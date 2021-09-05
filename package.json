@@ -22,5 +22,5 @@
   "files": [
     "dist/"
   ],
-  "main": "dist/hera.js"
+  "main": "dist/main.js"
 }
