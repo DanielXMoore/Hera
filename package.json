@@ -16,8 +16,8 @@
     "url": "https://github.com/STRd6/hera.git"
   },
   "scripts": {
-    "prepublish": "script/prepublish",
-    "test": "script/test"
+    "prepare": "bash script/prepare",
+    "test": "bash script/test"
   },
   "files": [
     "dist/"

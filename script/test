@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-script/prepublish
+script/prepare
 
 node_modules/.bin/mocha \
   --expose-gc \
