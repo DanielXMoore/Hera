@@ -11,6 +11,34 @@ The mother of all parsers.
 A Recognition-Based Syntactic Foundation](https://bford.info/pub/lang/peg.pdf)
 - [Wikipedia](https://en.wikipedia.org/wiki/Parsing_expression_grammar)
 
+Quickstart
+---
+
+```bash
+npm install STRd6/hera
+```
+
+```javascript
+Hera = require("hera")
+fs = require("fs")
+
+source = fs.readFileSync("cool-grammar.hera")
+
+rules = Hera.parse(source, {
+  filename: path
+})
+
+// Generate parser.js source code
+parserSource = Hera.generate(rules)
+fs.writeFile("cool-parser.js", parserSource)
+parser = require("./cool-parser")
+// or generate parser object
+parser = Hera.generate(rules, true)
+
+parser.parse("text that my cool parser should parse")
+
+```
+
 Overview
 ---
 
