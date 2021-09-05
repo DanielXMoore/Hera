@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+script/prepublish
+
+node_modules/.bin/mocha \
+  --expose-gc \
+  --compilers coffee:coffeescript \
+  --reporter spec \
+  --require 'coffeescript/register' \
+  --require test/helper.coffee \
+  "$@"

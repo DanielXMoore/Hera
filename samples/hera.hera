@@ -1,0 +1,145 @@
+Grammar
+  EOS* Rule+ -> 
+    return Object.fromEntries($2)
+
+Rule
+  Name EOS RuleBody -> [1,3]
+
+RuleBody
+  ( Indent Choice )+ -> 
+    var r = $1.map((a) => a[1])
+    if (r.length === 1) return r[0];
+    return ["/", r]
+
+Choice
+  Sequence Handling -> 
+    if ($2 !== undefined) {
+      if (!$1.push)
+        $1 = ["S", [$1], $2]
+      else
+        $1.push($2)
+    }
+    return $1
+
+Sequence
+  Expression SequenceExpression+ -> 
+    $2.unshift($1)
+    return ["S", $2]
+  Expression ChoiceExpression+ -> 
+    $2.unshift($1)
+    return ["/", $2]
+  Expression
+
+SequenceExpression
+  _ Expression -> 2
+
+ChoiceExpression
+  _ "/" _ Expression -> 4
+
+Expression
+  Suffix
+  PrefixOperator Suffix -> [1,2]
+
+PrefixOperator
+  /[&!]/
+
+Suffix
+  Primary SuffixOperator -> [2,1]
+  Primary
+
+SuffixOperator
+  /[+?*]/
+
+Primary
+  Name
+  Literal
+  OpenParenthesis Sequence CloseParenthesis -> 2
+
+Literal
+  StringLiteral
+  RegExpLiteral
+
+Handling
+  EOS -> 
+    return undefined
+  _* Arrow HandlingExpression -> 3
+
+HandlingExpression
+  EOS HandlingExpressionBody -> 2
+  StringValue EOS -> 1
+  HandlingExpressionValue EOS -> 1
+
+HandlingExpressionBody
+  HandlingExpressionLine+ -> 
+    return {
+      f: $1.join("\n")
+    }
+
+HandlingExpressionLine
+  Indent Indent /[^\n\r]*/ EOS -> 3
+
+HandlingExpressionValue
+  RValue
+  OpenBracket RValue CommaThenValue* CloseBracket -> 
+    $3.unshift($2); return $3
+
+RValue
+  StringValue
+  /\d\d?/ -> 
+    return parseInt($0, 10)
+
+CommaThenValue
+  _* "," _* RValue _* -> 4
+
+StringValue
+  "\"" DoubleStringCharacter* "\"" -> 
+    return $2.join('')
+
+DoubleStringCharacter
+  /[^"\\]+/
+  EscapeSequence
+
+EscapeSequence
+  Backslash /[^]/ -> 
+    return '\\' + $2
+
+StringLiteral
+  StringValue -> ["L",1]
+
+RegExpLiteral
+  "/" !_ RegExpCharacter* "/" -> 
+    return ["R", $3.join('')]
+
+RegExpCharacter
+  /[^\/\\]+/
+  EscapeSequence
+
+Name
+  /[_a-zA-Z][_a-zA-Z0-9]*/
+
+Arrow
+  "->" _*
+
+Backslash
+  "\\"
+
+OpenBracket
+  /\[[ \t]*/
+
+CloseBracket
+  /\][ \t]*/
+
+OpenParenthesis
+  /\([ \t]*/
+
+CloseParenthesis
+  /[ \t]*\)/
+
+Indent
+  "  "
+
+_
+  /[ \t]+/
+
+EOS
+  /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/

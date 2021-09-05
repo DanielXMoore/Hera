@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+./node_modules/.bin/coffee \
+  --bare \
+  --compile \
+  --output dist/ \
+  source/

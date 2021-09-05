@@ -1,0 +1,24 @@
+Expression
+  Term (_ ("+" / "-") _ Term)* ->
+    return $2.reduce(function(result, element) {
+      if (element[1] === "+") { return result + element[3]; }
+      if (element[1] === "-") { return result - element[3]; }
+    }, $1);
+
+Term
+  Factor (_ ("*" / "/") _ Factor)* ->
+    return $2.reduce(function(result, element) {
+      if (element[1] === "*") { return result * element[3]; }
+      if (element[1] === "/") { return result / element[3]; }
+    }, $1)
+
+Factor
+  "(" _ Expression _ ")" -> 3
+  Integer
+
+Integer
+  _ /[0-9]+/ ->
+    return Number($2)
+
+_
+  /\s*/

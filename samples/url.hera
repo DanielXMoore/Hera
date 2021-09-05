@@ -1,0 +1,71 @@
+URI
+  Scheme HierarchicalPart Query? Fragment? ->
+    return Object.assign($2, {
+      scheme: $1,
+      query: $3,
+      fragment: $4
+    })
+
+Scheme
+  /([A-Za-z][A-Za-z0-9.+-]*):/ ->
+    return $1.toLowerCase()
+
+HierarchicalPart
+  "//" Authority Path ->
+    $2.path = $3
+    return $2
+
+Authority
+  UserInfo? Host Port? ->
+    return {
+      host: $2,
+      port: $3,
+    }
+
+Port
+  /:(\d+)/ -> 1
+
+Host
+  IPv4Address / RegisteredName
+
+UserInfo
+  (Unreserved / PercentEncoded)+ "@"
+
+RegisteredName
+  (Unreserved / PercentEncoded / SubDelimiter)* ->
+    return $1.join('')
+
+Path
+  ( "/" Segment )* ->
+    return $1.flat().join('')
+
+Segment
+  PathCharacter* ->
+    return $1.join('')
+
+PathCharacter
+  Unreserved / PercentEncoded / SubDelimiter / ":" / "@"
+
+Query
+  "?" ( PathCharacter / "/" / "?" )* ->
+    return $2.join('')
+
+Fragment
+  "#" ( PathCharacter / "/" / "?" )* ->
+    return $2.join('')
+
+Unreserved
+  /[A-Za-z0-9~._-]+/
+
+PercentEncoded
+  /%[A-Fa-f0-9]{2}/ ->
+    return decodeURIComponent($0)
+
+SubDelimiter
+  /[!$&'()*+,;=]/
+
+IPv4Address
+  DecimalOctet "." DecimalOctet "." DecimalOctet "." DecimalOctet
+
+DecimalOctet
+  /[0-9]|[0-9]{2}|1[0-9]{2}|2[0-4][0-9]|25[0-5]/
