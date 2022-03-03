@@ -1,6 +1,6 @@
 {
   "name": "hera",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "coffeescript": "^2",
@@ -17,7 +17,8 @@
     "test": "bash script/test"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "register.js"
   ],
   "main": "dist/main.js"
 }
