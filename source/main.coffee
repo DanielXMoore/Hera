@@ -80,13 +80,8 @@ create = (create, rules) ->
       s = v.toString()
       # Would prefer to use -v.flags.length, but IE doesn't support .flags
       s.slice(0, s.lastIndexOf('/')+1)
-    else if typeof v is "string"
-      if v is ""
-        "EOF"
-      else
-        JSON.stringify(v)
     else
-      v
+      JSON.stringify(v)
 
     if name = _names.get(v)
       "#{name} #{pv}"

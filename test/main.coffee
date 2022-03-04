@@ -198,7 +198,6 @@ describe "Hera", ->
       Rule
         "A"+ -> "a"
         "B"+ -> "b"
-
     """
 
     parser = hera.generate(rules, true)
@@ -206,7 +205,15 @@ describe "Hera", ->
     assert.equal parser.parse("AAAAAA"), "a"
     assert.equal parser.parse("BBB"), "b"
 
-    parser.decompile rules
+  it "should decompile nested choices", ->
+    rules = hera.parse """
+      Rule
+        ("A" / "C") ("B" / "D")
+        "Z" -> "z"
+    """
+
+    decompiled = hera.decompile rules
+    assert.deepEqual hera.parse(decompiled), rules
 
   it "should tokenize", ->
     rules = hera.parse """
@@ -243,6 +250,17 @@ describe "Hera", ->
       parser.parse("aa")
     , /Unconsumed input/
 
+  it "should throw an error when there are no failed expectations but still input remaining", ->
+    rules = hera.parse """
+      Rule
+        ""
+    """
+
+    parser = hera.generate(rules, true)
+    assert.throws ->
+      parser.parse("bb")
+    , /Unconsumed input/
+
   it "throws an error when parsing non-strings", ->
     rules = hera.parse """
       Rule
@@ -253,3 +271,57 @@ describe "Hera", ->
     assert.throws ->
       parser.parse(undefined)
     , /Input must be a string/
+
+  it "should throw an error when running out of input", ->
+    parser = hera.generate hera.parse("""
+      Rule
+        "aaaa"
+        EOF
+      EOF
+        !/[\s\S]/
+    """), true
+
+    assert.throws ->
+      parser.parse "aaa"
+    , /Rule "aaaa"/
+
+  it "should throw an error when mapping to a non-array object", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    # Hack in a non-array object for the mapping value
+    rules.Rule[2] = {}
+
+    parser = hera.generate(rules, true)
+    assert.throws ->
+      parser.parse("a")
+    , /non-array object mapping/
+
+  it "should throw an error when mapping to an unknown type", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    # Hack in an unknown type for the mapping value
+    rules.Rule[2] = false
+
+    parser = hera.generate(rules, true)
+    assert.throws ->
+      parser.parse("a")
+    , /Unknown mapping type/
+
+  it "throw an error when encountering an unknown operator", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    # Hack in an unknown operator
+    rules.Rule[0] = "QQ"
+
+    assert.throws ->
+      hera.generate(rules, true)
+    , /Don't know how to pre-compute "QQ"/
