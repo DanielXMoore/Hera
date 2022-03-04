@@ -5,6 +5,9 @@ Hera
 >
 > — Homeric Hymn 12 to Hera (trans. Evelyn-White) (Greek epic C7th to 4th B.C.
 
+[![Build](https://github.com/STRd6/hera/actions/workflows/build.yml/badge.svg)](https://github.com/STRd6/hera/actions/workflows/build.yml)
+[![Coverage Status](https://coveralls.io/repos/github/STRd6/hera/badge.svg?branch=main)](https://coveralls.io/github/STRd6/hera?branch=main)
+
 The mother of all parsers.
 
 - [Parsing Expression Grammars:
@@ -43,7 +46,7 @@ Overview
 ---
 
 Hera uses Parsing Expression grammars to create parsers for programatic
-languages. 
+languages.
 
 Hera grammars are indentation based. Rules are left most and indented beneath
 them are choices that satisfy the rule. Parsing makes heavy use of the built

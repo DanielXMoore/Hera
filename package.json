@@ -3,8 +3,10 @@
   "version": "0.7.1",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
+    "@danielx/coffeecoverage": "4.0.0-pre.1",
     "coffeescript": "^2",
-    "mocha": "^9.1.1"
+    "mocha": "^9.1.1",
+    "nyc": "^15.1.0"
   },
   "dependencies": {},
   "homepage": "https://danielx.net/hera/docs/README.html",
@@ -12,9 +14,43 @@
     "type": "git",
     "url": "https://github.com/STRd6/hera.git"
   },
+  "mocha": {
+    "extension": [
+      "coffee"
+    ],
+    "require": [
+      "coffeescript/register",
+      "@danielx/coffeecoverage/register-istanbul",
+      "./test/helper.coffee"
+    ],
+    "reporter": "spec",
+    "recursive": true,
+    "spec": [
+      "test"
+    ]
+  },
+  "nyc": {
+    "check-coverage": true,
+    "branches": 77,
+    "lines": 85,
+    "functions": 88,
+    "statements": 86,
+    "reporter": [
+      "lcov",
+      "text"
+    ],
+    "extension": [
+      ".coffee"
+    ],
+    "exclude": [
+      "source/rules.coffee"
+    ],
+    "sourceMap": false,
+    "instrument": false
+  },
   "scripts": {
     "prepare": "bash script/prepare",
-    "test": "bash script/test"
+    "test": "nyc mocha"
   },
   "files": [
     "dist/",

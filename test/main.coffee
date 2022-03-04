@@ -1,4 +1,4 @@
-hera = require "../dist/main"
+hera = require "../source/main"
 test = it
 
 describe "Hera", ->
@@ -58,19 +58,19 @@ describe "Hera", ->
     """
 
     assert hera.parse(grammar)
-  
+
   it "should handle comments", ->
     grammar = """
       # Comment!
       # Comment
-      
-      
+
+
       Grammar # Comment!
         Rule # Another Comment!
       # 2Comment!
       Rule#Comment
         "a"#rad
-      
+
       # comment
     """
 
@@ -123,7 +123,7 @@ describe "Hera", ->
       Group2
         /(c+)(d+)/ ->
           return [$1, $2];
-      
+
       Group3
         /123((456)789)/ -> [3, 1, 2, 0]
 
@@ -158,7 +158,7 @@ describe "Hera", ->
     assert.throws ->
       hera.parse """
         Rule
-          
+
       """,
       filename: "test.hera"
 
@@ -177,6 +177,6 @@ describe "Hera", ->
 
     assert.throws ->
       parser.parse "BBA"
-    
+
     assert.throws ->
       parser.parse "AAB"
