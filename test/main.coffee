@@ -180,3 +180,76 @@ describe "Hera", ->
 
     assert.throws ->
       parser.parse "AAB"
+
+  it "should work with assertions", ->
+    rules = hera.parse """
+      Rule
+        &"B" "C"+
+        &"A" "A"+ ->
+          return $2
+    """
+
+    parser = hera.generate(rules, true)
+
+    assert.equal parser.parse("AAAAAA").length, 6
+
+  it "should have string handlers", ->
+    rules = hera.parse """
+      Rule
+        "A"+ -> "a"
+        "B"+ -> "b"
+
+    """
+
+    parser = hera.generate(rules, true)
+
+    assert.equal parser.parse("AAAAAA"), "a"
+    assert.equal parser.parse("BBB"), "b"
+
+    parser.decompile rules
+
+  it "should tokenize", ->
+    rules = hera.parse """
+      Rule
+        &"D" "D" -> "d"
+        !"C" "A"+ -> "a"
+        "B"+ -> "b"
+    """
+
+    parser = hera.generate(rules, true)
+
+    assert.equal parser.parse("AAAAAA", tokenize: true).value[1].value.length, 6
+    assert.equal parser.parse("BBB", tokenize: true).value.length, 3
+    assert.equal parser.parse("D", tokenize: true).value.length, 2
+
+  it "should skip infinite zero width loops", ->
+    rules = hera.parse """
+      Rule
+        ""* "a"
+    """
+
+    parser = hera.generate(rules, true)
+    result = parser.parse("a")
+    assert.deepEqual result, [[], "a"]
+
+  it "should throw an error when there is unconsumed input", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    parser = hera.generate(rules, true)
+    assert.throws ->
+      parser.parse("aa")
+    , /Unconsumed input/
+
+  it "throws an error when parsing non-strings", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    parser = hera.generate(rules, true)
+    assert.throws ->
+      parser.parse(undefined)
+    , /Input must be a string/

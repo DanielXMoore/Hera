@@ -87,7 +87,7 @@ create = (create, rules) ->
         JSON.stringify(v)
     else
       v
-    
+
     if name = _names.get(v)
       "#{name} #{pv}"
     else
@@ -156,7 +156,7 @@ create = (create, rules) ->
   precompileHandler = (handler, op) ->
     if handler?.f
       fn = Function(
-        "$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9", 
+        "$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9",
         handler.f
       )
 
@@ -324,14 +324,14 @@ create = (create, rules) ->
 
       s = pos
       results = []
-  
+
       loop
         prevPos = pos
-  
+
         r = invoke({input, pos}, term)
         if !r?
           break
-  
+
         {pos, value} = r
         if pos is prevPos
           break
@@ -375,7 +375,7 @@ create = (create, rules) ->
 
       # If the assertion doesn't advance the position then it is failed.
       # A zero width assertion always succeeds and is useless
-      if newState.pos is state.pos
+      if !newState? or (newState.pos is state.pos)
         return
       else
         return state
@@ -460,13 +460,10 @@ create = (create, rules) ->
   # Ignore result handlers and return type tokens based on rule names
   tokenHandler = (handler, op, name) ->
     ({value}) ->
-      if !value?
-        return value
-
       switch op
         when "S"
           type: name
-          value: 
+          value:
             value.filter (v) -> v?
             .reduce (a, b) ->
               a.concat b
@@ -538,7 +535,7 @@ create = (create, rules) ->
             terms.join(" ") + hToS(h)
           else
             "( " + terms.join(" ") + " )"
-          
+
         when "/"
           terms = rule[1].map (i) ->
             toS i, depth and depth+1
