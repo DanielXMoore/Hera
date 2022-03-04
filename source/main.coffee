@@ -91,8 +91,7 @@ create = (create, rules) ->
   # Lookup to get Rule names from precomputed rules
   _names = new Map
   noteName = (name, value) ->
-    if name
-      _names.set(value, name)
+    _names.set(value, name)
 
     return value
 

@@ -325,3 +325,31 @@ describe "Hera", ->
     assert.throws ->
       hera.generate(rules, true)
     , /Don't know how to pre-compute "QQ"/
+
+  it "should error when referencing an unknown rule", ->
+    assert.throws ->
+      hera.generate hera.parse("""
+        Rule
+          "aaaa"
+          EOF
+      """), true
+    , /No rule with name "EOF"/
+
+  it "should give accurate error message with multiline input", ->
+    parser = hera.generate hera.parse("""
+      Rule
+        Line+
+      Line
+        "aaaa" EOL
+      EOL
+        /\r\n|\n/
+    """), true
+
+    assert.throws ->
+      parser.parse """
+        aaaa
+        aaaa
+        aaaa
+        aaa
+      """
+    , /3:6/
