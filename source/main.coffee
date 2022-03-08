@@ -96,8 +96,7 @@ create = (create, rules) ->
     return value
 
   # Transforming Rules into a pre-computed form
-  preComputedRules = null
-  precomputeRule = (rule, out, name, compile) ->
+  precomputeRule = (precomputed, rule, out, name, compile) ->
     # Replace fn lookup with actual reference
     if Array.isArray(rule) # op, arg, handler triplet or pair
       [op, arg, handler] = rule
@@ -109,9 +108,9 @@ create = (create, rules) ->
           switch op
             when "/", "S"
               arg.map (x) ->
-                precomputeRule x, null, name, compile
+                precomputeRule precomputed, x, null, name, compile
             when "*", "+", "?", "!", "&"
-              precomputeRule arg, null, name + op, compile
+              precomputeRule precomputed, arg, null, name + op, compile
             when "R"
               noteName name, RegExp(arg, RE_FLAGS)
             when "L"
@@ -132,16 +131,16 @@ create = (create, rules) ->
       return result
     else # rule name as a string
       # Replace rulename string lookup with actual reference
-      if preComputedRules[rule]
-        return preComputedRules[rule]
+      if precomputed[rule]
+        return precomputed[rule]
       else
-        preComputedRules[rule] = placeholder = out || []
+        precomputed[rule] = placeholder = out || []
 
         data = rules[rule]
         if !data?
           throw new Error "No rule with name #{JSON.stringify(rule)}"
 
-        precomputeRule(data, placeholder, rule, compile)
+        precomputeRule(precomputed, data, placeholder, rule, compile)
 
   getValue = (x) -> x.value
 
@@ -182,11 +181,11 @@ create = (create, rules) ->
         (s) ->
           mapValue handler, s.value
 
-  precompute = (rules, compile) ->
-    preComputedRules = {}
+  precompute = (rules, compile, precomputed={}) ->
     first = Object.keys(rules)[0]
-    preComputedRules[first] = precomputeRule first, null, first, compile
-    return preComputedRules
+    precomputed[first] = precomputeRule precomputed, first, null, first, compile
+
+    return precomputed
 
   invoke = (state, data) ->
     # console.log state.pos, prettyPrint data[1]
@@ -432,6 +431,7 @@ create = (create, rules) ->
 
       """
 
+  precomputedCache = new Map
   parse = (input, opts={}) ->
     if typeof input != "string"
       throw new Error "Input must be a string"
@@ -443,11 +443,15 @@ create = (create, rules) ->
     maxFailPos = 0
     state = {input, pos: 0}
 
-    # TODO: This breaks pre-computed rules for subsequent non-tokenized calls
     if opts.tokenize
-      precompute rules, tokenHandler
+      precomputed = precomputedCache.get(tokenHandler)
+      if !precomputed
+        precomputed = precompute rules, tokenHandler
+        precomputedCache.set(tokenHandler, precomputed)
+    else
+      precomputed = precomputedCache.get(rules)
 
-    result = invoke(state, Object.values(preComputedRules)[0])
+    result = invoke(state, Object.values(precomputed)[0])
 
     return validate(input, result, opts)
 
@@ -549,7 +553,7 @@ create = (create, rules) ->
     .join("\n")
 
   # Pre compile the rules and handler functions
-  precompute(rules, precompileHandler)
+  precomputedCache.set rules, precompute(rules, precompileHandler)
 
   module.exports =
     decompile: decompile

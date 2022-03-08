@@ -229,6 +229,9 @@ describe "Hera", ->
     assert.equal parser.parse("BBB", tokenize: true).value.length, 3
     assert.equal parser.parse("D", tokenize: true).value.length, 2
 
+    # tokenize shouldn't blow up regular parsing
+    assert.equal parser.parse("BBB"), "b"
+
   it "should skip infinite zero width loops", ->
     rules = hera.parse """
       Rule
