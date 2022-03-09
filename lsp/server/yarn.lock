@@ -2,6 +2,11 @@
 # yarn lockfile v1
 
 
+"@danielx/hera@^0.7.2-pre.0":
+  version "0.7.2-pre.0"
+  resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.7.2-pre.0.tgz#82b151018c11551135186615613ce29f7158fa42"
+  integrity sha512-ElMJxiKUjbe8F+CHF8kIBWAdL82l6ybENHD0BJTBFVKnaGReLqxfzn23q3x3XcLj5Ur7waSNGSxW97wbiq8qzA==
+
 vscode-jsonrpc@6.0.0:
   version "6.0.0"
   resolved "https://registry.yarnpkg.com/vscode-jsonrpc/-/vscode-jsonrpc-6.0.0.tgz#108bdb09b4400705176b957ceca9e0880e9b6d4e"
