@@ -21,6 +21,12 @@ import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import * as Hera from '@danielx/hera';
+
+console.log(Hera);
+
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
@@ -145,6 +151,32 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
   let problems = 0;
   const diagnostics: Diagnostic[] = [];
+
+  try {
+    console.log(Hera.parse(text));
+    const tokens = Hera.parse(text, {tokenize: true});
+
+    console.log(tokens);
+
+  } catch (e : any) {
+    console.log(e);
+    const [_, line, character] = e.message.match(/^[^:]*:(\d+):(\d+)\s*(.*)$/s);
+    diagnostics.push({
+      range: {
+        start: {
+          line: line - 1,
+          character: character - 1
+        },
+        end: {
+          line: line - 1,
+          character: character
+        }
+      },
+      severity: DiagnosticSeverity.Error,
+      message: e.message
+    });
+  }
+
   while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
     problems++;
     const diagnostic: Diagnostic = {
