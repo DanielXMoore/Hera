@@ -1,6 +1,6 @@
 {
   "name": "hera-lsp-client",
-  "description": "VSCode part of a language server",
+  "description": "VSCode part of hera language server",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.63.0"

@@ -8,7 +8,7 @@
     "vscode": "^1.63.0"
   },
   "activationEvents": [
-    "onLanguage:plaintext"
+    "onLanguage:hera"
   ],
   "main": "./client/dist/extension",
   "contributes": {
@@ -34,7 +34,13 @@
           "description": "Traces the communication between VS Code and the language server."
         }
       }
-    }
+    },
+    "languages": [
+      {
+        "id": "hera",
+        "extensions": [".hera"]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "yarn compile",
