@@ -32,6 +32,22 @@ result
   value: any - mapped value of the match
   pos: number - next input position
 
+rule [ op arg handler? ]
+
+Rule data is a triplet of primitive operator, argument, and optional handler.
+
+operators
+
+  L: string literal
+  R: regexp literal
+  /: Choice
+  S: Sequence
+  *: Repetition (zero or more)
+  +: Repetition (one or more)
+  ?: option
+  &: and predicate
+  !: not predicate
+
 ###
 
 # On 2019-07-25 at 11:11 PM it was first able to parse its decompiled rules and
@@ -80,8 +96,13 @@ create = (create, rules) ->
       s = v.toString()
       # Would prefer to use -v.flags.length, but IE doesn't support .flags
       s.slice(0, s.lastIndexOf('/')+1)
+    else if typeof v is "string"
+      if v is ""
+        "EOF"
+      else
+        JSON.stringify(v)
     else
-      JSON.stringify(v)
+      v
 
     if name = _names.get(v)
       "#{name} #{pv}"
@@ -91,12 +112,14 @@ create = (create, rules) ->
   # Lookup to get Rule names from precomputed rules
   _names = new Map
   noteName = (name, value) ->
-    _names.set(value, name)
+    if name
+      _names.set(value, name)
 
     return value
 
   # Transforming Rules into a pre-computed form
-  precomputeRule = (precomputed, rule, out, name, compile) ->
+  preComputedRules = null
+  precomputeRule = (rule, out, name, compile) ->
     # Replace fn lookup with actual reference
     if Array.isArray(rule) # op, arg, handler triplet or pair
       [op, arg, handler] = rule
@@ -108,9 +131,9 @@ create = (create, rules) ->
           switch op
             when "/", "S"
               arg.map (x) ->
-                precomputeRule precomputed, x, null, name, compile
+                precomputeRule x, null, name, compile
             when "*", "+", "?", "!", "&"
-              precomputeRule precomputed, arg, null, name + op, compile
+              precomputeRule arg, null, name + op, compile
             when "R"
               noteName name, RegExp(arg, RE_FLAGS)
             when "L"
@@ -131,16 +154,16 @@ create = (create, rules) ->
       return result
     else # rule name as a string
       # Replace rulename string lookup with actual reference
-      if precomputed[rule]
-        return precomputed[rule]
+      if preComputedRules[rule]
+        return preComputedRules[rule]
       else
-        precomputed[rule] = placeholder = out || []
+        preComputedRules[rule] = placeholder = out || []
 
         data = rules[rule]
         if !data?
           throw new Error "No rule with name #{JSON.stringify(rule)}"
 
-        precomputeRule(precomputed, data, placeholder, rule, compile)
+        precomputeRule(data, placeholder, rule, compile)
 
   getValue = (x) -> x.value
 
@@ -181,11 +204,11 @@ create = (create, rules) ->
         (s) ->
           mapValue handler, s.value
 
-  precompute = (rules, compile, precomputed={}) ->
+  precompute = (rules, compile) ->
+    preComputedRules = {}
     first = Object.keys(rules)[0]
-    precomputed[first] = precomputeRule precomputed, first, null, first, compile
-
-    return precomputed
+    preComputedRules[first] = precomputeRule first, null, first, compile
+    return preComputedRules
 
   invoke = (state, data) ->
     # console.log state.pos, prettyPrint data[1]
@@ -368,13 +391,15 @@ create = (create, rules) ->
 
       # If the assertion doesn't advance the position then it is failed.
       # A zero width assertion always succeeds and is useless
-      if !newState? or (newState.pos is state.pos)
+      if newState.pos is state.pos
         return
       else
         return state
 
   # Compute the line and column number of a position (used in error reporting)
-  location = (input, pos) ->
+  loc = (input, pos) ->
+    rawPos = pos
+
     [line, column] = input.split(/\n|\r\n|\r/).reduce ([row, col], line) ->
       l = line.length + 1
       if pos > l
@@ -395,11 +420,11 @@ create = (create, rules) ->
       return result.value
 
     expectations = Array.from new Set failExpected.slice(0, failIndex)
-    l = location input, maxFailPos
+    l = loc input, maxFailPos
 
     # The parse completed with a result but there is still input
     if result? and result.pos > maxFailPos
-      l = location input, result.pos
+      l = loc input, result.pos
       throw new Error """
         Unconsumed input at #{l}
 
@@ -429,7 +454,6 @@ create = (create, rules) ->
 
       """
 
-  precomputedCache = new Map
   parse = (input, opts={}) ->
     if typeof input != "string"
       throw new Error "Input must be a string"
@@ -441,26 +465,23 @@ create = (create, rules) ->
     maxFailPos = 0
     state = {input, pos: 0}
 
+    # TODO: This breaks pre-computed rules for subsequent non-tokenized calls
     if opts.tokenize
-      precomputed = precomputedCache.get(tokenHandler)
-      if !precomputed
-        precomputed = precompute rules, tokenHandler
-        precomputedCache.set(tokenHandler, precomputed)
-    else
-      precomputed = precomputedCache.get(rules)
+      precompute rules, tokenHandler
 
-    result = invoke(state, Object.values(precomputed)[0])
+    result = invoke(state, Object.values(preComputedRules)[0])
 
     return validate(input, result, opts)
 
   # Ignore result handlers and return type tokens based on rule names
   tokenHandler = (handler, op, name) ->
-    (result) ->
-      {loc, value} = result
+    ({value}) ->
+      if !value?
+        return value
+
       switch op
         when "S"
           type: name
-          loc: loc
           value:
             value.filter (v) -> v?
             .reduce (a, b) ->
@@ -468,17 +489,14 @@ create = (create, rules) ->
             , []
         when "L", "R" # Terminals
           type: name
-          loc: loc
           value: value
         when "*", "+"
           type: op
-          loc: loc
           value: value
         when "?", "/"
-          value
+          return value
         when "!", "&"
           type: op + name
-          loc: loc
           value: value
 
   # Generate the source for a new parser for the given rules
@@ -556,7 +574,7 @@ create = (create, rules) ->
     .join("\n")
 
   # Pre compile the rules and handler functions
-  precomputedCache.set rules, precompute(rules, precompileHandler)
+  precompute(rules, precompileHandler)
 
   module.exports =
     decompile: decompile

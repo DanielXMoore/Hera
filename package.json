@@ -1,18 +1,21 @@
 {
-  "name": "hera",
-  "version": "0.7.1",
+  "name": "@danielx/hera",
+  "version": "0.7.2-pre.0",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/coffeecoverage": "4.0.0-pre.1",
+    "benchmark": "^2.1.4",
     "coffeescript": "^2",
+    "microtime": "^3.0.0",
     "mocha": "^9.1.1",
     "nyc": "^15.1.0"
   },
   "dependencies": {},
   "homepage": "https://danielx.net/hera/docs/README.html",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/STRd6/hera.git"
+    "url": "https://github.com/DanielXMoore/hera.git"
   },
   "mocha": {
     "extension": [
@@ -43,6 +46,7 @@
       ".coffee"
     ],
     "exclude": [
+      "source/old_main.coffee",
       "source/rules.coffee"
     ],
     "sourceMap": false,
