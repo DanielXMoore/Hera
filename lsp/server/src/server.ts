@@ -22,81 +22,7 @@ import {
 import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
-
-interface Loc {
-  pos: number
-  length: number
-}
-
-interface HeraNode {
-  type: string
-  loc: Loc
-  value: HeraNode[] | string
-}
-
-interface parse {
-  (input:string): any,
-  (input:string, tokenize:{tokenize: true}) : HeraNode
-}
-
-interface HeraParser {
-  parse: parse
-}
-
-type DeclEntry = [string, Loc]
-
-function declarations(grammar: HeraNode): Map<string, Loc> {
-  const {value} = grammar;
-  if (Array.isArray(value)) {
-    return new Map(value.flatMap<HeraNode>(({type, value}) => {
-      if (type === "Rule+") {
-        return (value as HeraNode[]).map(({value}) => {
-          return value[0] as HeraNode;
-        });
-      }
-      return [];
-    }).map<DeclEntry>(({value, loc}) => [value as string, loc]));
-  }
-  return new Map([]);
-}
-
-const identifier = /[a-zA-Z0-9]+/suy;
-const alphaNumeric = /[a-zA-Z0-9]/;
-
-function wordAt(document:TextDocument, position:Position):string {
-  const {line, character} = position;
-
-  const text = document.getText({
-    start: {
-      line: line,
-      character: 0
-    },
-    end: {
-      line: line + 1,
-      character: 0
-    }
-  });
-
-  identifier.lastIndex = character;
-  const match = text.match(identifier);
-
-  // need the beginning of the word too
-  if (match) {
-    let i = character;
-    while (i >= 0 && text[i].match(alphaNumeric))
-      i--;
-    return text.slice(i+1, character) + match[0];
-  }
-
-  return "";
-}
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-// @type Hera
-import * as HeraP from '@danielx/hera';
-
-const Hera = HeraP as HeraParser;
+import { getDeclarationFor, getReferencesFor, parseDocument } from './util';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -108,8 +34,6 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
-
-const declarationsCache = new Map<string, Map<string, Loc>>();
 
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -169,21 +93,16 @@ connection.onDeclaration((params, token, workDoneProgress, resultProgress) => {
   const doc = documents.get(params.textDocument.uri);
 
   if (doc) {
-    const lookup = declarationsCache.get(doc.uri);
-    const id = wordAt(doc, params.position);
-    const loc = lookup?.get(id);
-    if (loc) {
-      const {pos, length} = loc;
-
-      return {
-        uri: doc.uri,
-        range: {
-          start: doc.positionAt(pos),
-          end: doc.positionAt(pos + length)
-        }
-      };
-    }
+    return getDeclarationFor(doc, params.position);
   }
+});
+
+connection.onReferences((params) => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc) {
+    return getReferencesFor(doc, params.position);
+  }
+
 });
 
 // The example settings
@@ -253,12 +172,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const diagnostics: Diagnostic[] = [];
 
   try {
-    console.log(Hera.parse(text));
-    const tokens = Hera.parse(text, {tokenize: true});
-
-    declarationsCache.set(textDocument.uri, declarations(tokens));
-
-  } catch (e : any) {
+    parseDocument(textDocument);
+  } catch (e: any) {
     console.log(e);
     const [_, line, character] = e.message.match(/^[^:]*:(\d+):(\d+)\s*(.*)$/s);
     diagnostics.push({

@@ -69,8 +69,7 @@ create = (create, rules) ->
 
   # RegExp Flags
   # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/RegExp
-  # Would like to add 's', but that kills IE11
-  RE_FLAGS = "uy"
+  RE_FLAGS = "suy"
 
   # Pretty print a string or RegExp literal
   # TODO: could expand to all rules?
@@ -101,24 +100,24 @@ create = (create, rules) ->
     if Array.isArray(rule) # op, arg, handler triplet or pair
       [op, arg, handler] = rule
 
+      arg = switch op
+        when "/", "S"
+          arg.map (x) ->
+            precomputeRule precomputed, x, null, name, compile
+        when "*", "+", "?", "!", "&"
+          precomputeRule precomputed, arg, null, name + op, compile
+        when "R"
+          noteName name, RegExp(arg, RE_FLAGS)
+        when "L"
+          noteName name, JSON.parse("\"" + arg + "\"")
+        else
+          throw new Error "Don't know how to pre-compute #{JSON.stringify op}"
+
       result =
         [
           fns[op]
-
-          switch op
-            when "/", "S"
-              arg.map (x) ->
-                precomputeRule precomputed, x, null, name, compile
-            when "*", "+", "?", "!", "&"
-              precomputeRule precomputed, arg, null, name + op, compile
-            when "R"
-              noteName name, RegExp(arg, RE_FLAGS)
-            when "L"
-              noteName name, JSON.parse("\"" + arg + "\"")
-            else
-              throw new Error "Don't know how to pre-compute #{JSON.stringify op}"
-
-          compile(handler, op, name)
+          arg
+          compile(handler, op, name, arg)
         ]
 
       if out
@@ -141,8 +140,6 @@ create = (create, rules) ->
           throw new Error "No rule with name #{JSON.stringify(rule)}"
 
         precomputeRule(precomputed, data, placeholder, rule, compile)
-
-  getValue = (x) -> x.value
 
   # Return a function precompiled for the given handler
   # Handlers map result values into language primitives
@@ -192,7 +189,6 @@ create = (create, rules) ->
 
     [fn, arg, mapping] = data
     result = fn state, arg
-    mapping ?= getValue
 
     if result
       result.value = mapping result
@@ -345,14 +341,25 @@ create = (create, rules) ->
         return
 
       {pos} = first
-      {pos} = rest = invoke({input, pos}, [fns["*"], term])
+      results = [first.value]
 
-      rest.value.unshift first.value
+      loop
+        prevPos = pos
+
+        r = invoke({input, pos}, term)
+        if !r?
+          break
+
+        {pos, value} = r
+        if pos is prevPos
+          break
+        else
+          results.push value
 
       loc:
         pos: s
         length: pos - s
-      value: rest.value
+      value: results
       pos: pos
 
     "!": (state, term) ->
@@ -462,7 +469,7 @@ create = (create, rules) ->
     return validate(input, result, opts)
 
   # Ignore result handlers and return type tokens based on rule names
-  tokenHandler = (handler, op, name) ->
+  tokenHandler = (handler, op, name, arg) ->
     (result) ->
       {loc, value} = result
       switch op
@@ -477,11 +484,11 @@ create = (create, rules) ->
               a.concat b
             , []
         when "L" # Terminal Literal
-          type: op
+          type: _names.get(arg)
           loc: loc
           value: value
         when "R" # Terminal RegExp
-          type: op
+          type: _names.get(arg)
           loc: loc
           value: value[0]
         when "*", "+"

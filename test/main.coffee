@@ -139,6 +139,21 @@ describe "Hera", ->
     assert.deepEqual parser.parse("123456789"), [undefined, "456789", "456", "123456789"]
     assert.deepEqual parser.parse("ppqq"), "ppqqqq"
 
+  test "regex that may sometimes be empty with +", ->
+    grammar = """
+      Start
+        Re+ ->
+          return $0.join('')
+
+      Re
+        /a|b?/
+    """
+
+    parser = hera.generate hera.parse(grammar), true
+    assert.deepEqual parser.parse("ab"), "ab"
+    assert.deepEqual parser.parse(""), ""
+    assert.deepEqual parser.parse("bb"), "bb"
+
   test "transitive regex", ->
     grammar = """
       Start
@@ -219,8 +234,11 @@ describe "Hera", ->
     source = """
       Rule
         &"D" /D/ -> "d"
-        !"C" "A"+ -> "a"
+        !"C" A+ -> "a"
         "B"+ -> "b"
+
+      A
+        "A"
     """
     rules = hera.parse source
 

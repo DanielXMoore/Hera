@@ -37,3 +37,19 @@ It also includes an End-to-End test.
 - In the [Extension Development Host](https://code.visualstudio.com/api/get-started/your-first-extension#:~:text=Then%2C%20inside%20the%20editor%2C%20press%20F5.%20This%20will%20compile%20and%20run%20the%20extension%20in%20a%20new%20Extension%20Development%20Host%20window.) instance of VSCode, open a document in 'plain text' language mode.
   - Type `j` or `t` to see `Javascript` and `TypeScript` completion.
   - Enter text content such as `AAA aaa BBB`. The extension will emit diagnostics for all words in all-uppercase.
+
+## Questions and Answers
+
+How to send declarations?
+
+How to set ctrl+click to jump to things?
+
+How to find all references?
+
+<https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol>
+
+How to display documentation when hovering a symbol or identifier?
+
+How to send auto-completion lists based on location in document?
+
+Why does quitting the launched VSCode client instance by closing the window open up a big ol' json file in the editor?
