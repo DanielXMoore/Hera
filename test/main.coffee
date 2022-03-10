@@ -216,18 +216,28 @@ describe "Hera", ->
     assert.deepEqual hera.parse(decompiled), rules
 
   it "should tokenize", ->
-    rules = hera.parse """
+    source = """
       Rule
-        &"D" "D" -> "d"
+        &"D" /D/ -> "d"
         !"C" "A"+ -> "a"
         "B"+ -> "b"
     """
+    rules = hera.parse source
+
+    # console.dir hera.parse(source, {tokenize: true}),
+    #   colors: true
+    #   depth: null
 
     parser = hera.generate(rules, true)
 
-    assert.equal parser.parse("AAAAAA", tokenize: true).value[1].value.length, 6
-    assert.equal parser.parse("BBB", tokenize: true).value.length, 3
-    assert.equal parser.parse("D", tokenize: true).value.length, 2
+    results = parser.parse("AAAAAA", tokenize: true)
+    assert.equal results.value[0].loc.length, 6
+
+    results = parser.parse("BBB", tokenize: true)
+    assert.equal results.value.length, 3
+
+    results = parser.parse("D", tokenize: true)
+    assert.equal results.loc.length, 1
 
     # tokenize shouldn't blow up regular parsing
     assert.equal parser.parse("BBB"), "b"

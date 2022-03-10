@@ -361,7 +361,11 @@ create = (create, rules) ->
       if newState?
         return
       else
-        return state
+        loc:
+          pos: state.pos
+          length: 0
+        value: undefined
+        pos: state.pos
 
     "&": (state, term) ->
       newState = invoke(state, term)
@@ -371,7 +375,11 @@ create = (create, rules) ->
       if !newState? or (newState.pos is state.pos)
         return
       else
-        return state
+        loc:
+          pos: state.pos
+          length: 0
+        value: newState.value
+        pos: state.pos
 
   # Compute the line and column number of a position (used in error reporting)
   location = (input, pos) ->
@@ -462,22 +470,30 @@ create = (create, rules) ->
           type: name
           loc: loc
           value:
-            value.filter (v) -> v?
+            value.filter (v) ->
+              # remove zero length matches (!, &, and * that are empty)
+              v? and v.loc.length
             .reduce (a, b) ->
               a.concat b
             , []
-        when "L", "R" # Terminals
-          type: name
+        when "L" # Terminal Literal
+          type: op
           loc: loc
           value: value
-        when "*", "+"
+        when "R" # Terminal RegExp
           type: op
+          loc: loc
+          value: value[0]
+        when "*", "+"
+          type = value[0]?.type + op
+
+          type: type
           loc: loc
           value: value
         when "?", "/"
           value
         when "!", "&"
-          type: op + name
+          type: op
           loc: loc
           value: value
 

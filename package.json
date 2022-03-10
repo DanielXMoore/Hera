@@ -46,6 +46,8 @@
       ".coffee"
     ],
     "exclude": [
+      "lsp/",
+      "node_modules/",
       "source/old_main.coffee",
       "source/rules.coffee"
     ],
