@@ -12,6 +12,8 @@ import {
   DidChangeConfigurationNotification,
   CompletionItem,
   CompletionItemKind,
+  Position,
+  Range,
   TextDocumentPositionParams,
   TextDocumentSyncKind,
   InitializeResult
@@ -41,19 +43,52 @@ interface HeraParser {
   parse: parse
 }
 
-function declarations(grammar: HeraNode): HeraNode[] {
+type DeclEntry = [string, Loc]
+
+function declarations(grammar: HeraNode): Map<string, Loc> {
   const {value} = grammar;
   if (Array.isArray(value)) {
-    return value.flatMap<HeraNode>(({type, value}) => {
+    return new Map(value.flatMap<HeraNode>(({type, value}) => {
       if (type === "Rule+") {
         return (value as HeraNode[]).map(({value}) => {
           return value[0] as HeraNode;
         });
       }
       return [];
-    });
+    }).map<DeclEntry>(({value, loc}) => [value as string, loc]));
   }
-  return [];
+  return new Map([]);
+}
+
+const identifier = /[a-zA-Z0-9]+/suy;
+const alphaNumeric = /[a-zA-Z0-9]/;
+
+function wordAt(document:TextDocument, position:Position):string {
+  const {line, character} = position;
+
+  const text = document.getText({
+    start: {
+      line: line,
+      character: 0
+    },
+    end: {
+      line: line + 1,
+      character: 0
+    }
+  });
+
+  identifier.lastIndex = character;
+  const match = text.match(identifier);
+
+  // need the beginning of the word too
+  if (match) {
+    let i = character;
+    while (i >= 0 && text[i].match(alphaNumeric))
+      i--;
+    return text.slice(i+1, character) + match[0];
+  }
+
+  return "";
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -73,6 +108,8 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
+
+const declarationsCache = new Map<string, Map<string, Loc>>();
 
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -97,7 +134,9 @@ connection.onInitialize((params: InitializeParams) => {
       // Tell the client that this server supports code completion.
       completionProvider: {
         resolveProvider: true
-      }
+      },
+      declarationProvider: true,
+      referencesProvider: true,
     }
   };
   if (hasWorkspaceFolderCapability) {
@@ -119,6 +158,31 @@ connection.onInitialized(() => {
     connection.workspace.onDidChangeWorkspaceFolders(_event => {
       connection.console.log('Workspace folder change event received.');
     });
+  }
+});
+
+// Goto declaration
+// textDocument/declaration
+connection.onDeclaration((params, token, workDoneProgress, resultProgress) => {
+  console.log(params);
+
+  const doc = documents.get(params.textDocument.uri);
+
+  if (doc) {
+    const lookup = declarationsCache.get(doc.uri);
+    const id = wordAt(doc, params.position);
+    const loc = lookup?.get(id);
+    if (loc) {
+      const {pos, length} = loc;
+
+      return {
+        uri: doc.uri,
+        range: {
+          start: doc.positionAt(pos),
+          end: doc.positionAt(pos + length)
+        }
+      };
+    }
   }
 });
 
@@ -192,7 +256,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     console.log(Hera.parse(text));
     const tokens = Hera.parse(text, {tokenize: true});
 
-    console.log(tokens, declarations(tokens));
+    declarationsCache.set(textDocument.uri, declarations(tokens));
 
   } catch (e : any) {
     console.log(e);
