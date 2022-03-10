@@ -11,15 +11,11 @@
   "repository": {
     "expression": {
       "patterns": [
-        {
-          "include": "#identifier"
-        },
-        {
-          "include": "#handler"
-        },
-        {
-          "include": "#string"
-        }
+        { "include": "#identifier" },
+        { "include": "#handler" },
+        { "include": "#string" },
+        { "include": "#regex" },
+        { "include": "#operator" }
       ]
     },
     "rule": {
@@ -73,12 +69,22 @@
         }
       ]
     },
+    "operator": {
+      "name": "constant.numeric.hera",
+      "match": "[!&?+*]"
+    },
+    "regex": {
+      "name": "string.regex.hera",
+      "begin": "/",
+      "end": "/",
+      "patterns": [{
+        "include": "#string-character-escape"
+      }]
+    },
     "string": {
-      "patterns": [
-        {
-          "include": "#qstring-double"
-        }
-      ]
+      "patterns": [{
+        "include": "#qstring-double"
+      }]
     },
     "string-character-escape": {
       "name": "constant.character.escape.js",
