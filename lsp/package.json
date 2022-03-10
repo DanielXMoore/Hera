@@ -40,6 +40,16 @@
         "id": "hera",
         "extensions": [".hera"]
       }
+    ],
+    "grammars": [
+      {
+        "language": "hera",
+        "scopeName": "source.hera",
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript": "javascript"
+        },
+        "path": "./syntaxes/hera.json"
+      }
     ]
   },
   "scripts": {

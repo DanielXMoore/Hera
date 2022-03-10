@@ -21,11 +21,47 @@ import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
 
+interface Loc {
+  pos: number
+  length: number
+}
+
+interface HeraNode {
+  type: string
+  loc: Loc
+  value: HeraNode[] | string
+}
+
+interface parse {
+  (input:string): any,
+  (input:string, tokenize:{tokenize: true}) : HeraNode
+}
+
+interface HeraParser {
+  parse: parse
+}
+
+function declarations(grammar: HeraNode): HeraNode[] {
+  const {value} = grammar;
+  if (Array.isArray(value)) {
+    return value.flatMap<HeraNode>(({type, value}) => {
+      if (type === "Rule+") {
+        return (value as HeraNode[]).map(({value}) => {
+          return value[0] as HeraNode;
+        });
+      }
+      return [];
+    });
+  }
+  return [];
+}
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import * as Hera from '@danielx/hera';
+// @type Hera
+import * as HeraP from '@danielx/hera';
 
-console.log(Hera);
+const Hera = HeraP as HeraParser;
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -156,7 +192,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     console.log(Hera.parse(text));
     const tokens = Hera.parse(text, {tokenize: true});
 
-    console.log(tokens);
+    console.log(tokens, declarations(tokens));
 
   } catch (e : any) {
     console.log(e);
