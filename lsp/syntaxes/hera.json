@@ -15,12 +15,17 @@
         { "include": "#handler" },
         { "include": "#string" },
         { "include": "#regex" },
-        { "include": "#operator" }
+        { "include": "#operator" },
+        { "include": "#comment" }
       ]
     },
     "rule": {
-      "match": "^[_a-zA-Z][_a-zA-Z0-9]*\\s*$",
+      "match": "^[_a-zA-Z][_a-zA-Z0-9]*",
       "name": "support.class.hera"
+    },
+    "comment": {
+      "match": "\\#.*$",
+      "name": "comment.hera"
     },
     "escaped_char": {
       "match": "\\.",
