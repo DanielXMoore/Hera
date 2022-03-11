@@ -98,10 +98,29 @@ function references(doc: TextDocument, grammar: HeraNode): Map<string, Location[
   });
 }
 
-function symbols(doc: TextDocument, grammar: HeraNode): DocumentSymbol[] {
-  return Array.from(filterMap(traverse(grammar), (node) => {
+
+function stringValue(literal: HeraNode) {
+  return Array.from(filterMap(traverse(literal), ({ value }) => {
+    console.log(value);
+    return typeof value === "string" ?
+      value :
+      undefined;
+  })).join('');
+}
+
+function* symbols(doc: TextDocument, grammar: HeraNode): Iterable<DocumentSymbol> {
+  for (const node of traverse(grammar)) {
     const location = locToLocation(doc, node.loc);
     const { type, value } = node;
+
+    if (type === "StringValue" && Array.isArray(value)) {
+      yield {
+        name: stringValue(node),
+        kind: SymbolKind.String,
+        range: location.range,
+        selectionRange: location.range,
+      };
+    }
 
     if (type !== "Rule" || !Array.isArray(value)) {
       return;
@@ -113,7 +132,7 @@ function symbols(doc: TextDocument, grammar: HeraNode): DocumentSymbol[] {
       range: location.range,
       selectionRange: location.range,
     };
-  }));
+  }
 }
 
 export function parseDocument(textDocument: TextDocument) {
@@ -134,12 +153,19 @@ export function parseDocument(textDocument: TextDocument) {
 
   declarationsCache.set(textDocument.uri, declarations(tokens));
 
+  console.log(Array.from(filterMap(traverse(tokens), (node) => {
+    if (node.type === "StringValue") {
+      return node;
+    }
+  })));
+
   const refs = references(textDocument, tokens);
-  console.log("refs", refs);
+  // console.log("refs", refs);
   referencesCache.set(textDocument.uri, refs);
 
-  const syms = symbols(textDocument, tokens);
-  console.log("syms", syms);
+  const syms = Array.from(symbols(textDocument, tokens));
+  console.log("SYMS");
+  console.log(syms);
   symbolsCache.set(textDocument.uri, syms);
 }
 
