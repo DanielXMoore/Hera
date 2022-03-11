@@ -1,5 +1,5 @@
 import { Position, TextDocument } from 'vscode-languageserver-textdocument';
-import { DocumentSymbol, Location, SelectionRange, SymbolKind, URI } from 'vscode-languageserver';
+import { CompletionItem, CompletionItemKind, DocumentSymbol, Location, SelectionRange, SymbolKind, URI } from 'vscode-languageserver';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -8,6 +8,7 @@ import * as HeraP from '@danielx/hera';
 
 const Hera = HeraP as HeraParser;
 
+const sourceCache = new Map<URI, string>();
 const declarationsCache = new Map<URI, Map<string, Loc>>();
 const referencesCache = new Map<URI, Map<string, Location[]>>();
 const symbolsCache = new Map<URI, DocumentSymbol[]>();
@@ -143,6 +144,8 @@ export function parseDocument(textDocument: TextDocument) {
 
   console.log(tokens);
 
+  sourceCache.set(textDocument.uri, text);
+
   let count = 0;
   for (const node of traverse(tokens)) {
     if (node.type === "Name")
@@ -229,4 +232,37 @@ export function getReferencesFor(doc: TextDocument, pos: Position): Location[] |
 export function getDocumentSymbols(doc: TextDocument): DocumentSymbol[] | undefined {
   // console.log("get document symbols", doc);
   return symbolsCache.get(doc.uri);
+}
+
+export function getCompletionsFor(doc: TextDocument, pos: Position): CompletionItem[] | undefined {
+  // The pass parameter contains the position of the text document in
+  // which code complete got requested. For the example we ignore this
+  // info and always provide the same completion items.
+  const { uri } = doc;
+  const keys = declarationsCache.get(uri)?.keys();
+  if (keys) {
+    return Array.from(keys).map((s, i) => ({
+      label: s,
+      kind: CompletionItemKind.Variable,
+      data: uri,
+    }));
+  }
+}
+
+export function onCompletionResolve(item: CompletionItem): CompletionItem {
+  const { label, data } = item;
+  const lookup = declarationsCache.get(data);
+
+  if (lookup) {
+    const loc = lookup.get(label);
+    const source = sourceCache.get(data);
+
+    item.detail = label;
+
+    if (source && loc) {
+      // TODO: this should be the body of the rule
+      item.documentation = source.slice(loc.pos, loc.pos + loc.length);
+    }
+  }
+  return item;
 }
