@@ -1,5 +1,5 @@
 import { Position, TextDocument } from 'vscode-languageserver-textdocument';
-import { Location, URI } from 'vscode-languageserver';
+import { DocumentSymbol, Location, SelectionRange, SymbolKind, URI } from 'vscode-languageserver';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -10,6 +10,7 @@ const Hera = HeraP as HeraParser;
 
 const declarationsCache = new Map<URI, Map<string, Loc>>();
 const referencesCache = new Map<URI, Map<string, Location[]>>();
+const symbolsCache = new Map<URI, DocumentSymbol[]>();
 
 interface Loc {
   pos: number
@@ -80,12 +81,39 @@ function partitionMap<T, K, V>(iterable: Iterable<T>, keyFn: (item: T) => K, val
   return m;
 }
 
+function* filterMap<T, V>(iterable: Iterable<T>, fn: (item: T) => V | undefined): Iterable<V> {
+  for (const item of iterable) {
+    const v = fn(item);
+    if (v !== undefined) {
+      yield v;
+    }
+  }
+}
+
 function references(doc: TextDocument, grammar: HeraNode): Map<string, Location[]> {
   return partitionMap(traverse(grammar), (node) => String(node.value), ({ type, loc }) => {
     if (type === "Name") {
       return locToLocation(doc, loc);
     }
   });
+}
+
+function symbols(doc: TextDocument, grammar: HeraNode): DocumentSymbol[] {
+  return Array.from(filterMap(traverse(grammar), (node) => {
+    const location = locToLocation(doc, node.loc);
+    const { type, value } = node;
+
+    if (type !== "Rule" || !Array.isArray(value)) {
+      return;
+    }
+
+    return {
+      name: String(value[0].value),
+      kind: SymbolKind.Class,
+      range: location.range,
+      selectionRange: location.range,
+    };
+  }));
 }
 
 export function parseDocument(textDocument: TextDocument) {
@@ -105,9 +133,14 @@ export function parseDocument(textDocument: TextDocument) {
   console.log("name nodes", count);
 
   declarationsCache.set(textDocument.uri, declarations(tokens));
+
   const refs = references(textDocument, tokens);
   console.log("refs", refs);
   referencesCache.set(textDocument.uri, refs);
+
+  const syms = symbols(textDocument, tokens);
+  console.log("syms", syms);
+  symbolsCache.set(textDocument.uri, syms);
 }
 
 const identifier = /[a-zA-Z0-9]+/suy;
@@ -165,4 +198,9 @@ export function getReferencesFor(doc: TextDocument, pos: Position): Location[] |
   const id = wordAt(doc, pos);
 
   return referencesCache.get(doc.uri)?.get(id);
+}
+
+export function getDocumentSymbols(doc: TextDocument): DocumentSymbol[] | undefined {
+  // console.log("get document symbols", doc);
+  return symbolsCache.get(doc.uri);
 }

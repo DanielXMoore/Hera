@@ -12,8 +12,6 @@ import {
   DidChangeConfigurationNotification,
   CompletionItem,
   CompletionItemKind,
-  Position,
-  Range,
   TextDocumentPositionParams,
   TextDocumentSyncKind,
   InitializeResult
@@ -22,7 +20,7 @@ import {
 import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
-import { getDeclarationFor, getReferencesFor, parseDocument } from './util';
+import { getDeclarationFor, getDocumentSymbols, getReferencesFor, parseDocument } from './util';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -59,6 +57,7 @@ connection.onInitialize((params: InitializeParams) => {
       completionProvider: {
         resolveProvider: true
       },
+      documentSymbolProvider: true,
       declarationProvider: true,
       referencesProvider: true,
     }
@@ -102,7 +101,13 @@ connection.onReferences((params) => {
   if (doc) {
     return getReferencesFor(doc, params.position);
   }
+});
 
+connection.onDocumentSymbol((params) => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc) {
+    return getDocumentSymbols(doc);
+  }
 });
 
 // The example settings
