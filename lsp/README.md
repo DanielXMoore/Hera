@@ -40,16 +40,28 @@ It also includes an End-to-End test.
 
 ## Questions and Answers
 
-How to send declarations?
+### How to send declarations?
 
-How to set ctrl+click to jump to things?
+### How to set ctrl+click to jump to things?
 
-How to find all references?
+Maybe DocumentLink? Nope, that is for permanently underlined links.
+
+Use `definitionProvider`, that will allow for Ctrl+Click to go to the
+definition, will underline when hovering with Ctrl held, and will automatically
+display a helpful UI preview of the target source location.
+
+### How to have nested symbols in the outline?
+
+Walk down the parse nodes and recurse into the AST node's children children
+collecting and transforming them into the `children` property for the returned
+`DocumentSymbol`.
+
+### How to find all references?
 
 <https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol>
 
-How to display documentation when hovering a symbol or identifier?
+### How to display documentation when hovering a symbol or identifier?
 
-How to send auto-completion lists based on location in document?
+### How to send auto-completion lists based on location in document?
 
-Why does quitting the launched VSCode client instance by closing the window open up a big ol' json file in the editor?
+### Why does quitting the launched VSCode client instance by closing the window open up a big ol' json file in the editor?

@@ -10,9 +10,7 @@ import {
   ProposedFeatures,
   InitializeParams,
   DidChangeConfigurationNotification,
-  CompletionItem,
-  CompletionItemKind,
-  TextDocumentPositionParams,
+  DocumentLinkParams,
   TextDocumentSyncKind,
   InitializeResult
 } from 'vscode-languageserver/node';
@@ -20,7 +18,7 @@ import {
 import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
-import { getCompletionsFor, getDeclarationFor, getDocumentSymbols, getReferencesFor, onCompletionResolve, parseDocument } from './util';
+import { getCompletionsFor, getDeclarationFor, getDocumentLinksFor, getDocumentSymbols, getReferencesFor, onCompletionResolve, onLinkResolve, parseDocument } from './util';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -57,8 +55,11 @@ connection.onInitialize((params: InitializeParams) => {
       completionProvider: {
         resolveProvider: true
       },
+      // documentLinkProvider: {
+      //   resolveProvider: true
+      // },
       documentSymbolProvider: true,
-      declarationProvider: true,
+      definitionProvider: true,
       referencesProvider: true,
     }
   };
@@ -96,17 +97,23 @@ connection.onCompletion((params) => {
 // the completion list.
 connection.onCompletionResolve(onCompletionResolve);
 
-// Goto declaration
-// textDocument/declaration
-connection.onDeclaration((params, token, workDoneProgress, resultProgress) => {
-  console.log(params);
-
+// Goto definition
+// textDocument/definitio
+connection.onDefinition((params, token, workDoneProgress, resultProgress) => {
   const doc = documents.get(params.textDocument.uri);
-
   if (doc) {
     return getDeclarationFor(doc, params.position);
   }
 });
+
+// connection.onDocumentLinks((params: DocumentLinkParams) => {
+//   const doc = documents.get(params.textDocument.uri);
+//   if (doc) {
+//     return getDocumentLinksFor(doc);
+//   }
+// });
+
+// connection.onDocumentLinkResolve(onLinkResolve);
 
 connection.onReferences((params) => {
   const doc = documents.get(params.textDocument.uri);

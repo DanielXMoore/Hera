@@ -3,18 +3,18 @@
 import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-function filter<T>(predicate: (item: T) => boolean) {
-  return function* (source: Iterable<T>) {
+function filter<T>(predicate: (item: T) => boolean): (source: Iterable<T>) => Iterable<T> {
+  return function* (source: Iterable<T>): Iterable<T> {
     for (const item of source) {
-      if (predicate(item) !== undefined) {
+      if (predicate(item)) {
         yield item;
       }
     }
   };
 }
 
-function map<T, V>(fn: (item: T) => V) {
-  return function* (source: Iterable<T>) {
+function map<T, V>(fn: (item: T) => V): (source: Iterable<T>) => Iterable<V> {
+  return function* (source: Iterable<T>): Iterable<V> {
     for (const item of source) {
       yield fn(item);
     }
@@ -24,7 +24,15 @@ function map<T, V>(fn: (item: T) => V) {
 const compose = <A, B, C>(a: ((source: Iterable<A>) => Iterable<B>), b: ((source: Iterable<B>) => Iterable<C>)) => (source: Iterable<A>) => b(a(source));
 const composeMany = <T>(...fns: any) => (source: Iterable<T>) => fns.reduce((a: any, b: any) => b(a), source);
 
-composeMany(filter((x: number) => x > 0), map((n: number) => n * 2));
+export const testfn: (source: Iterable<number>) => Iterable<number> = composeMany(
+  filter((x: number) => x > 0),
+  map((n: number) => n * 2),
+);
+
+console.log("iterable test");
+for (const v of testfn([-2, -1, 0, 1, 2])) {
+  console.log(v);
+}
 
 function exampleDiagnostics(textDocument: TextDocument) {
   const hasDiagnosticRelatedInformationCapability = true;

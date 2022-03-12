@@ -1,17 +1,20 @@
 import { Position, TextDocument } from 'vscode-languageserver-textdocument';
-import { CompletionItem, CompletionItemKind, DocumentSymbol, Location, SelectionRange, SymbolKind, URI } from 'vscode-languageserver';
+import { CompletionItem, CompletionItemKind, DocumentLink, DocumentSymbol, Location, SymbolKind, URI } from 'vscode-languageserver';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 // @type Hera
 import * as HeraP from '@danielx/hera';
+import { link } from 'fs';
 
 const Hera = HeraP as HeraParser;
 
+// TODO: Combine all of these into some kind of cached "DocumentInfo"
 const sourceCache = new Map<URI, string>();
 const declarationsCache = new Map<URI, Map<string, Loc>>();
 const referencesCache = new Map<URI, Map<string, Location[]>>();
 const symbolsCache = new Map<URI, DocumentSymbol[]>();
+const linksCache = new Map<URI, DocumentLink[]>();
 
 interface Loc {
   pos: number
@@ -91,6 +94,35 @@ function* filterMap<T, V>(iterable: Iterable<T>, fn: (item: T) => V | undefined)
   }
 }
 
+function links(doc: TextDocument, grammar: HeraNode): DocumentLink[] {
+  const results: DocumentLink[] = [];
+  const decLookup = declarationsCache.get(doc.uri);
+
+  if (decLookup) {
+    for (const node of traverse(grammar)) {
+      const { type, loc, value } = node;
+
+      if (type === "Name") {
+        const decl = decLookup.get(String(value));
+        if (decl) {
+          const { line, character } = locToLocation(doc, decl).range.start;
+          const target = doc.uri + `#${line + 1}:${character}`;
+
+          results.push({
+            range: locToLocation(doc, loc).range,
+            data: {
+              target: target,
+              tooltip: target,
+            }
+          });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 function references(doc: TextDocument, grammar: HeraNode): Map<string, Location[]> {
   return partitionMap(traverse(grammar), (node) => String(node.value), ({ type, loc }) => {
     if (type === "Name") {
@@ -98,6 +130,8 @@ function references(doc: TextDocument, grammar: HeraNode): Map<string, Location[
     }
   });
 }
+
+// ./util.ts:12:0
 
 
 function stringValue(literal: HeraNode) {
@@ -109,30 +143,58 @@ function stringValue(literal: HeraNode) {
   })).join('');
 }
 
+function* ruleSymbolChildren(doc: TextDocument, node: HeraNode) {
+  for (const child of traverse(node)) {
+    const { type, value, loc } = child;
+
+    // TODO: Identifier children as well
+    if (type === "StringValue" && Array.isArray(value)) {
+      const location = locToLocation(doc, loc);
+      yield {
+        name: stringValue(child),
+        kind: SymbolKind.String,
+        range: location.range,
+        selectionRange: location.range,
+      };
+    } else if (type === "RegExpLiteral") {
+      const location = locToLocation(doc, loc);
+      yield {
+        name: stringValue(child),
+        kind: SymbolKind.String,
+        range: location.range,
+        selectionRange: location.range,
+      };
+    } else if (type === "Name") {
+      const location = locToLocation(doc, loc);
+      yield {
+        name: stringValue(child),
+        kind: SymbolKind.Variable,
+        range: location.range,
+        selectionRange: location.range
+      };
+    }
+  }
+}
+
 function* symbols(doc: TextDocument, grammar: HeraNode): Iterable<DocumentSymbol> {
   for (const node of traverse(grammar)) {
     const location = locToLocation(doc, node.loc);
     const { type, value } = node;
 
-    if (type === "StringValue" && Array.isArray(value)) {
+    // eslint-disable-next-line no-empty
+    if (type !== "Rule" || !Array.isArray(value)) {
+
+    } else {
       yield {
-        name: stringValue(node),
-        kind: SymbolKind.String,
+        name: String(value[0].value),
+        kind: SymbolKind.Class,
         range: location.range,
         selectionRange: location.range,
+        children: Array.from(ruleSymbolChildren(doc, node)).filter((c) =>
+          c.range.start.line != location.range.start.line
+        )
       };
     }
-
-    if (type !== "Rule" || !Array.isArray(value)) {
-      return;
-    }
-
-    return {
-      name: String(value[0].value),
-      kind: SymbolKind.Class,
-      range: location.range,
-      selectionRange: location.range,
-    };
   }
 }
 
@@ -161,6 +223,8 @@ export function parseDocument(textDocument: TextDocument) {
       return node;
     }
   })));
+
+  linksCache.set(textDocument.uri, links(textDocument, tokens));
 
   const refs = references(textDocument, tokens);
   // console.log("refs", refs);
@@ -265,4 +329,12 @@ export function onCompletionResolve(item: CompletionItem): CompletionItem {
     }
   }
   return item;
+}
+
+export function getDocumentLinksFor(doc: TextDocument): DocumentLink[] {
+  return linksCache.get(doc.uri) || [];
+}
+
+export function onLinkResolve(item: DocumentLink): DocumentLink {
+  return Object.assign(item, item.data);
 }
