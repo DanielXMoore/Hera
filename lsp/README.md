@@ -20,9 +20,11 @@ It also includes an End-to-End test.
 │   │   ├── test // End to End tests for Language Client / Server
 │   │   └── extension.ts // Language Client entry point
 ├── package.json // The extension manifest.
-└── server // Language Server
-    └── src
-        └── server.ts // Language Server entry point
+├── server // Language Server
+│   └── src
+│       └── server.ts // Language Server entry point
+└── syntaxes
+    └── hera.json // TextMate grammar for syntax highlighting
 ```
 
 ## Running the Sample
@@ -40,7 +42,43 @@ It also includes an End-to-End test.
 
 ## Questions and Answers
 
-### How to send declarations?
+### How to publish and install the extension?
+
+<https://code.visualstudio.com/api/working-with-extensions/publishing-extension>
+
+### How to minimize extension girth?
+
+Node modules is a known fatty what is the best way to only include the files
+that are actually necessary? Tree shaking? What tool is best?
+
+### How to view crashed extension logs?
+
+Installing the extension from vsix isn't exactly the same as lanuching from the
+dev env. To see the logs: `Ctrl+Shift+P` -> Search Show Logs -> Extension Host
+
+You can also view the files at `C:\Users\duder\.vscode\extensions\danielx.hera-lsp-0.0.1`
+
+ProTip:tm: Using `yarn link` for development will break the extension so make
+sure to unlink before publishing.
+
+### How to highlight source code?
+
+<https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide>
+
+Add a grammars section in package.json to register a textmate grammar.
+
+```json
+"grammars": [
+      {
+        "language": "hera",
+        "scopeName": "source.hera",
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript": "javascript"
+        },
+        "path": "./syntaxes/hera.json"
+      }
+    ]
+```
 
 ### How to set ctrl+click to jump to things?
 
@@ -49,6 +87,9 @@ Maybe DocumentLink? Nope, that is for permanently underlined links.
 Use `definitionProvider`, that will allow for Ctrl+Click to go to the
 definition, will underline when hovering with Ctrl held, and will automatically
 display a helpful UI preview of the target source location.
+
+To link to a line / column append `#${line}:#{column}` with count starting from
+1.
 
 ### How to have nested symbols in the outline?
 

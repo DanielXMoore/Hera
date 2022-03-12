@@ -3,9 +3,13 @@
   "description": "Hera LSP",
   "version": "0.0.1",
   "publisher": "danielx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DanielXMoore/hera.git"
+  },
   "categories": [],
   "engines": {
-    "vscode": "^1.63.0"
+    "vscode": "^1.65.0"
   },
   "activationEvents": [
     "onLanguage:hera"
@@ -38,7 +42,9 @@
     "languages": [
       {
         "id": "hera",
-        "extensions": [".hera"]
+        "extensions": [
+          ".hera"
+        ]
       }
     ],
     "grammars": [
@@ -67,6 +73,7 @@
     "@typescript-eslint/parser": "^5.13.0",
     "eslint": "^8.10.0",
     "mocha": "^9.2.1",
-    "typescript": "^4.6.2"
+    "typescript": "^4.6.2",
+    "vsce": "^2.7.0"
   }
 }
