@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.2-pre.0",
+  "version": "0.7.2-pre.1",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/coffeecoverage": "4.0.0-pre.1",
@@ -57,6 +57,9 @@
   "scripts": {
     "prepare": "bash script/prepare",
     "test": "nyc mocha"
+  },
+  "bin": {
+    "hera": "bin/hera"
   },
   "files": [
     "dist/",

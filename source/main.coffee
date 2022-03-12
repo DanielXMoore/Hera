@@ -582,6 +582,8 @@ create = (create, rules) ->
   precomputedCache.set rules, precompute(rules, precompileHandler)
 
   module.exports =
+    compile: (source, opts) ->
+      generate parse(source, opts)
     decompile: decompile
     parse: parse
     generate: generate
