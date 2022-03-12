@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.2-pre.1",
+  "version": "0.7.2-pre.2",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/coffeecoverage": "4.0.0-pre.1",
@@ -48,6 +48,7 @@
     "exclude": [
       "lsp/",
       "node_modules/",
+      "source/cli.coffee",
       "source/old_main.coffee",
       "source/rules.coffee"
     ],

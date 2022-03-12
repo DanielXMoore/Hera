@@ -1,6 +1,9 @@
 hera = require "../source/main"
 test = it
 
+compile = (src) ->
+  hera.generate hera.parse(src), true
+
 describe "Hera", ->
   it "should do math example", ->
     grammar = readFile("samples/math.hera")
@@ -41,8 +44,12 @@ describe "Hera", ->
     Object.keys(parsedRules).forEach (key) ->
       assert.deepEqual(parsedRules[key], hera.rules[key], "#{key} rule doesn't match")
 
-    # TODO: strip trailing whitespace before compare
+    # strip trailing whitespace before compare
+    grammar = grammar.replace(/[ ]+\n/g, '\n')
     assert.equal grammar, readFile("samples/hera.hera")
+
+  it "should compile to js string", ->
+    assert hera.compile readFile("samples/math.hera")
 
   it "should consume blank lines as part of EOS", ->
     grammar = """
@@ -168,6 +175,34 @@ describe "Hera", ->
     assert.deepEqual parser.parse(""), []
     assert.deepEqual parser.parse("ab"), ["ab"]
     assert.deepEqual parser.parse("ababccbc"), ["ab", "abcc", "bc"]
+
+  it "should parse bare character classes as regexes", ->
+    newHera = compile readFile("samples/hera.hera")
+
+    rules = newHera.parse """
+      Rule
+        [a-z]+[1-9]*
+
+      Flags
+        [dgimsuy]
+
+      Name
+        [_a-zA-Z][_a-zA-Z0-9]*
+
+      Quants
+        [0-9]{3,4}
+
+      Quant2
+        [a]{2}
+    """
+
+    # require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
+
+    assert.deepEqual rules.Rule, ["R", "[a-z]+[1-9]*"]
+    assert.deepEqual rules.Flags, ["R", "[dgimsuy]"]
+    assert.deepEqual rules.Name, ["R", "[_a-zA-Z][_a-zA-Z0-9]*"]
+    assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
+    assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
 
   it "should return error messages", ->
     assert.throws ->

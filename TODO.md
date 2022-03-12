@@ -18,7 +18,7 @@ Create a hera cli to build parsers.
 
 ---
 
-Bare Regexes
+Bare Regexes - Added!
 
 Allow for "bare" character classes to make regexes.
 

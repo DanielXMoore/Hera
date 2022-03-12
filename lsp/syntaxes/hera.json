@@ -15,6 +15,7 @@
         { "include": "#handler" },
         { "include": "#string" },
         { "include": "#regex" },
+        { "include": "#characterClass"},
         { "include": "#operator" },
         { "include": "#comment" }
       ]
@@ -24,7 +25,7 @@
       "name": "support.class.hera"
     },
     "comment": {
-      "match": "\\#.*$",
+      "match": "#.*$",
       "name": "comment.hera"
     },
     "escaped_char": {
@@ -43,7 +44,7 @@
         }
       },
       "contentName": "meta.embedded.block.javascript",
-      "end": "^(?=[_a-zA-Z])|^(  )(?=[_a-zA-Z/(\"])",
+      "end": "^(?=[_a-zA-Z#])|^(  )(?=[_a-zA-Z/(\"#])",
       "endCaptures": {
         "2": "indent"
       },
@@ -82,6 +83,19 @@
       "name": "string.regex.hera",
       "begin": "/",
       "end": "/",
+      "patterns": [{
+        "include": "#string-character-escape"
+      }]
+    },
+    "characterClass": {
+      "name": "string.character-class.hera",
+      "begin": "\\[",
+      "end": "\\]([.*?]|\\{\\d+(,\\d+)?\\})?",
+      "endCaptures": {
+        "1": {
+          "name": "constant.numeric.hera"
+        }
+      },
       "patterns": [{
         "include": "#string-character-escape"
       }]

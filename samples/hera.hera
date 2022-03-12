@@ -109,10 +109,23 @@ StringLiteral
 RegExpLiteral
   "/" !_ RegExpCharacter* "/" ->
     return ["R", $3.join('')]
+  CharacterClass+ ->
+    return ["R", $1.join('')]
 
 RegExpCharacter
   /[^\/\\]+/
   EscapeSequence
+
+CharacterClass
+  "[" CharacterClassCharacter* "]" Quantifier? ->
+    return "[" + $2.join('') + "]" + ($4 || "")
+
+CharacterClassCharacter
+  /[^\]\\]+/
+  EscapeSequence
+
+Quantifier
+  /[?+*]|\{\d+(,\d+)?\}/
 
 Name
   /[_a-zA-Z][_a-zA-Z0-9]*/

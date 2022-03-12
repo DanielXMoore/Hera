@@ -354,28 +354,40 @@ module.exports = {
     ]
   ],
   "RegExpLiteral": [
-    "S",
+    "/",
     [
       [
-        "L",
-        "/"
+        "S",
+        [
+          [
+            "L",
+            "/"
+          ],
+          [
+            "!",
+            "_"
+          ],
+          [
+            "*",
+            "RegExpCharacter"
+          ],
+          [
+            "L",
+            "/"
+          ]
+        ],
+        {
+          "f": "return [\"R\", $3.join('')]"
+        }
       ],
       [
-        "!",
-        "_"
-      ],
-      [
-        "*",
-        "RegExpCharacter"
-      ],
-      [
-        "L",
-        "/"
+        "+",
+        "CharacterClass",
+        {
+          "f": "return [\"R\", $1.join('')]"
+        }
       ]
-    ],
-    {
-      "f": "return [\"R\", $3.join('')]"
-    }
+    ]
   ],
   "RegExpCharacter": [
     "/",
@@ -386,6 +398,44 @@ module.exports = {
       ],
       "EscapeSequence"
     ]
+  ],
+  "CharacterClass": [
+    "S",
+    [
+      [
+        "L",
+        "["
+      ],
+      [
+        "*",
+        "CharacterClassCharacter"
+      ],
+      [
+        "L",
+        "]"
+      ],
+      [
+        "?",
+        "Quantifier"
+      ]
+    ],
+    {
+      "f": "return \"[\" + $2.join('') + \"]\" + ($4 || \"\")"
+    }
+  ],
+  "CharacterClassCharacter": [
+    "/",
+    [
+      [
+        "R",
+        "[^\\]\\\\]+"
+      ],
+      "EscapeSequence"
+    ]
+  ],
+  "Quantifier": [
+    "R",
+    "[?+*]|\\{\\d+(,\\d+)?\\}"
   ],
   "Name": [
     "R",
