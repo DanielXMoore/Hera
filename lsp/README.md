@@ -106,3 +106,7 @@ collecting and transforming them into the `children` property for the returned
 ### How to send auto-completion lists based on location in document?
 
 ### Why does quitting the launched VSCode client instance by closing the window open up a big ol' json file in the editor?
+
+## TODO
+
+- [ ] Fix `/` choice expression highlighting (getting eaten by regex)

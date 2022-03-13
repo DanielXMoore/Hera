@@ -1,6 +1,9 @@
 TODO
 ====
 
+- [x] Split out decompile to util
+- [ ] Decompile regexes to character class expressions when possible.
+
 Features
 --------
 

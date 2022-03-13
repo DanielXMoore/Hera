@@ -41,14 +41,14 @@ Expression
   PrefixOperator Suffix -> [1,2]
 
 PrefixOperator
-  /[&!]/
+  [&!]
 
 Suffix
   Primary SuffixOperator -> [2,1]
   Primary
 
 SuffixOperator
-  /[+?*]/
+  [+?*]
 
 Primary
   Name
@@ -96,11 +96,11 @@ StringValue
     return $2.join('')
 
 DoubleStringCharacter
-  /[^"\\]+/
+  [^"\\]+
   EscapeSequence
 
 EscapeSequence
-  Backslash /[^]/ ->
+  Backslash [^] ->
     return '\\' + $2
 
 StringLiteral
@@ -109,11 +109,14 @@ StringLiteral
 RegExpLiteral
   "/" !_ RegExpCharacter* "/" ->
     return ["R", $3.join('')]
+  CharacterClassExpression
+
+CharacterClassExpression
   CharacterClass+ ->
     return ["R", $1.join('')]
 
 RegExpCharacter
-  /[^\/\\]+/
+  [^\/\\]+
   EscapeSequence
 
 CharacterClass
@@ -121,14 +124,14 @@ CharacterClass
     return "[" + $2.join('') + "]" + ($4 || "")
 
 CharacterClassCharacter
-  /[^\]\\]+/
+  [^\]\\]+
   EscapeSequence
 
 Quantifier
   /[?+*]|\{\d+(,\d+)?\}/
 
 Name
-  /[_a-zA-Z][_a-zA-Z0-9]*/
+  [_a-zA-Z][_a-zA-Z0-9]*
 
 Arrow
   "->" _*
@@ -152,7 +155,7 @@ Indent
   "  "
 
 _
-  /[ \t]+/
+  [ \t]+
 
 EOS
   /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/

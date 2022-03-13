@@ -34,20 +34,6 @@ describe "Hera", ->
     assert.equal query, "query"
     assert.equal fragment, "fragment"
 
-  it "should parse decompiled rules", ->
-    grammar = hera.decompile(hera.rules)
-
-    # console.log grammar
-    parsedRules = hera.parse grammar
-    # console.log parsedRules, hera.rules
-
-    Object.keys(parsedRules).forEach (key) ->
-      assert.deepEqual(parsedRules[key], hera.rules[key], "#{key} rule doesn't match")
-
-    # strip trailing whitespace before compare
-    grammar = grammar.replace(/[ ]+\n/g, '\n')
-    assert.equal grammar, readFile("samples/hera.hera")
-
   it "should compile to js string", ->
     assert hera.compile readFile("samples/math.hera")
 
@@ -178,6 +164,7 @@ describe "Hera", ->
 
   it "should parse bare character classes as regexes", ->
     newHera = compile readFile("samples/hera.hera")
+    # require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
 
     rules = newHera.parse """
       Rule
@@ -195,8 +182,6 @@ describe "Hera", ->
       Quant2
         [a]{2}
     """
-
-    # require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
 
     assert.deepEqual rules.Rule, ["R", "[a-z]+[1-9]*"]
     assert.deepEqual rules.Flags, ["R", "[dgimsuy]"]
@@ -255,15 +240,16 @@ describe "Hera", ->
     assert.equal parser.parse("AAAAAA"), "a"
     assert.equal parser.parse("BBB"), "b"
 
-  it "should decompile nested choices", ->
-    rules = hera.parse """
-      Rule
-        ("A" / "C") ("B" / "D")
-        "Z" -> "z"
-    """
+  describe "starting rules", ->
+    it "should be able to parse from any starting rule", ->
+      assert hera.parse "[]",
+        startRule: "CharacterClassExpression"
 
-    decompiled = hera.decompile rules
-    assert.deepEqual hera.parse(decompiled), rules
+    it "should throw an error when a non-existent starting rule is given ", ->
+      assert.throws ->
+        hera.parse "",
+          startRule: "DoesNotExist"
+      , /Could not find rule/
 
   it "should tokenize", ->
     source = """

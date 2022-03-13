@@ -380,14 +380,15 @@ module.exports = {
           "f": "return [\"R\", $3.join('')]"
         }
       ],
-      [
-        "+",
-        "CharacterClass",
-        {
-          "f": "return [\"R\", $1.join('')]"
-        }
-      ]
+      "CharacterClassExpression"
     ]
+  ],
+  "CharacterClassExpression": [
+    "+",
+    "CharacterClass",
+    {
+      "f": "return [\"R\", $1.join('')]"
+    }
   ],
   "RegExpCharacter": [
     "/",

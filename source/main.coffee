@@ -464,7 +464,15 @@ create = (create, rules) ->
     else
       precomputed = precomputedCache.get(rules)
 
-    result = invoke(state, Object.values(precomputed)[0])
+    if opts.startRule?
+      startRule = precomputed[opts.startRule]
+    else
+      startRule = Object.values(precomputed)[0]
+
+    if !startRule
+      throw new Error "Could not find rule with name '#{opts.startRule}'"
+
+    result = invoke(state, startRule)
 
     return validate(input, result, opts)
 
@@ -522,69 +530,12 @@ create = (create, rules) ->
     else
       return src
 
-  # handler to source
-  hToS = (h) ->
-    return "" unless h?
-
-    " -> " + switch typeof h
-      when "number"
-        h
-      when "string"
-        JSON.stringify(h)
-      when "object"
-        if Array.isArray(h)
-          JSON.stringify(h)
-        else
-          "\n#{h.f.replace(/^|\n/g, "$&    ")}"
-
-  # toS and decompile generate a source document from the rules AST
-  toS = (rule, depth=0) ->
-    if Array.isArray(rule)
-      f = rule[0]
-      h = rule[2]
-      switch f
-        when "*", "+", "?"
-          toS(rule[1], depth+1) + f + hToS(h)
-        when "&", "!"
-          f + toS(rule[1], depth+1)
-        when "L"
-          '"' + rule[1] + '"' + hToS(h)
-        when "R"
-          '/' + rule[1] + '/' + hToS(h)
-        when "S"
-          terms = rule[1].map (i) ->
-            toS i, depth+1
-
-          if depth < 1
-            terms.join(" ") + hToS(h)
-          else
-            "( " + terms.join(" ") + " )"
-
-        when "/"
-          terms = rule[1].map (i) ->
-            toS i, depth and depth+1
-
-          if depth is 0 and !h
-            terms.join("\n  ")
-          else
-            "( " + terms.join(" / ") + " )" + hToS(h)
-    else # String name of the rule
-      rule
-
-  # Convert the rules to source text in hera grammar
-  decompile = (rules) ->
-    Object.keys(rules).map (name) ->
-      value = toS rules[name]
-      "#{name}\n  #{value}\n"
-    .join("\n")
-
   # Pre compile the rules and handler functions
   precomputedCache.set rules, precompute(rules, precompileHandler)
 
   module.exports =
     compile: (source, opts) ->
       generate parse(source, opts)
-    decompile: decompile
     parse: parse
     generate: generate
     rules: rules

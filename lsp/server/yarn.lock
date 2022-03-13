@@ -204,10 +204,10 @@
   dependencies:
     "@cspotcode/source-map-consumer" "0.8.0"
 
-"@danielx/hera@^0.7.2-pre.1":
-  version "0.7.2-pre.1"
-  resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.7.2-pre.1.tgz#01e6a14d2ed6d96dd37529c9a83a11c3e9356872"
-  integrity sha512-TFwc00eiloZMoGEtTjKUbK4ZtgfWLlHpXO+2esvuk6pqBAkYUnSoFyugqEcbrXtDClrNVgEHmo4SZ3k3iOquyw==
+"@danielx/hera@^0.7.2-pre.2":
+  version "0.7.2-pre.2"
+  resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.7.2-pre.2.tgz#26403369b366ac8eedbbc8ec9da1c925f5d71ae0"
+  integrity sha512-tSoo0MfFkWby3Zdz+/uaPvUfwTr2YTRRPETyESNt1MJeLUXwtPwsNIzS2lgq6WYSJcSUrjG8BIGJlwzRJq8CDA==
 
 "@istanbuljs/load-nyc-config@^1.0.0":
   version "1.1.0"
