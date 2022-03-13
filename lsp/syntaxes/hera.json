@@ -17,12 +17,17 @@
         { "include": "#regex" },
         { "include": "#characterClass"},
         { "include": "#operator" },
-        { "include": "#comment" }
+        { "include": "#comment" },
+        { "include": "#choice"}
       ]
     },
     "rule": {
       "match": "^[_a-zA-Z][_a-zA-Z0-9]*",
       "name": "support.class.hera"
+    },
+    "choice": {
+      "match": "/",
+      "name": "constant.numeric.hera"
     },
     "comment": {
       "match": "#.*$",
@@ -81,7 +86,7 @@
     },
     "regex": {
       "name": "string.regex.hera",
-      "begin": "/",
+      "begin": "/(?=[^\n\t ])",
       "end": "/",
       "patterns": [{
         "include": "#string-character-escape"

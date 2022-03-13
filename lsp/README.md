@@ -103,10 +103,15 @@ collecting and transforming them into the `children` property for the returned
 
 ### How to display documentation when hovering a symbol or identifier?
 
+### How to specify comment behavior in a custom language?
+
+<https://stackoverflow.com/questions/34822552/how-to-customize-comment-block-characters-in-visual-studio-code>
+<https://code.visualstudio.com/api/references/vscode-api#CommentRule>
+
 ### How to send auto-completion lists based on location in document?
 
 ### Why does quitting the launched VSCode client instance by closing the window open up a big ol' json file in the editor?
 
 ## TODO
 
-- [ ] Fix `/` choice expression highlighting (getting eaten by regex)
+- [x] Fix `/` choice expression highlighting (getting eaten by regex)

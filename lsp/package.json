@@ -44,7 +44,8 @@
         "id": "hera",
         "extensions": [
           ".hera"
-        ]
+        ],
+        "configuration": "./syntaxes/hera-configuration.json"
       }
     ],
     "grammars": [
