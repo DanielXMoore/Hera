@@ -76,7 +76,7 @@ HandlingExpressionBody
     }
 
 HandlingExpressionLine
-  Indent Indent /[^\n\r]*/ EOS -> 3
+  Indent Indent [^\n\r]* EOS -> 3
 
 HandlingExpressionValue
   RValue
