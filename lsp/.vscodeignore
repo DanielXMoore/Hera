@@ -1,24 +1,3 @@
-**/*.map
-**/*.ts
-**/tsconfig.base.json
-**/tsconfig.json
-.coverage
-.eslintignore
-.eslintrc.js
-.gitignore
-.nyc_output
-.tsconfig.json
-.vscode/**
-scripts/e2e.sh
+**/*
 
-server/.nyc_output/**
-server/coverage/**
-
-client/testFixture/
-client/node_modules/**
-!client/node_modules/vscode-jsonrpc/**
-!client/node_modules/vscode-languageclient/**
-!client/node_modules/vscode-languageserver-protocol/**
-!client/node_modules/vscode-languageserver-types/**
-!client/node_modules/{minimatch,brace-expansion,concat-map,balanced-match}/**
-!client/node_modules/{semver,lru-cache,yallist}/**
+!dist/

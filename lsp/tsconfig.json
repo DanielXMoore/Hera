@@ -5,6 +5,7 @@
     "lib": [
       "es2020"
     ],
+    "esModuleInterop": true,
     "outDir": "dist",
     "rootDir": "src",
     "sourceMap": true
@@ -15,13 +16,5 @@
   "exclude": [
     "node_modules",
     ".vscode-test"
-  ],
-  "references": [
-    {
-      "path": "./client"
-    },
-    {
-      "path": "./server"
-    }
   ]
 }

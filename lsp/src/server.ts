@@ -10,7 +10,6 @@ import {
   ProposedFeatures,
   InitializeParams,
   DidChangeConfigurationNotification,
-  DocumentLinkParams,
   TextDocumentSyncKind,
   InitializeResult
 } from 'vscode-languageserver/node';
@@ -18,7 +17,14 @@ import {
 import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
-import { getCompletionsFor, getDeclarationFor, getDocumentLinksFor, getDocumentSymbols, getReferencesFor, onCompletionResolve, onLinkResolve, parseDocument } from './util';
+import {
+  getCompletionsFor,
+  getDeclarationFor,
+  getDocumentSymbols,
+  getReferencesFor,
+  onCompletionResolve,
+  parseDocument
+} from './util';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.

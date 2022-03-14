@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-export CODE_TESTS_PATH="$(pwd)/client/dist/test"
-export CODE_TESTS_WORKSPACE="$(pwd)/client/testFixture"
+# TODO: update e2e
 
-node "$(pwd)/client/dist/test/runTest"
+export CODE_TESTS_PATH="$(pwd)/e2e/dist"
+export CODE_TESTS_WORKSPACE="$(pwd)/e2e/fixture"
+
+node "$(pwd)/e2e/dist/runTest"
