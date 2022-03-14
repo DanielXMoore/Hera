@@ -96,6 +96,10 @@ Add a grammars section in package.json to register a textmate grammar.
     ]
 ```
 
+### How to highlight hera blocks in Markdown?
+
+<https://github.com/mjbvz/vscode-fenced-code-block-grammar-injection-example>
+
 ### How to set ctrl+click to jump to things?
 
 Maybe DocumentLink? Nope, that is for permanently underlined links.

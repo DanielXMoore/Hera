@@ -1,9 +1,10 @@
 {
-  "name": "hera-lsp",
+  "name": "hera",
+  "displayName": "Hera",
   "description": "Hera Language Server",
   "icon": "images/hera.png",
-  "version": "0.0.1",
-  "publisher": "danielx",
+  "version": "0.1.0",
+  "publisher": "DanielX",
   "repository": {
     "type": "git",
     "url": "https://github.com/DanielXMoore/hera.git"
@@ -24,6 +25,9 @@
           ".hera"
         ],
         "configuration": "./syntaxes/hera-configuration.json"
+      },
+      {
+        "id": "hera-markdown-injection"
       }
     ],
     "grammars": [
@@ -34,6 +38,17 @@
           "meta.embedded.block.javascript": "javascript"
         },
         "path": "./syntaxes/hera.json"
+      },
+      {
+        "language": "hera-markdown-injection",
+        "scopeName": "markdown.hera.codeblock",
+        "path": "./syntaxes/codeblock.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.hera": "hera"
+        }
       }
     ]
   },
