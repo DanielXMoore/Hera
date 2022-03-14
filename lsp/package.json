@@ -1,6 +1,7 @@
 {
   "name": "hera-lsp",
-  "description": "Hera LSP",
+  "description": "Hera Language Server",
+  "icon": "images/hera.png",
   "version": "0.0.1",
   "publisher": "danielx",
   "repository": {
@@ -16,29 +17,6 @@
   ],
   "main": "./dist/extension",
   "contributes": {
-    "configuration": {
-      "type": "object",
-      "title": "Example configuration",
-      "properties": {
-        "languageServerExample.maxNumberOfProblems": {
-          "scope": "resource",
-          "type": "number",
-          "default": 100,
-          "description": "Controls the maximum number of problems produced by the server."
-        },
-        "languageServerExample.trace.server": {
-          "scope": "window",
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "Traces the communication between VS Code and the language server."
-        }
-      }
-    },
     "languages": [
       {
         "id": "hera",
@@ -96,8 +74,8 @@
     "compile": "node .esbuild.mjs",
     "e2e": "sh ./scripts/e2e.sh",
     "lint": "eslint ./src --ext .ts,.tsx",
+    "package": "node .esbuild.mjs && vsce package --yarn",
     "test": "nyc mocha",
-    "vscode:prepublish": "node .esbuild.mjs",
     "watch": "node .esbuild.mjs --watch"
   },
   "devDependencies": {

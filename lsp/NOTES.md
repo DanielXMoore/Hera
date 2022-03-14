@@ -36,6 +36,23 @@ Adapted from sample code for <https://code.visualstudio.com/api/language-extensi
 
 <https://code.visualstudio.com/api/working-with-extensions/publishing-extension>
 
+`yarn --ignore-engines package`
+
+`--ignore-engines` suppresses the unnecessary yarn warning about vscode engine
+field in package.json.
+
+this then runs:
+
+`node .esbuild.mjs && vsce package --yarn`
+
+Esbuild compiles the client and server each into their own entry point,
+minifying and tree shaking.
+
+The output is a small .vsix package that can be installed by clicking
+
+`Extensions -> ... -> Install from VSIX` or alternatively
+`Ctrl+Shift+P` -> `Extensions: Install from VSIX`
+
 ### How to minimize extension girth?
 
 <https://code.visualstudio.com/api/working-with-extensions/bundling-extension>
