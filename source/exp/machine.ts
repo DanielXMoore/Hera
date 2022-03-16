@@ -16,6 +16,8 @@ export interface ParseResult<T> {
 
 export type MaybeResult<T> = ParseResult<T> | undefined
 
+export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
+
 export interface Parser<T> {
   (state: ParseState): MaybeResult<T>
 }
@@ -40,7 +42,7 @@ export function $fail(pos: number, expected: any) {
   return
 }
 
-export function $L(state: ParseState, str: string): MaybeResult<string> {
+export function $L<T extends string>(state: ParseState, str: T): MaybeResult<T> {
   const { input, pos } = state;
   const { length } = str;
 
@@ -174,10 +176,10 @@ export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
 export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   return (state) => {
     let { input, pos } = state
-    let value
+    let value: T
 
     const s = pos
-    const results = []
+    const results: T[] = []
 
     while (true) {
       const prevPos = pos
@@ -206,7 +208,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 export function $P<T>(fn: Parser<T>): Parser<T[]> {
   return (state: ParseState) => {
     const { input, pos: s } = state
-    let value
+    let value: T
 
     const first = fn(state)
     if (!first) return
@@ -332,50 +334,6 @@ export function defaultRegExpHandler(result: MaybeResult<RegExpMatchArray>): May
     result.value = result.value[0]
     //@ts-ignore
     return result
-  }
-}
-
-export function makeStructuralHandler<A extends number[], T extends any[]>(mapping: A): (result: MaybeResult<T>) => MaybeResult<T[number][]>
-export function makeStructuralHandler<S extends string, N extends number, A extends [S, N], T extends any[]>(mapping: A): (result: MaybeResult<T>) => MaybeResult<[S, T[N]]>
-export function makeStructuralHandler<N extends number, T extends any[]>(mapping: N): (result: MaybeResult<T>) => MaybeResult<T[N]>
-export function makeStructuralHandler<S extends string>(mapping: S): (result: MaybeResult<unknown>) => MaybeResult<S>
-
-export function makeStructuralHandler<A, B>(mapping: typeof mapValue): (result: MaybeResult<A>) => MaybeResult<B> {
-  return function (result) {
-    if (result) {
-      const { value } = result
-      const mappedValue = mapValue(mapping, value)
-
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<B>
-    }
-  }
-}
-
-type Mapping = undefined | number | string | Mapping[]
-
-export function mapValue<T>(mapping: undefined, value: T): T
-export function mapValue<T extends string>(mapping: T, value: unknown): T
-export function mapValue<T extends any[]>(mapping: number, value: T): T[number]
-export function mapValue<A extends any[], T extends any[]>(mapping: A, value: T): any[]
-export function mapValue<S extends string, N extends number, T extends any[]>(mapping: [S, N], value: T): [S, T[N]]
-export function mapValue(mapping: any, value: any): any
-
-export function mapValue(mapping: Mapping, value: any) {
-  switch (typeof mapping) {
-    case "number":
-      return value[mapping]
-    case "string":
-      return mapping
-    case "object":
-      if (Array.isArray(mapping))
-        return mapping.map((n) => mapValue(n, value))
-      throw new Error("non-array object mapping")
-    case "undefined":
-      return value
-    default:
-      throw new Error("Unknown mapping type")
   }
 }
 

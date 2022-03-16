@@ -1,6 +1,7 @@
 Benchmark = require("benchmark")
 hera = require "../source/main"
 oldHera = require "../source/old_main"
+tsHera = require "../source/exp/compiled"
 
 fs = require "fs"
 path = require "path"
@@ -24,10 +25,11 @@ bench = (alternatives) ->
     async: true
 
 describe "Benchmark", ->
-  it "check console", ->
+  it.only "check console", ->
     grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
     hera.parse grammar
     oldHera.parse grammar
+    tsHera.parse grammar
 
     bench
       hera: ->
@@ -35,3 +37,6 @@ describe "Benchmark", ->
 
       oldHera: ->
         oldHera.parse grammar
+
+      tsHera: ->
+        tsHera.parse grammar

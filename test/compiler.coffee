@@ -7,5 +7,5 @@ fs = require "fs"
 
 describe "Experimental", ->
   describe "TypeScript Compiler", ->
-    it.only "should compile to a typescript file", ->
+    it.skip "should compile to a typescript file", ->
       fs.writeFileSync "source/exp/compiled.ts", typeScript(rules)

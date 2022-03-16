@@ -24,6 +24,7 @@
       "coffee"
     ],
     "require": [
+      "ts-node/register",
       "coffeescript/register",
       "./test/helper.coffee"
     ],
