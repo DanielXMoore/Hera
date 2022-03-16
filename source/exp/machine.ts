@@ -27,7 +27,7 @@ let failIndex = 0
 const failHintRegex = /\S+|[^\S]+|$/y
 let maxFailPos = 0
 
-export function $fail(pos, expected) {
+export function $fail(pos: number, expected: any) {
   if (pos < maxFailPos) return
 
   if (pos > maxFailPos) {
@@ -58,17 +58,14 @@ export function $L(state: ParseState, str: string): MaybeResult<string> {
   $fail(pos, str)
 }
 
-export function $R(state: ParseState, regExp: RegExp): MaybeResult<string[]> {
+export function $R(state: ParseState, regExp: RegExp): MaybeResult<RegExpMatchArray> {
   const { input, pos } = state
   regExp.lastIndex = state.pos
 
-  let l, m: RegExpMatchArray, v
+  let l, m, v
 
   if (m = input.match(regExp)) {
     v = m[0]
-  }
-
-  if (v != undefined) {
     l = v.length
 
     return {
@@ -88,7 +85,6 @@ export function $R(state: ParseState, regExp: RegExp): MaybeResult<string[]> {
 // Proioritized choice
 // roughly a(...) || b(...) in JS, generalized to reduce, optimized to loop
 
-export function $C(): undefined
 export function $C<A>(a: Parser<A>): Parser<A>
 export function $C<A, B>(a: Parser<A>, b: Parser<B>): Parser<A | B>
 export function $C<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<A | B | C>
@@ -98,6 +94,7 @@ export function $C<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d
 export function $C<A, B, C, D, E, F, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>): Parser<A | B | C | D | E | F | H>
 export function $C<A, B, C, D, E, F, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>): Parser<A | B | C | D | E | F | H | I>
 export function $C<A, B, C, D, E, F, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<A | B | C | D | E | F | H | I | J>
+
 export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
   return (state: ParseState) => {
     let i = 0
@@ -128,7 +125,7 @@ export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
   return (state: ParseState) => {
     let { input, pos } = state
     let i = 0, value
-    const results = [] as T, s = pos, l = terms.length
+    const results = [] as unknown as T, s = pos, l = terms.length
 
     while (i < l) {
       const r = terms[i++]({ input, pos })
@@ -330,7 +327,12 @@ export function defaultHandler<T>(result: MaybeResult<T>): MaybeResult<T> {
 }
 
 export function defaultRegExpHandler(result: MaybeResult<RegExpMatchArray>): MaybeResult<string> {
-  if (result) return result[0]
+  if (result) {
+    //@ts-ignore
+    result.value = result.value[0]
+    //@ts-ignore
+    return result
+  }
 }
 
 export function makeStructuralHandler<A extends number[], T extends any[]>(mapping: A): (result: MaybeResult<T>) => MaybeResult<T[number][]>
@@ -351,6 +353,8 @@ export function makeStructuralHandler<A, B>(mapping: typeof mapValue): (result: 
   }
 }
 
+type Mapping = undefined | number | string | Mapping[]
+
 export function mapValue<T>(mapping: undefined, value: T): T
 export function mapValue<T extends string>(mapping: T, value: unknown): T
 export function mapValue<T extends any[]>(mapping: number, value: T): T[number]
@@ -358,7 +362,7 @@ export function mapValue<A extends any[], T extends any[]>(mapping: A, value: T)
 export function mapValue<S extends string, N extends number, T extends any[]>(mapping: [S, N], value: T): [S, T[N]]
 export function mapValue(mapping: any, value: any): any
 
-export function mapValue(mapping, value) {
+export function mapValue(mapping: Mapping, value: any) {
   switch (typeof mapping) {
     case "number":
       return value[mapping]
@@ -373,4 +377,95 @@ export function mapValue(mapping, value) {
     default:
       throw new Error("Unknown mapping type")
   }
+}
+
+export function defaultRegExpTransform(fn: Parser<RegExpMatchArray>): Parser<string> {
+  return function (state) {
+    return defaultRegExpHandler(fn(state));
+  }
+}
+
+function location(input: string, pos: number) {
+  const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
+    const l = line.length + 1
+    if (pos > l) {
+      pos -= l
+      return [row + 1, 1]
+    } else if (pos >= 0) {
+      col += pos
+      pos = -1
+      return [row, col]
+    } else {
+      return [row, col]
+    }
+  }, [1, 1])
+
+  return `${line}:${column}`
+}
+
+// Pretty print a string or RegExp literal
+// TODO: could expand to all rules?
+// Includes looking up the name
+function prettyPrint(v: string | RegExp) {
+  let pv;
+
+  if (v instanceof RegExp) {
+    const s = v.toString()
+    // Would prefer to use -v.flags.length, but IE doesn't support .flags
+    pv = s.slice(0, s.lastIndexOf('/') + 1)
+  } else {
+    pv = JSON.stringify(v)
+  }
+
+  const name = false; // _names.get(v)
+
+  if (name) {
+    return "#{name} #{pv}"
+  } else {
+    return pv
+  }
+}
+
+function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
+  if (result && result.pos === input.length)
+    return result.value
+
+  const expectations = Array.from(new Set(failExpected.slice(0, failIndex)))
+  let l = location(input, maxFailPos)
+
+  // The parse completed with a result but there is still input
+  if (result && result.pos > maxFailPos) {
+    l = location(input, result.pos)
+    throw new Error(`
+${filename}:${l} Unconsumed input at #{l}
+
+${input.slice(result.pos)}
+    `)
+  } else if (expectations.length) {
+    failHintRegex.lastIndex = maxFailPos
+    let [hint] = input.match(failHintRegex)!
+
+    if (hint.length)
+      hint = prettyPrint(hint)
+    else
+      hint = "EOF"
+
+    throw new Error(`
+${filename}:${l} Failed to parse
+Expected:
+\t${expectations.map(prettyPrint).join("\n\t")}
+Found: ${hint}
+`)
+  } else if (result)
+    throw new Error(`
+Unconsumed input at ${l}
+
+${input.slice(result.pos)}
+  `);
+}
+
+export function parse<T>(rule: Parser<T>, input: string) {
+  return validate(input, rule({ input, pos: 0 }), {
+    filename: "[anon]"
+  })
 }

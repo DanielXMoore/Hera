@@ -4,25 +4,39 @@ strDefs = []
 reDefs = []
 
 defineTerminal = (lit) ->
-  id = "$L#{strDefs.length}"
-  strDefs.push lit
+  index = strDefs.indexOf(lit)
+
+  if index >= 0
+    id = "$L#{index}"
+  else
+    id = "$L#{strDefs.length}"
+    strDefs.push lit
 
   return id
 
 defineRe = (re) ->
-  id = "$R#{reDefs.length}"
-  reDefs.push re
+  index = reDefs.indexOf(re)
+
+  if index >= 0
+    id = "$R#{index}"
+  else
+    id = "$R#{reDefs.length}"
+    reDefs.push re
 
   return id
 
-compileOp = (tuple) ->
+compileOp = (tuple, defaultHandler) ->
   if Array.isArray(tuple)
     [op, args, h] = tuple
     switch op
       when "L"
         defineTerminal(args)
       when "R"
-        defineRe(args)
+        f = defineRe(args)
+        if defaultHandler
+          "defaultRegExpTransform(#{f})"
+        else
+          f
       when "/"
         "$C(#{args.map(compileOp).join(", ")})"
       when "S"
@@ -45,8 +59,20 @@ compileOp = (tuple) ->
 # Only rules have handlers, either one per choice line,
 # or one for the whole deal
 
-regExpHandlerParams = [0...10].map (_, i) -> "$#{i}"
+regExpHandlerParams = ["$loc"].concat [0...10].map (_, i) -> "$#{i}"
 regularHandlerParams = ["$loc", "$0", "$1"]
+
+compileStructuralHandler = (mapping, source) ->
+  switch typeof mapping
+    when "string"
+      JSON.stringify(mapping)
+    when "number"
+      "#{source}[#{mapping-1}]"
+    when "object"
+      if Array.isArray mapping
+        "[#{mapping.map((m) -> compileStructuralHandler(m, source)).join(',')}]"
+    else
+      throw new Error "Unknown mapping: #{mapping}"
 
 compileHandler = (name, arg) ->
   return unless Array.isArray(arg)
@@ -54,13 +80,22 @@ compileHandler = (name, arg) ->
 
   if h?.f? # function mapping
     if op is "S"
-      parameters = ["$loc", "$0"].concat args.map (_, i) -> "$#{i+1}"
+      parameters = ["$loc:Loc", "$0:V"].concat args.map (_, i) -> "$#{i+1}:V[#{i}]"
 
       return """
-        const #{name}_handler = makeResultHandler_S(function(#{parameters.join(", ")}) {#{h.f}});
+        function #{name}_handler<V extends any[]>(result: MaybeResult<V>) {
+          if (result) {
+            function fn(#{parameters.join(", ")}){#{h.f}}
+
+            //@ts-ignore
+            result.value = fn(result.loc, result.value, ...result.value);
+
+            return result as unknown as MaybeResult<ReturnType<typeof fn>>
+          }
+        };
       """
     else if op is "R"
-      parameters = ["$loc"].concat regExpHandlerParams
+      parameters = regExpHandlerParams
 
       return """
         const #{name}_handler = makeResultHandler_R(function(#{parameters.join(", ")}) {#{h.f}});
@@ -72,15 +107,23 @@ compileHandler = (name, arg) ->
         const #{name}_handler = makeResultHandler(function(#{parameters.join(", ")}) {#{h.f}});
       """
   else if h # other mapping
-    # TODO: opportunity for precompiling this more
-    return """
-      const #{name}_handler = makeStructuralHandler(#{JSON.stringify(h)});
-    """
-  else
-    if op is "R"
+    if op is "S" or op is "R"
+      parameters = regExpHandlerParams
       return """
-        const #{name}_handler = defaultRegExpHandler;
+        function #{name}_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<#{compileStructuralHandler(h, "V")}> {
+          if (result) {
+            const { value } = result
+            const mappedValue = #{compileStructuralHandler(h, "value")}
+
+            //@ts-ignore
+            result.value = mappedValue
+            //@ts-ignore
+            return result
+          }
+        };
       """
+    else
+      throw new Error "Structural handling doesn't make sense for #{JSON.stringify(arg)}"
 
   # no mapping
   return
@@ -98,12 +141,12 @@ compileRule = (name, rule) ->
       if handlers[i]
         "#{name}_#{i}_handler(#{compileOp(arg)}(state))"
       else
-        "#{compileOp(arg)}(state)"
+        "#{compileOp(arg, true)}(state)"
     .join(" || ")
 
     """
       #{handlers.join("\n")}
-      function #{name}(state) {
+      function #{name}(state: ParseState) {
         return #{options}
       }
     """
@@ -114,32 +157,35 @@ compileRule = (name, rule) ->
     if handler
       """
         #{handler}
-        function #{name}(state) {
+        function #{name}(state: ParseState) {
           return #{name}_handler(#{compileOp(rule)}(state));
         }
       """
     else
       """
-        function #{name}(state) {
-          return #{compileOp(rule)}(state);
+        function #{name}(state: ParseState) {
+          return #{compileOp(rule, true)}(state);
         }
       """
 
 header = """
   import {
     $L, $R, $C, $S, $E, $P, $Q, $N, $Y,
-    defaultRegExpHandler,
+    Loc,
+    MaybeResult,
+    ParseState,
+    defaultRegExpTransform,
     makeResultHandler_R,
-    makeResultHandler_S,
     makeResultHandler,
-    makeStructuralHandler,
+    parse as heraParse,
   } from "./machine"
 """
 
 module.exports =
   typeScript: (rules) ->
+    ruleNames = Object.keys(rules)
 
-    body = Object.keys(rules).map (name) ->
+    body = ruleNames.map (name) ->
       compileRule(name, rules[name])
     .join("\n\n")
 
@@ -148,18 +194,22 @@ module.exports =
 
     #{ strDefs.map (str, i) ->
       """
-        const $l#{i} = #{JSON.stringify(str)};
-        function $L#{i}(state) { return $L(state, $l#{i}) }
+        const $l#{i} = "#{str}";
+        function $L#{i}(state: ParseState) { return $L(state, $l#{i}) }
       """
     .join "\n" }
 
     #{ reDefs.map (r, i) ->
       """
         const $r#{i} = new RegExp(#{JSON.stringify(r)}, 'suy');
-        function $R#{i}(state) { return $R(state, $r#{i}) }
+        function $R#{i}(state: ParseState) { return $R(state, $r#{i}) }
       """
 
     .join "\n" }
 
     #{body}
+
+    export function parse(input:string) {
+      return heraParse(#{ruleNames[0]}, input);
+    }
     """

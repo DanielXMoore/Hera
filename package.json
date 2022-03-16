@@ -8,7 +8,9 @@
     "coffeescript": "^2",
     "microtime": "^3.0.0",
     "mocha": "^9.1.1",
-    "nyc": "^15.1.0"
+    "nyc": "^15.1.0",
+    "ts-node": "^10.7.0",
+    "typescript": "^4.6.2"
   },
   "dependencies": {},
   "homepage": "https://danielx.net/hera/docs/README.html",
