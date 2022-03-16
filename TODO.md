@@ -2,10 +2,22 @@ TODO
 ====
 
 - [x] Split out decompile to util
-- [ ] Decompile regexes to character class expressions when possible.
+- [x] Decompile regexes to character class expressions when possible.
+- [ ] Compile to typescript?
+- [ ] Compile to fancy regexes?
 
 Features
 --------
+
+`.` `EOF` : Any Character and EOF regexes. EOF could also be a special rule
+implemented as `pos == input.length`
+
+```javascript
+any = /[^]/
+EOF = /(?![^])/y // must be sticky mode
+```
+
+---
 
 Quantifiers
 
@@ -40,8 +52,30 @@ Quants
 
 Named variables
 
+```hera
 Grammar
   Preamble:pre Files+:files Suffix:s
 
 Phone
-  "1"
+  # Also allow named groups in regexes
+  /1-?(<area>[0-9]{3})-?(<number>[0-9]{3}-?[0-9]{4})/ ->
+    return {
+      area,
+      numeber: number.replace(/[^0-9]/, "")
+    }
+```
+
+---
+
+`i` insensitive flag that can be added to RegExps, strings, and character classes
+
+```hera
+Name
+  [_a-z0-9]+i
+
+Id
+  /cool|rad|dad/i
+
+InsensitiveString
+  "a fun game"i
+```
