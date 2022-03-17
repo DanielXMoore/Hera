@@ -132,7 +132,7 @@ create = (create, rules) ->
             when "/", "S"
               arg.map (x) ->
                 precomputeRule x, null, name, compile
-            when "*", "+", "?", "!", "&"
+            when "*", "+", "?", "!", "&", "$"
               precomputeRule arg, null, name + op, compile
             when "R"
               noteName name, RegExp(arg, RE_FLAGS)
@@ -377,6 +377,15 @@ create = (create, rules) ->
         length: pos - s
       value: rest.value
       pos: pos
+
+    # $ prefix operator, convert result value to a string spanning the matched input
+    "$": (state, term) ->
+      newState = invoke(state, term)
+      if !newState
+        return
+
+      newState.value = state.input.substring(state.pos, newState.pos)
+      return newState
 
     "!": (state, term) ->
       newState = invoke(state, term)

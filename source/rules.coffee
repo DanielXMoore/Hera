@@ -122,7 +122,7 @@ module.exports = {
   ],
   "PrefixOperator": [
     "R",
-    "[&!]"
+    "[$&!]"
   ],
   "Suffix": [
     "/",

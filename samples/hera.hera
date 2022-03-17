@@ -41,7 +41,7 @@ Expression
   PrefixOperator Suffix -> [1,2]
 
 PrefixOperator
-  [&!]
+  [$&!]
 
 Suffix
   Primary SuffixOperator -> [2,1]

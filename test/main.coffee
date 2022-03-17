@@ -4,6 +4,11 @@ test = it
 compile = (src) ->
   hera.generate hera.parse(src), true
 
+describe.skip "", ->
+  it "should update rules file", ->
+    newHera = compile readFile("samples/hera.hera")
+    require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
+
 describe "Hera", ->
   it "should do math example", ->
     grammar = readFile("samples/math.hera")
@@ -164,7 +169,6 @@ describe "Hera", ->
 
   it "should parse bare character classes as regexes", ->
     newHera = compile readFile("samples/hera.hera")
-    # require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
 
     rules = newHera.parse """
       Rule
@@ -215,6 +219,107 @@ describe "Hera", ->
 
     assert.throws ->
       parser.parse "AAB"
+
+  describe "-> Structural Result", ->
+    it "should map regexp groups into the structure", ->
+      {parse} = compile """
+        Rule
+          /(a)(b)(c)/ -> [2, 3, 1]
+      """
+
+      assert.deepEqual ["b", "c", "a"], parse "abc"
+
+    it "should map sequence items into the structure", ->
+      {parse} = compile """
+        Rule
+          "A" "B" "C" -> [2, 3, 1]
+      """
+
+      assert.deepEqual ["B", "C", "A"], parse "ABC"
+
+    it "should map the entire result as $1", ->
+      {parse} = compile """
+        Rule
+          Sub* -> ["T", 1]
+
+        Sub
+          "A" "B"
+      """
+
+      assert.deepEqual ["T", []], parse ""
+      assert.deepEqual ["T", [["A", "B"]]], parse "AB"
+      assert.deepEqual ["T", [["A", "B"], ["A", "B"]]], parse "ABAB"
+
+  describe "$ Prefix Operator: result text", ->
+    it "should return the whole text of the match", ->
+      {parse} = compile """
+        Rule
+          $("AAA" "B" "C")
+      """
+
+      assert.equal "AAABC", parse "AAABC"
+
+    it "should keep pass through fail states", ->
+      {parse} = compile """
+        Rule
+          $A / $B
+        A
+          [aA]+
+        B
+          [bB]+
+      """
+
+      assert.equal "aaAaa", parse "aaAaa"
+      assert.equal "bBbb", parse "bBbb"
+      assert.throws ->
+        parse "c"
+      , /Expected:\s*A/
+
+    it "should correctly span repetitions", ->
+      {parse} = compile """
+        Rule
+          $("A" "B" "C")*
+      """
+
+      assert.equal "ABCABC", parse "ABCABC"
+      assert.equal "", parse ""
+
+    it "should handle nested rules", ->
+      {parse, rules} = compile """
+        RegExpLiteral
+          "/" !_ $RegExpCharacter* "/" -> ["R", 3]
+          CharacterClassExpression
+
+        CharacterClassExpression
+          $CharacterClass+ -> ["R", 1]
+
+        RegExpCharacter
+          [^\\/\\\\]+
+          EscapeSequence
+
+        CharacterClass
+          "[" CharacterClassCharacter* "]" Quantifier?
+
+        CharacterClassCharacter
+          [^\\]\\\\]+
+          EscapeSequence
+
+        Quantifier
+          /[?+*]|\\{\\d+(,\\d+)?\\}/
+
+        EscapeSequence
+          Backslash [^] ->
+            return '\\\\' + $2
+
+        Backslash
+          "\\\\"
+
+        _
+          [ \\t]+
+      """
+
+      assert.deepEqual ["R", "[abc][bc]"], parse "[abc][bc]"
+      assert.deepEqual ["R", "[^]a\\[\\^b]"], parse "/[^]a\\[\\^b]/"
 
   it "should work with assertions", ->
     rules = hera.parse """

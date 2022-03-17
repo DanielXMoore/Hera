@@ -104,7 +104,7 @@ create = (create, rules) ->
         when "/", "S"
           arg.map (x) ->
             precomputeRule precomputed, x, null, name, compile
-        when "*", "+", "?", "!", "&"
+        when "*", "+", "?", "!", "&", "$"
           precomputeRule precomputed, arg, null, name + op, compile
         when "R"
           noteName name, RegExp(arg, RE_FLAGS)
@@ -175,8 +175,12 @@ create = (create, rules) ->
         else
           (s) -> s.value
       else
-        (s) ->
-          mapValue handler, s.value
+        if handler?
+          (s) -> # 0 and 1 in the structural handler should be the result
+            mapValue handler, [s.value, s.value]
+        else
+          (s) ->
+            s.value
 
   precompute = (rules, compile, precomputed={}) ->
     first = Object.keys(rules)[0]
@@ -213,9 +217,6 @@ create = (create, rules) ->
             mapValue n, value
         else
           throw new Error "non-array object mapping"
-      when "undefined"
-        value
-
       else
         throw new Error "Unknown mapping type"
 
@@ -362,6 +363,15 @@ create = (create, rules) ->
       value: results
       pos: pos
 
+    # $ prefix operator, convert result value to a string spanning the matched input
+    "$": (state, term) ->
+      newState = invoke(state, term)
+      if !newState
+        return
+
+      newState.value = state.input.substring(state.pos, newState.pos)
+      return newState
+
     "!": (state, term) ->
       newState = invoke(state, term)
 
@@ -377,9 +387,7 @@ create = (create, rules) ->
     "&": (state, term) ->
       newState = invoke(state, term)
 
-      # If the assertion doesn't advance the position then it is failed.
-      # A zero width assertion always succeeds and is useless
-      if !newState? or (newState.pos is state.pos)
+      if !newState?
         return
       else
         loc:
