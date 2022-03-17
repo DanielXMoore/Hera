@@ -22,26 +22,6 @@ export interface Parser<T> {
   (state: ParseState): MaybeResult<T>
 }
 
-// Error tracking
-// Goal is zero allocations
-const failExpected = Array(16)
-let failIndex = 0
-const failHintRegex = /\S+|[^\S]+|$/y
-let maxFailPos = 0
-
-export function $fail(pos: number, expected: any) {
-  if (pos < maxFailPos) return
-
-  if (pos > maxFailPos) {
-    maxFailPos = pos
-    failIndex = 0
-  }
-
-  failExpected[failIndex++] = expected
-
-  return
-}
-
 export function $L<T extends string>(state: ParseState, str: T): MaybeResult<T> {
   const { input, pos } = state;
   const { length } = str;
@@ -168,11 +148,14 @@ export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
   }
 }
 
-// a*
+// *
 // NOTE: zero length repetitions (where position doesn't advance) return
 // an empty array of values. A repetition where the position doesn't advance
 // would be an infinite loop, so this avoids that problem cleanly.
-// TODO: Think through how this interacts with & and ! predicates
+
+// Since this always returns a result `&x*` will always succeed and `!x*` will
+// always fail. Same goes for `&x?` and `!x?`. Relatedly `&x+ == &x` and
+// `!x+ == !x`.
 export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   return (state) => {
     let { input, pos } = state
@@ -204,7 +187,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   }
 }
 
-// a + one or more
+// + one or more
 export function $P<T>(fn: Parser<T>): Parser<T[]> {
   return (state: ParseState) => {
     const { input, pos: s } = state
@@ -240,6 +223,19 @@ export function $P<T>(fn: Parser<T>): Parser<T[]> {
   }
 }
 
+// $ prefix operator, convert result value to a string spanning the
+// matched input
+export function $TEXT(fn: Parser<unknown>): Parser<string> {
+  return (state: ParseState) => {
+    const newState = fn(state)
+    if (!newState) return
+
+    newState.value = state.input.substring(state.pos, newState.pos)
+    return newState as ParseResult<string>
+  }
+}
+
+// ! prefix operator
 export function $N(fn: Parser<unknown>): Parser<undefined> {
   return (state: ParseState) => {
     const newState = fn(state)
@@ -258,13 +254,13 @@ export function $N(fn: Parser<unknown>): Parser<undefined> {
   }
 
 }
+
+// & prefix operator
 export function $Y(fn: Parser<unknown>): Parser<undefined> {
   return (state: ParseState) => {
     const newState = fn(state)
 
-    // If the assertion doesn't advance the position then it is failed.
-    // A zero width assertion always succeeds and is useless
-    if (!newState || (newState.pos === state.pos)) return
+    if (!newState) return
 
     return {
       loc: {
@@ -341,6 +337,28 @@ export function defaultRegExpTransform(fn: Parser<RegExpMatchArray>): Parser<str
   return function (state) {
     return defaultRegExpHandler(fn(state));
   }
+}
+
+// TODO package up the fail state tracking better than these globals floating around
+
+// Error tracking
+// Goal is zero allocations
+const failExpected = Array(16)
+let failIndex = 0
+const failHintRegex = /\S+|[^\S]+|$/y
+let maxFailPos = 0
+
+export function $fail(pos: number, expected: any) {
+  if (pos < maxFailPos) return
+
+  if (pos > maxFailPos) {
+    maxFailPos = pos
+    failIndex = 0
+  }
+
+  failExpected[failIndex++] = expected
+
+  return
 }
 
 function location(input: string, pos: number) {

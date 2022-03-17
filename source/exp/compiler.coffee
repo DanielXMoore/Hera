@@ -47,12 +47,14 @@ compileOp = (tuple, defaultHandler) ->
         "$P(#{compileOp(args)})"
       when "?"
         "$E(#{compileOp(args)})"
+      when "$"
+        "$TEXT(#{compileOp(args)})"
       when "&"
         "$Y(#{compileOp(args)})"
       when "!"
         "$N(#{compileOp(args)})"
       else
-        "TODO" + JSON.stringify(tuple)
+        throw new Error "Unknown op: #{op} ", args
   else # rule reference
     tuple
 
@@ -74,23 +76,46 @@ compileStructuralHandler = (mapping, source) ->
     else
       throw new Error "Unknown mapping: #{mapping}"
 
-compileHandler = (name, arg) ->
+compileHandler = (options, name, arg) ->
   return unless Array.isArray(arg)
+
+  types = options.types
+
+  if types
+    locType = ": Loc"
+    vType = ": V"
+    resultType = ": MaybeResult<V>"
+    typeVariable = "<V extends any[]>"
+  else
+    locType = ""
+    vType = ""
+    resultType = ""
+    typeVariable = ""
+
   [op, args, h] = arg
 
   if h?.f? # function mapping
     if op is "S"
-      parameters = ["$loc:Loc", "$0:V"].concat args.map (_, i) -> "$#{i+1}:V[#{i}]"
+      parameters = ["$loc#{locType}", "$0#{vType}"].concat args.map (_, i) ->
+        if types
+          "$#{i+1}:V[#{i}]"
+        else
+          "$#{i+1}"
+
+      if types
+        returnConversion = " as unknown as MaybeResult<ReturnType<typeof fn>>"
+      else
+        returnConversion = ""
 
       return """
-        function #{name}_handler<V extends any[]>(result: MaybeResult<V>) {
+        function #{name}_handler#{typeVariable}(result#{resultType}) {
           if (result) {
             function fn(#{parameters.join(", ")}){#{h.f}}
 
             //@ts-ignore
             result.value = fn(result.loc, result.value, ...result.value);
 
-            return result as unknown as MaybeResult<ReturnType<typeof fn>>
+            return result#{returnConversion}
           }
         };
       """
@@ -109,8 +134,14 @@ compileHandler = (name, arg) ->
   else if h # other mapping
     if op is "S" or op is "R"
       parameters = regExpHandlerParams
+
+      if types
+        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V")}>"
+      else
+        returnType = ""
+
       return """
-        function #{name}_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<#{compileStructuralHandler(h, "V")}> {
+        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
           if (result) {
             const { value } = result
             const mappedValue = #{compileStructuralHandler(h, "value")}
@@ -129,13 +160,18 @@ compileHandler = (name, arg) ->
   return
 
 
-compileRule = (name, rule) ->
+compileRule = (options, name, rule) ->
   [op, args, h] = rule
+
+  if options.types
+    stateType = ": ParseState"
+  else
+    stateType = ""
 
   # choice may have nested handlings?
   if op is "/" and !h
     handlers = args.map (arg, i) ->
-      compileHandler "#{name}_#{i}", arg
+      compileHandler options, "#{name}_#{i}", arg
 
     options = args.map (arg, i) ->
       if handlers[i]
@@ -146,70 +182,76 @@ compileRule = (name, rule) ->
 
     """
       #{handlers.join("\n")}
-      function #{name}(state: ParseState) {
+      function #{name}(state#{stateType}) {
         return #{options}
       }
     """
 
   else
-    handler = compileHandler(name, rule)
+    handler = compileHandler(options, name, rule)
 
     if handler
       """
         #{handler}
-        function #{name}(state: ParseState) {
+        function #{name}(state#{stateType}) {
           return #{name}_handler(#{compileOp(rule)}(state));
         }
       """
     else
       """
-        function #{name}(state: ParseState) {
+        function #{name}(state#{stateType}) {
           return #{compileOp(rule, true)}(state);
         }
       """
 
-header = """
-  import {
-    $L, $R, $C, $S, $E, $P, $Q, $N, $Y,
-    Loc,
-    MaybeResult,
-    ParseState,
-    defaultRegExpTransform,
-    makeResultHandler_R,
-    makeResultHandler,
-    parse as heraParse,
-  } from "./machine"
-"""
-
 module.exports =
-  typeScript: (rules) ->
+  compile: (rules, options={}) ->
+    { types } = options
     ruleNames = Object.keys(rules)
 
     body = ruleNames.map (name) ->
-      compileRule(name, rules[name])
+      compileRule(options, name, rules[name])
     .join("\n\n")
 
+    if types
+      inputType = ": string"
+      stateType = ": ParseState"
+    else
+      inputType = ""
+      stateType = ""
+
     """
-    #{header}
+    import {
+      $L, $R, $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
+      Loc,
+      MaybeResult,
+      ParseState,
+      defaultRegExpTransform,
+      makeResultHandler_R,
+      makeResultHandler,
+      parse as heraParse,
+    } from "./machine"
 
     #{ strDefs.map (str, i) ->
       """
         const $l#{i} = "#{str}";
-        function $L#{i}(state: ParseState) { return $L(state, $l#{i}) }
+        function $L#{i}(state#{stateType}) { return $L(state, $l#{i}) }
       """
     .join "\n" }
 
     #{ reDefs.map (r, i) ->
       """
         const $r#{i} = new RegExp(#{JSON.stringify(r)}, 'suy');
-        function $R#{i}(state: ParseState) { return $R(state, $r#{i}) }
+        function $R#{i}(state#{stateType}) { return $R(state, $r#{i}) }
       """
 
     .join "\n" }
 
     #{body}
 
-    export function parse(input:string) {
-      return heraParse(#{ruleNames[0]}, input);
+    module.exports = {
+      parse: function parse(input#{inputType}) {
+        return heraParse(#{ruleNames[0]}, input);
+      }
     }
     """

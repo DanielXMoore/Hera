@@ -1,11 +1,24 @@
 # Experimental compilers, going ham
 
 {rules} = require "../source/main"
-{typeScript} = require "../source/exp/compiler"
+{compile} = require "../source/exp/compiler"
+
+heraSrc = readFile("samples/hera.hera")
 
 fs = require "fs"
 
 describe "Experimental", ->
   describe "TypeScript Compiler", ->
     it.skip "should compile to a typescript file", ->
-      fs.writeFileSync "source/exp/compiled.ts", typeScript(rules)
+      fs.writeFileSync "source/exp/compiled.ts", compile(rules, {types: true})
+      fs.writeFileSync "source/exp/compiled.mjs", compile(rules, {types: false})
+
+    it "should parse from compiled js", ->
+      {parse} = require "../source/exp/compiled.js"
+
+      assert parse heraSrc
+
+    it "should parse from compiled ts", ->
+      {parse} = require "../source/exp/compiled.ts"
+
+      assert parse heraSrc

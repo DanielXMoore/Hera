@@ -40,7 +40,7 @@
     // "noResolve": true,                                /* Disallow `import`s, `require`s or `<reference>`s from expanding the number of files TypeScript should add to a project. */
     /* JavaScript Support */
     "allowJs": false, /* Allow JavaScript files to be a part of your program. Use the `checkJS` option to get errors from these files. */
-    "checkJs": true, /* Enable error reporting in type-checked JavaScript files. */
+    "checkJs": false, /* Enable error reporting in type-checked JavaScript files. */
     // "maxNodeModuleJsDepth": 1,                        /* Specify the maximum folder depth used for checking JavaScript files from `node_modules`. Only applicable with `allowJs`. */
     /* Emit */
     "declaration": true, /* Generate .d.ts files from TypeScript and JavaScript files in your project. */
@@ -74,7 +74,7 @@
     "forceConsistentCasingInFileNames": true, /* Ensure that casing is correct in imports. */
     /* Type Checking */
     "strict": true, /* Enable all strict type-checking options. */
-    "noImplicitAny": true, /* Enable error reporting for expressions and declarations with an implied `any` type.. */
+    "noImplicitAny": false, /* Enable error reporting for expressions and declarations with an implied `any` type.. */
     "strictNullChecks": true, /* When type checking, take into account `null` and `undefined`. */
     "strictFunctionTypes": true, /* When assigning functions, check to ensure parameters and the return values are subtype-compatible. */
     // "strictBindCallApply": true,                      /* Check that the arguments for `bind`, `call`, and `apply` methods match the original function. */
@@ -96,7 +96,9 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "exclude": [],
+  "exclude": [
+    "source/exp/compiled.mjs"
+  ],
   "include": [
     "source"
   ]
