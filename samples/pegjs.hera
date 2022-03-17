@@ -109,8 +109,9 @@ ActionExpression
       : $1;
 
 SequenceExpression
-  # TODO: named parameters
-  head:LabeledExpression tail:(__ @LabeledExpression)* ->
+  LabeledExpression (__ LabeledExpression)* ->
+    const head = $1
+    const tail = $2.map((l) => l[1]) // @
     return ((tail.length > 0) || (head.type === "labeled" && head.pick))
       ? {
           type: "sequence",
@@ -120,8 +121,10 @@ SequenceExpression
       : head;
 
 LabeledExpression
-  # TODO: named parameters
-  pluck:Pluck label:LabelColon? expression:PrefixedExpression ->
+  Pluck LabelColon? PrefixedExpression ->
+    const pluck = $1
+    const label = $2
+    const expression = $3
     if (expression.type.startsWith("semantic_")) {
       error("\"@\" cannot be used on a semantic predicate", pluck);
     }
@@ -134,8 +137,10 @@ LabeledExpression
       expression,
       location: location()
     };
-  # TODO: named parameters
-  label:LabelColon __ expression:PrefixedExpression ->
+
+  LabelColon __ PrefixedExpression ->
+    const label = $1;
+    const expression = $3
     return {
       type: "labeled",
       label: label[0],
@@ -171,7 +176,7 @@ PrefixedExpression
 PrefixedOperator
   "$" -> "text"
   "&" -> "simple_and"
-  "!" -> "simple_not
+  "!" -> "simple_not"
 
 SuffixedExpression
   PrimaryExpression __ SuffixedOperator ->
@@ -193,8 +198,9 @@ PrimaryExpression
   AnyMatcher
   RuleReferenceExpression
   SemanticPredicateExpression
-  # TODO: named parameters
-  "(" __ expression:Expression __ ")" ->
+
+  "(" __ Expression __ ")" ->
+    const expression = $3;
     // The purpose of the "group" AST node is just to isolate label scope. We
     // don't need to put it around nodes that can't contain any labels or
     // nodes that already isolate label scope themselves. This leaves us with
@@ -204,9 +210,8 @@ PrimaryExpression
         : expression;
 
 RuleReferenceExpression
-  # TODO: Named parameters
-  name:IdentifierName !(__ (StringLiteral __)? "=") ->
-    return { type: "rule_ref", name: name[0], location: location() };
+  IdentifierName !(__ (StringLiteral __)? "=") ->
+    return { type: "rule_ref", name: $1[0], location: location() };
 
 SemanticPredicateExpression
   SemanticPredicateOperator __ CodeBlock ->
@@ -298,13 +303,12 @@ UnicodeDigit
 UnicodeConnectorPunctuation
   Pc
 
-# TODO: named parameters
 LiteralMatcher "literal"
-  value:StringLiteral ignoreCase:"i"? ->
+  StringLiteral "i"? ->
     return {
       type: "literal",
-      value,
-      ignoreCase: ignoreCase !== null,
+      value: $1,
+      ignoreCase: ignoreCase != null,
       location: location()
     };
 
