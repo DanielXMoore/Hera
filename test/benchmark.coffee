@@ -25,7 +25,7 @@ bench = (alternatives) ->
     async: true
 
 describe "Benchmark", ->
-  it.only "check console", ->
+  it "check console", ->
     grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
     hera.parse grammar
     oldHera.parse grammar
