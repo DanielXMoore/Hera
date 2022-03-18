@@ -1,13 +1,15 @@
 import {
-  $L, $R, $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
+  $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
   Loc,
   MaybeResult,
   ParseState,
   defaultRegExpTransform,
   makeResultHandler_R,
   makeResultHandler,
-  parse as heraParse,
+  parserState,
 } from "./machine"
+
+const { parse, $L, $R } = parserState(Grammar)
 
 const $l0 = "/";
 function $L0(state: ParseState) { return $L(state, $l0) }
@@ -59,24 +61,22 @@ function $R14(state: ParseState) { return $R(state, $r14) }
 const $r15 = new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy');
 function $R15(state: ParseState) { return $R(state, $r15) }
 
+function Grammar_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) { return Object.fromEntries($2) }
 function Grammar_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1]){return Object.fromEntries($2)}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = Grammar_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof Grammar_handler_fn>>
   }
 };
 function Grammar(state: ParseState) {
   return Grammar_handler($S($Q(EOS), $P(Rule))(state));
 }
 
-function Rule_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0],V[2]]> {
+function Rule_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0], V[2]]> {
   if (result) {
     const { value } = result
-    const mappedValue = [value[0],value[2]]
+    const mappedValue = [value[0], value[2]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -88,53 +88,55 @@ function Rule(state: ParseState) {
   return Rule_handler($S(Name, EOS, RuleBody)(state));
 }
 
-const RuleBody_handler = makeResultHandler(function($loc, $0, $1) {var r = $1.map((a) => a[1])
-if (r.length === 1) return r[0];
-return ["/", r]});
+const RuleBody_handler = makeResultHandler(function ($loc, $0, $1) {
+  var r = $1.map((a) => a[1])
+  if (r.length === 1) return r[0];
+  return ["/", r]
+});
 function RuleBody(state: ParseState) {
   return RuleBody_handler($P($S(Indent, Choice))(state));
 }
 
+function Choice_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+  if ($2 !== undefined) {
+    if (!$1.push)
+      $1 = ["S", [$1], $2]
+    else
+      $1.push($2)
+  }
+  return $1
+}
 function Choice_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1]){if ($2 !== undefined) {
-  if (!$1.push)
-    $1 = ["S", [$1], $2]
-  else
-    $1.push($2)
-}
-return $1}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = Choice_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof Choice_handler_fn>>
   }
 };
 function Choice(state: ParseState) {
   return Choice_handler($S(Sequence, Handling)(state));
 }
 
+function Sequence_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+  $2.unshift($1)
+  return ["S", $2]
+}
 function Sequence_0_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1]){$2.unshift($1)
-return ["S", $2]}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = Sequence_0_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof Sequence_0_handler_fn>>
   }
 };
+function Sequence_1_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+  $2.unshift($1)
+  return ["/", $2]
+}
 function Sequence_1_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1]){$2.unshift($1)
-return ["/", $2]}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = Sequence_1_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof Sequence_1_handler_fn>>
   }
 };
 
@@ -173,10 +175,10 @@ function ChoiceExpression(state: ParseState) {
 }
 
 
-function Expression_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0],V[1]]> {
+function Expression_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0], V[1]]> {
   if (result) {
     const { value } = result
-    const mappedValue = [value[0],value[1]]
+    const mappedValue = [value[0], value[1]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -192,10 +194,10 @@ function PrefixOperator(state: ParseState) {
   return defaultRegExpTransform($R0)(state);
 }
 
-function Suffix_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[1],V[0]]> {
+function Suffix_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[1], V[0]]> {
   if (result) {
     const { value } = result
-    const mappedValue = [value[1],value[0]]
+    const mappedValue = [value[1], value[0]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -235,14 +237,12 @@ function Literal(state: ParseState) {
   return StringLiteral(state) || RegExpLiteral(state)
 }
 
+function Handling_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0]) { return undefined }
 function Handling_0_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0]){return undefined}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = Handling_0_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof Handling_0_handler_fn>>
   }
 };
 function Handling_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[2]> {
@@ -297,9 +297,11 @@ function HandlingExpression(state: ParseState) {
   return HandlingExpression_0_handler($S(EOS, HandlingExpressionBody)(state)) || HandlingExpression_1_handler($S(StringValue, EOS)(state)) || HandlingExpression_2_handler($S(HandlingExpressionValue, EOS)(state))
 }
 
-const HandlingExpressionBody_handler = makeResultHandler(function($loc, $0, $1) {return {
-  f: $1.join("\n")
-}});
+const HandlingExpressionBody_handler = makeResultHandler(function ($loc, $0, $1) {
+  return {
+    f: $1.join("\n")
+  }
+});
 function HandlingExpressionBody(state: ParseState) {
   return HandlingExpressionBody_handler($P(HandlingExpressionLine)(state));
 }
@@ -320,14 +322,12 @@ function HandlingExpressionLine(state: ParseState) {
 }
 
 
+function HandlingExpressionValue_1_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { $3.unshift($2); return $3 }
 function HandlingExpressionValue_1_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1], $3:V[2], $4:V[3]){$3.unshift($2); return $3}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = HandlingExpressionValue_1_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof HandlingExpressionValue_1_handler_fn>>
   }
 };
 function HandlingExpressionValue(state: ParseState) {
@@ -335,7 +335,7 @@ function HandlingExpressionValue(state: ParseState) {
 }
 
 
-const RValue_1_handler = makeResultHandler_R(function($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($0, 10)});
+const RValue_1_handler = makeResultHandler_R(function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
 function RValue(state: ParseState) {
   return StringValue(state) || RValue_1_handler($R3(state))
 }
@@ -355,14 +355,12 @@ function CommaThenValue(state: ParseState) {
   return CommaThenValue_handler($S($Q(_), $L1, $Q(_), RValue, $Q(_))(state));
 }
 
+function StringValue_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2]) { return $2.join('') }
 function StringValue_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1], $3:V[2]){return $2.join('')}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = StringValue_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof StringValue_handler_fn>>
   }
 };
 function StringValue(state: ParseState) {
@@ -375,24 +373,22 @@ function DoubleStringCharacter(state: ParseState) {
   return defaultRegExpTransform($R4)(state) || EscapeSequence(state)
 }
 
+function EscapeSequence_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) { return '\\' + $2 }
 function EscapeSequence_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1]){return '\\' + $2}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = EscapeSequence_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof EscapeSequence_handler_fn>>
   }
 };
 function EscapeSequence(state: ParseState) {
   return EscapeSequence_handler($S(Backslash, defaultRegExpTransform($R5))(state));
 }
 
-function StringLiteral_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["L",V[0]]> {
+function StringLiteral_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["L", V[0]]> {
   if (result) {
     const { value } = result
-    const mappedValue = ["L",value[0]]
+    const mappedValue = ["L", value[0]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -404,14 +400,12 @@ function StringLiteral(state: ParseState) {
   return StringLiteral_handler($S(StringValue)(state));
 }
 
+function RegExpLiteral_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { return ["R", $3.join('')] }
 function RegExpLiteral_0_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1], $3:V[2], $4:V[3]){return ["R", $3.join('')]}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = RegExpLiteral_0_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof RegExpLiteral_0_handler_fn>>
   }
 };
 
@@ -419,7 +413,7 @@ function RegExpLiteral(state: ParseState) {
   return RegExpLiteral_0_handler($S($L0, $N(_), $Q(RegExpCharacter), $L0)(state)) || CharacterClassExpression(state)
 }
 
-const CharacterClassExpression_handler = makeResultHandler(function($loc, $0, $1) {return ["R", $1.join('')]});
+const CharacterClassExpression_handler = makeResultHandler(function ($loc, $0, $1) { return ["R", $1.join('')] });
 function CharacterClassExpression(state: ParseState) {
   return CharacterClassExpression_handler($P(CharacterClass)(state));
 }
@@ -430,14 +424,12 @@ function RegExpCharacter(state: ParseState) {
   return defaultRegExpTransform($R6)(state) || EscapeSequence(state)
 }
 
+function CharacterClass_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { return "[" + $2.join('') + "]" + ($4 || "") }
 function CharacterClass_handler<V extends any[]>(result: MaybeResult<V>) {
   if (result) {
-    function fn($loc: Loc, $0: V, $1:V[0], $2:V[1], $3:V[2], $4:V[3]){return "[" + $2.join('') + "]" + ($4 || "")}
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
-    return result as unknown as MaybeResult<ReturnType<typeof fn>>
+    result.value = CharacterClass_handler_fn(result.loc, result.value, ...result.value);
+    return result as unknown as MaybeResult<ReturnType<typeof CharacterClass_handler_fn>>
   }
 };
 function CharacterClass(state: ParseState) {
@@ -495,7 +487,5 @@ function EOS(state: ParseState) {
 }
 
 module.exports = {
-  parse: function parse(input: string) {
-    return heraParse(Grammar, input);
-  }
+  parse: parse
 }

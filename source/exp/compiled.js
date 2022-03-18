@@ -1,13 +1,12 @@
 const {
-  $L, $R, $C, $S, $E, $P, $Q, $N, $Y,
-  Loc,
-  MaybeResult,
-  ParseState,
+  $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
+  parserState,
   defaultRegExpTransform,
   makeResultHandler_R,
   makeResultHandler,
-  parse: heraParse,
 } = require("./machine")
+
+const { parse, $L, $R } = parserState(Grammar)
 
 const $l0 = "/";
 function $L0(state) { return $L(state, $l0) }
@@ -59,13 +58,11 @@ function $R14(state) { return $R(state, $r14) }
 const $r15 = new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy');
 function $R15(state) { return $R(state, $r15) }
 
+function Grammar_handler_fn($loc, $0, $1, $2) { return Object.fromEntries($2) }
 function Grammar_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2) { return Object.fromEntries($2) }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = Grammar_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -97,21 +94,19 @@ function RuleBody(state) {
   return RuleBody_handler($P($S(Indent, Choice))(state));
 }
 
+function Choice_handler_fn($loc, $0, $1, $2) {
+  if ($2 !== undefined) {
+    if (!$1.push)
+      $1 = ["S", [$1], $2]
+    else
+      $1.push($2)
+  }
+  return $1
+}
 function Choice_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2) {
-      if ($2 !== undefined) {
-        if (!$1.push)
-          $1 = ["S", [$1], $2]
-        else
-          $1.push($2)
-      }
-      return $1
-    }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = Choice_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -119,29 +114,25 @@ function Choice(state) {
   return Choice_handler($S(Sequence, Handling)(state));
 }
 
+function Sequence_0_handler_fn($loc, $0, $1, $2) {
+  $2.unshift($1)
+  return ["S", $2]
+}
 function Sequence_0_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2) {
-      $2.unshift($1)
-      return ["S", $2]
-    }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = Sequence_0_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
+function Sequence_1_handler_fn($loc, $0, $1, $2) {
+  $2.unshift($1)
+  return ["/", $2]
+}
 function Sequence_1_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2) {
-      $2.unshift($1)
-      return ["/", $2]
-    }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = Sequence_1_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -243,13 +234,11 @@ function Literal(state) {
   return StringLiteral(state) || RegExpLiteral(state)
 }
 
+function Handling_0_handler_fn($loc, $0, $1) { return undefined }
 function Handling_0_handler(result) {
   if (result) {
-    function fn($loc, $0, $1) { return undefined }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = Handling_0_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -330,13 +319,11 @@ function HandlingExpressionLine(state) {
 }
 
 
+function HandlingExpressionValue_1_handler_fn($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 }
 function HandlingExpressionValue_1_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = HandlingExpressionValue_1_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -365,13 +352,11 @@ function CommaThenValue(state) {
   return CommaThenValue_handler($S($Q(_), $L1, $Q(_), RValue, $Q(_))(state));
 }
 
+function StringValue_handler_fn($loc, $0, $1, $2, $3) { return $2.join('') }
 function StringValue_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2, $3) { return $2.join('') }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = StringValue_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -385,13 +370,11 @@ function DoubleStringCharacter(state) {
   return defaultRegExpTransform($R4)(state) || EscapeSequence(state)
 }
 
+function EscapeSequence_handler_fn($loc, $0, $1, $2) { return '\\' + $2 }
 function EscapeSequence_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2) { return '\\' + $2 }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = EscapeSequence_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -414,13 +397,11 @@ function StringLiteral(state) {
   return StringLiteral_handler($S(StringValue)(state));
 }
 
+function RegExpLiteral_0_handler_fn($loc, $0, $1, $2, $3, $4) { return ["R", $3.join('')] }
 function RegExpLiteral_0_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2, $3, $4) { return ["R", $3.join('')] }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = RegExpLiteral_0_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -440,13 +421,11 @@ function RegExpCharacter(state) {
   return defaultRegExpTransform($R6)(state) || EscapeSequence(state)
 }
 
+function CharacterClass_handler_fn($loc, $0, $1, $2, $3, $4) { return "[" + $2.join('') + "]" + ($4 || "") }
 function CharacterClass_handler(result) {
   if (result) {
-    function fn($loc, $0, $1, $2, $3, $4) { return "[" + $2.join('') + "]" + ($4 || "") }
-
     //@ts-ignore
-    result.value = fn(result.loc, result.value, ...result.value);
-
+    result.value = CharacterClass_handler_fn(result.loc, result.value, ...result.value);
     return result
   }
 };
@@ -505,7 +484,5 @@ function EOS(state) {
 }
 
 module.exports = {
-  parse: function parse(input) {
-    return heraParse(Grammar, input);
-  }
+  parse: parse
 }

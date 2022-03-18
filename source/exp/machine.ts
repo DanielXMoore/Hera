@@ -1,28 +1,63 @@
+/**
+ * Location information within a string. A position and a length. Can be
+ * converted into line numbers when reporting errors.
+ */
 export interface Loc {
   pos: number
   length: number
 }
 
+/**
+ * The current parse state. The input string being parsed and the position to
+ * check for matches.
+ */
 export interface ParseState {
   input: string
   pos: number
 }
 
+/**
+ * A parsing result. We found a `T` at `loc` and the next position to parse is
+ * `pos`.
+ *
+ * Is pos always loc.pos + loc.length?
+ */
 export interface ParseResult<T> {
   loc: Loc,
   pos: number,
   value: T,
 }
 
+/**
+ * Either we found a parse result or we didn't.
+ */
 export type MaybeResult<T> = ParseResult<T> | undefined
 
+/**
+ * Utility to get the wrapped ParseResult type.
+ */
 export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
 
+/**
+ * Note failure to find `expectation` at `pos`. This is later used to generate
+ * detailed error messages.
+ */
+interface Fail {
+  (pos: number, expectation: any): void
+}
+
+/**
+ * A Parser is a function that takes a string and position to check and returns
+ * a result if it matches.
+ */
 export interface Parser<T> {
   (state: ParseState): MaybeResult<T>
 }
 
-export function $L<T extends string>(state: ParseState, str: T): MaybeResult<T> {
+/**
+ * Match a string literal.
+ */
+export function $L<T extends string>(state: ParseState, str: T, fail: Fail): MaybeResult<T> {
   const { input, pos } = state;
   const { length } = str;
 
@@ -37,10 +72,13 @@ export function $L<T extends string>(state: ParseState, str: T): MaybeResult<T> 
     }
   }
 
-  $fail(pos, str)
+  fail(pos, str)
 }
 
-export function $R(state: ParseState, regExp: RegExp): MaybeResult<RegExpMatchArray> {
+/**
+ * Match a regular expression (must be sticky).
+ */
+export function $R(state: ParseState, regExp: RegExp, fail: Fail): MaybeResult<RegExpMatchArray> {
   const { input, pos } = state
   regExp.lastIndex = state.pos
 
@@ -60,7 +98,7 @@ export function $R(state: ParseState, regExp: RegExp): MaybeResult<RegExpMatchAr
     }
   }
 
-  $fail(pos, regExp)
+  fail(pos, regExp)
 }
 
 // a / b / c / ...
@@ -339,28 +377,7 @@ export function defaultRegExpTransform(fn: Parser<RegExpMatchArray>): Parser<str
   }
 }
 
-// TODO package up the fail state tracking better than these globals floating around
-
-// Error tracking
-// Goal is zero allocations
-const failExpected = Array(16)
-let failIndex = 0
-const failHintRegex = /\S+|[^\S]+|$/y
-let maxFailPos = 0
-
-export function $fail(pos: number, expected: any) {
-  if (pos < maxFailPos) return
-
-  if (pos > maxFailPos) {
-    maxFailPos = pos
-    failIndex = 0
-  }
-
-  failExpected[failIndex++] = expected
-
-  return
-}
-
+/** Utility function to convert position in a string input to line:colum */
 function location(input: string, pos: number) {
   const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
     const l = line.length + 1
@@ -379,69 +396,111 @@ function location(input: string, pos: number) {
   return `${line}:${column}`
 }
 
-// Pretty print a string or RegExp literal
-// TODO: could expand to all rules?
-// Includes looking up the name
-function prettyPrint(v: string | RegExp) {
-  let pv;
-
-  if (v instanceof RegExp) {
-    const s = v.toString()
-    // Would prefer to use -v.flags.length, but IE doesn't support .flags
-    pv = s.slice(0, s.lastIndexOf('/') + 1)
-  } else {
-    pv = JSON.stringify(v)
-  }
-
-  const name = false; // _names.get(v)
-
-  if (name) {
-    return "#{name} #{pv}"
-  } else {
-    return pv
-  }
+export interface ParserOptions {
+  /** The name of the file being parsed */
+  filename?: string
 }
 
-function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
-  if (result && result.pos === input.length)
-    return result.value
+const failHintRegex = /\S+|[^\S]+|$/y
 
-  const expectations = Array.from(new Set(failExpected.slice(0, failIndex)))
-  let l = location(input, maxFailPos)
+export function parserState<T>(parser: Parser<T>) {
+  // Error tracking
+  // Goal is zero allocations
+  const failExpected = Array(16)
+  let failIndex = 0
+  let maxFailPos = 0
 
-  // The parse completed with a result but there is still input
-  if (result && result.pos > maxFailPos) {
-    l = location(input, result.pos)
-    throw new Error(`
+  function fail(pos: number, expected: any) {
+    if (pos < maxFailPos) return
+
+    if (pos > maxFailPos) {
+      maxFailPos = pos
+      failExpected.length = failIndex = 0
+    }
+
+    failExpected[failIndex++] = expected
+
+    return
+  }
+
+  // Pretty print a string or RegExp literal
+  // TODO: could expand to all rules?
+  // Includes looking up the name
+  function prettyPrint(v: string | RegExp) {
+    let pv;
+
+    if (v instanceof RegExp) {
+      const s = v.toString()
+      // Would prefer to use -v.flags.length, but IE doesn't support .flags
+      pv = s.slice(0, s.lastIndexOf('/') + 1)
+    } else {
+      pv = JSON.stringify(v)
+    }
+
+    const name = false; // _names.get(v)
+
+    if (name) {
+      return "#{name} #{pv}"
+    } else {
+      return pv
+    }
+  }
+
+  function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
+    if (result && result.pos === input.length)
+      return result.value
+
+    const expectations = Array.from(new Set(failExpected.slice(0, failIndex)))
+    let l = location(input, maxFailPos)
+
+    // The parse completed with a result but there is still input
+    if (result && result.pos > maxFailPos) {
+      l = location(input, result.pos)
+      throw new Error(`
 ${filename}:${l} Unconsumed input at #{l}
 
 ${input.slice(result.pos)}
     `)
-  } else if (expectations.length) {
-    failHintRegex.lastIndex = maxFailPos
-    let [hint] = input.match(failHintRegex)!
+    } else if (expectations.length) {
+      failHintRegex.lastIndex = maxFailPos
+      let [hint] = input.match(failHintRegex)!
 
-    if (hint.length)
-      hint = prettyPrint(hint)
-    else
-      hint = "EOF"
+      if (hint.length)
+        hint = prettyPrint(hint)
+      else
+        hint = "EOF"
 
-    throw new Error(`
+      throw new Error(`
 ${filename}:${l} Failed to parse
 Expected:
 \t${expectations.map(prettyPrint).join("\n\t")}
 Found: ${hint}
 `)
-  } else if (result)
-    throw new Error(`
+    } else if (result)
+      throw new Error(`
 Unconsumed input at ${l}
 
 ${input.slice(result.pos)}
-  `);
-}
+`);
+  }
 
-export function parse<T>(rule: Parser<T>, input: string) {
-  return validate(input, rule({ input, pos: 0 }), {
-    filename: "[anon]"
-  })
+  return {
+    $L: function (state: ParseState, str: string) {
+      return $L(state, str, fail)
+    },
+    $R: function (state: ParseState, re: RegExp) {
+      return $R(state, re, fail)
+    },
+    parse: (input: string, options: ParserOptions = {}) => {
+      const filename = options.filename || "<anonymous>";
+
+      failIndex = 0
+      maxFailPos = 0
+      failExpected.length = 0
+
+      return validate(input, parser({ input, pos: 0 }), {
+        filename: filename
+      })
+    }
+  }
 }

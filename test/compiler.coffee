@@ -11,14 +11,14 @@ describe "Experimental", ->
   describe "TypeScript Compiler", ->
     it.skip "should compile to a typescript file", ->
       fs.writeFileSync "source/exp/compiled.ts", compile(rules, {types: true})
-      fs.writeFileSync "source/exp/compiled.mjs", compile(rules, {types: false})
+      fs.writeFileSync "source/exp/compiled.js", compile(rules, {types: false})
 
     it "should parse from compiled js", ->
       {parse} = require "../source/exp/compiled.js"
 
-      assert parse heraSrc
+      assert.deepEqual rules, parse heraSrc
 
     it "should parse from compiled ts", ->
       {parse} = require "../source/exp/compiled.ts"
 
-      assert parse heraSrc
+      assert.deepEqual rules, parse heraSrc

@@ -72,7 +72,7 @@ compileStructuralHandler = (mapping, source) ->
       "#{source}[#{mapping-1}]"
     when "object"
       if Array.isArray mapping
-        "[#{mapping.map((m) -> compileStructuralHandler(m, source)).join(',')}]"
+        "[#{mapping.map((m) -> compileStructuralHandler(m, source)).join(', ')}]"
     else
       throw new Error "Unknown mapping: #{mapping}"
 
@@ -103,18 +103,16 @@ compileHandler = (options, name, arg) ->
           "$#{i+1}"
 
       if types
-        returnConversion = " as unknown as MaybeResult<ReturnType<typeof fn>>"
+        returnConversion = " as unknown as MaybeResult<ReturnType<typeof #{name}_handler_fn>>"
       else
         returnConversion = ""
 
       return """
+        function #{name}_handler_fn#{typeVariable}(#{parameters.join(", ")}){#{h.f}}
         function #{name}_handler#{typeVariable}(result#{resultType}) {
           if (result) {
-            function fn(#{parameters.join(", ")}){#{h.f}}
-
             //@ts-ignore
-            result.value = fn(result.loc, result.value, ...result.value);
-
+            result.value = #{name}_handler_fn(result.loc, result.value, ...result.value);
             return result#{returnConversion}
           }
         };
@@ -214,23 +212,37 @@ module.exports =
     .join("\n\n")
 
     if types
-      inputType = ": string"
       stateType = ": ParseState"
+      header = """
+      import {
+        $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
+        Loc,
+        MaybeResult,
+        ParseState,
+        defaultRegExpTransform,
+        makeResultHandler_R,
+        makeResultHandler,
+        parserState,
+      } from "./machine"
+
+      const { parse, $L, $R } = parserState(#{ruleNames[0]})
+      """
     else
-      inputType = ""
       stateType = ""
+      header = """
+      const {
+        $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
+        parserState,
+        defaultRegExpTransform,
+        makeResultHandler_R,
+        makeResultHandler,
+      } = require("./machine")
+
+      const { parse, $L, $R } = parserState(#{ruleNames[0]})
+      """
 
     """
-    import {
-      $L, $R, $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
-      Loc,
-      MaybeResult,
-      ParseState,
-      defaultRegExpTransform,
-      makeResultHandler_R,
-      makeResultHandler,
-      parse as heraParse,
-    } from "./machine"
+    #{header}
 
     #{ strDefs.map (str, i) ->
       """
@@ -250,8 +262,6 @@ module.exports =
     #{body}
 
     module.exports = {
-      parse: function parse(input#{inputType}) {
-        return heraParse(#{ruleNames[0]}, input);
-      }
+      parse: parse
     }
     """
