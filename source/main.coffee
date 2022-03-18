@@ -69,8 +69,7 @@ create = (create, rules) ->
 
   # RegExp Flags
   # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/RegExp
-  # Would like to add 's', but that kills IE11
-  RE_FLAGS = "uy"
+  RE_FLAGS = "suy"
 
   # Pretty print a string or RegExp literal
   # TODO: could expand to all rules?
@@ -101,24 +100,24 @@ create = (create, rules) ->
     if Array.isArray(rule) # op, arg, handler triplet or pair
       [op, arg, handler] = rule
 
+      arg = switch op
+        when "/", "S"
+          arg.map (x) ->
+            precomputeRule precomputed, x, null, name, compile
+        when "*", "+", "?", "!", "&", "$"
+          precomputeRule precomputed, arg, null, name + op, compile
+        when "R"
+          noteName name, RegExp(arg, RE_FLAGS)
+        when "L"
+          noteName name, JSON.parse("\"" + arg + "\"")
+        else
+          throw new Error "Don't know how to pre-compute #{JSON.stringify op}"
+
       result =
         [
           fns[op]
-
-          switch op
-            when "/", "S"
-              arg.map (x) ->
-                precomputeRule precomputed, x, null, name, compile
-            when "*", "+", "?", "!", "&"
-              precomputeRule precomputed, arg, null, name + op, compile
-            when "R"
-              noteName name, RegExp(arg, RE_FLAGS)
-            when "L"
-              noteName name, JSON.parse("\"" + arg + "\"")
-            else
-              throw new Error "Don't know how to pre-compute #{JSON.stringify op}"
-
-          compile(handler, op, name)
+          arg
+          compile(handler, op, name, arg)
         ]
 
       if out
@@ -141,8 +140,6 @@ create = (create, rules) ->
           throw new Error "No rule with name #{JSON.stringify(rule)}"
 
         precomputeRule(precomputed, data, placeholder, rule, compile)
-
-  getValue = (x) -> x.value
 
   # Return a function precompiled for the given handler
   # Handlers map result values into language primitives
@@ -178,8 +175,12 @@ create = (create, rules) ->
         else
           (s) -> s.value
       else
-        (s) ->
-          mapValue handler, s.value
+        if handler?
+          (s) -> # 0 and 1 in the structural handler should be the result
+            mapValue handler, [s.value, s.value]
+        else
+          (s) ->
+            s.value
 
   precompute = (rules, compile, precomputed={}) ->
     first = Object.keys(rules)[0]
@@ -192,7 +193,6 @@ create = (create, rules) ->
 
     [fn, arg, mapping] = data
     result = fn state, arg
-    mapping ?= getValue
 
     if result
       result.value = mapping result
@@ -217,9 +217,6 @@ create = (create, rules) ->
             mapValue n, value
         else
           throw new Error "non-array object mapping"
-      when "undefined"
-        value
-
       else
         throw new Error "Unknown mapping type"
 
@@ -345,15 +342,35 @@ create = (create, rules) ->
         return
 
       {pos} = first
-      {pos} = rest = invoke({input, pos}, [fns["*"], term])
+      results = [first.value]
 
-      rest.value.unshift first.value
+      loop
+        prevPos = pos
+
+        r = invoke({input, pos}, term)
+        if !r?
+          break
+
+        {pos, value} = r
+        if pos is prevPos
+          break
+        else
+          results.push value
 
       loc:
         pos: s
         length: pos - s
-      value: rest.value
+      value: results
       pos: pos
+
+    # $ prefix operator, convert result value to a string spanning the matched input
+    "$": (state, term) ->
+      newState = invoke(state, term)
+      if !newState
+        return
+
+      newState.value = state.input.substring(state.pos, newState.pos)
+      return newState
 
     "!": (state, term) ->
       newState = invoke(state, term)
@@ -361,17 +378,23 @@ create = (create, rules) ->
       if newState?
         return
       else
-        return state
+        loc:
+          pos: state.pos
+          length: 0
+        value: undefined
+        pos: state.pos
 
     "&": (state, term) ->
       newState = invoke(state, term)
 
-      # If the assertion doesn't advance the position then it is failed.
-      # A zero width assertion always succeeds and is useless
-      if !newState? or (newState.pos is state.pos)
+      if !newState?
         return
       else
-        return state
+        loc:
+          pos: state.pos
+          length: 0
+        value: newState.value
+        pos: state.pos
 
   # Compute the line and column number of a position (used in error reporting)
   location = (input, pos) ->
@@ -449,12 +472,20 @@ create = (create, rules) ->
     else
       precomputed = precomputedCache.get(rules)
 
-    result = invoke(state, Object.values(precomputed)[0])
+    if opts.startRule?
+      startRule = precomputed[opts.startRule]
+    else
+      startRule = Object.values(precomputed)[0]
+
+    if !startRule
+      throw new Error "Could not find rule with name '#{opts.startRule}'"
+
+    result = invoke(state, startRule)
 
     return validate(input, result, opts)
 
   # Ignore result handlers and return type tokens based on rule names
-  tokenHandler = (handler, op, name) ->
+  tokenHandler = (handler, op, name, arg) ->
     (result) ->
       {loc, value} = result
       switch op
@@ -462,22 +493,30 @@ create = (create, rules) ->
           type: name
           loc: loc
           value:
-            value.filter (v) -> v?
+            value.filter (v) ->
+              # remove zero length matches (!, &, and * that are empty)
+              v? and v.loc.length
             .reduce (a, b) ->
               a.concat b
             , []
-        when "L", "R" # Terminals
-          type: name
+        when "L" # Terminal Literal
+          type: _names.get(arg)
           loc: loc
           value: value
+        when "R" # Terminal RegExp
+          type: _names.get(arg)
+          loc: loc
+          value: value[0]
         when "*", "+"
-          type: op
+          type = value[0]?.type + op
+
+          type: type
           loc: loc
           value: value
         when "?", "/"
           value
         when "!", "&"
-          type: op + name
+          type: op
           loc: loc
           value: value
 
@@ -499,67 +538,12 @@ create = (create, rules) ->
     else
       return src
 
-  # handler to source
-  hToS = (h) ->
-    return "" unless h?
-
-    " -> " + switch typeof h
-      when "number"
-        h
-      when "string"
-        JSON.stringify(h)
-      when "object"
-        if Array.isArray(h)
-          JSON.stringify(h)
-        else
-          "\n#{h.f.replace(/^|\n/g, "$&    ")}"
-
-  # toS and decompile generate a source document from the rules AST
-  toS = (rule, depth=0) ->
-    if Array.isArray(rule)
-      f = rule[0]
-      h = rule[2]
-      switch f
-        when "*", "+", "?"
-          toS(rule[1], depth+1) + f + hToS(h)
-        when "&", "!"
-          f + toS(rule[1], depth+1)
-        when "L"
-          '"' + rule[1] + '"' + hToS(h)
-        when "R"
-          '/' + rule[1] + '/' + hToS(h)
-        when "S"
-          terms = rule[1].map (i) ->
-            toS i, depth+1
-
-          if depth < 1
-            terms.join(" ") + hToS(h)
-          else
-            "( " + terms.join(" ") + " )"
-
-        when "/"
-          terms = rule[1].map (i) ->
-            toS i, depth and depth+1
-
-          if depth is 0 and !h
-            terms.join("\n  ")
-          else
-            "( " + terms.join(" / ") + " )" + hToS(h)
-    else # String name of the rule
-      rule
-
-  # Convert the rules to source text in hera grammar
-  decompile = (rules) ->
-    Object.keys(rules).map (name) ->
-      value = toS rules[name]
-      "#{name}\n  #{value}\n"
-    .join("\n")
-
   # Pre compile the rules and handler functions
   precomputedCache.set rules, precompute(rules, precompileHandler)
 
   module.exports =
-    decompile: decompile
+    compile: (source, opts) ->
+      generate parse(source, opts)
     parse: parse
     generate: generate
     rules: rules

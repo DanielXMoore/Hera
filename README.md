@@ -6,7 +6,7 @@ Hera
 > — Homeric Hymn 12 to Hera (trans. Evelyn-White) (Greek epic C7th to 4th B.C.
 
 [![Build](https://github.com/DanielXMoore/hera/actions/workflows/build.yml/badge.svg)](https://github.com/DanielXMoore/hera/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/DanielXMoore/hera/badge.svg?branch=main)](https://coveralls.io/github/DanielXMoore/hera?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/DanielXMoore/Hera/badge.svg?branch=main)](https://coveralls.io/github/DanielXMoore/Hera?branch=main)
 
 The mother of all parsers.
 
@@ -146,6 +146,22 @@ Regex Groups
 >     Punctuation
 >       "."
 
+Changelog
+---
+
+- 0.7.3
+  - Added prefix $ text operator
+  - Fixed structural mapping bug where in `["R", 1]` the `1` would take the
+  first element of the result rather than the whole result on non-sequence
+  handlers.
+- 0.7.2
+  - VSCode Extension <https://marketplace.visualstudio.com/items?itemName=DanielX.hera>
+  - Bare character class 
+
+Experiments
+---
+
+Compiling parsers to TypeScript.
 
 Glossary
 ---

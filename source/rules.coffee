@@ -122,7 +122,7 @@ module.exports = {
   ],
   "PrefixOperator": [
     "R",
-    "[&!]"
+    "[$&!]"
   ],
   "Suffix": [
     "/",
@@ -308,17 +308,18 @@ module.exports = {
         "\\\""
       ],
       [
-        "*",
-        "DoubleStringCharacter"
+        "$",
+        [
+          "*",
+          "DoubleStringCharacter"
+        ]
       ],
       [
         "L",
         "\\\""
       ]
     ],
-    {
-      "f": "return $2.join('')"
-    }
+    2
   ],
   "DoubleStringCharacter": [
     "/",
@@ -331,17 +332,17 @@ module.exports = {
     ]
   ],
   "EscapeSequence": [
-    "S",
+    "$",
     [
-      "Backslash",
+      "S",
       [
-        "R",
-        "[^]"
+        "Backslash",
+        [
+          "R",
+          "[^]"
+        ]
       ]
-    ],
-    {
-      "f": "return '\\\\' + $2"
-    }
+    ]
   ],
   "StringLiteral": [
     "S",
@@ -354,28 +355,49 @@ module.exports = {
     ]
   ],
   "RegExpLiteral": [
-    "S",
+    "/",
     [
       [
-        "L",
-        "/"
+        "S",
+        [
+          [
+            "L",
+            "/"
+          ],
+          [
+            "!",
+            "_"
+          ],
+          [
+            "$",
+            [
+              "*",
+              "RegExpCharacter"
+            ]
+          ],
+          [
+            "L",
+            "/"
+          ]
+        ],
+        [
+          "R",
+          3
+        ]
       ],
-      [
-        "!",
-        "_"
-      ],
-      [
-        "*",
-        "RegExpCharacter"
-      ],
-      [
-        "L",
-        "/"
-      ]
+      "CharacterClassExpression"
+    ]
+  ],
+  "CharacterClassExpression": [
+    "$",
+    [
+      "+",
+      "CharacterClass"
     ],
-    {
-      "f": "return [\"R\", $3.join('')]"
-    }
+    [
+      "R",
+      1
+    ]
   ],
   "RegExpCharacter": [
     "/",
@@ -386,6 +408,41 @@ module.exports = {
       ],
       "EscapeSequence"
     ]
+  ],
+  "CharacterClass": [
+    "S",
+    [
+      [
+        "L",
+        "["
+      ],
+      [
+        "*",
+        "CharacterClassCharacter"
+      ],
+      [
+        "L",
+        "]"
+      ],
+      [
+        "?",
+        "Quantifier"
+      ]
+    ]
+  ],
+  "CharacterClassCharacter": [
+    "/",
+    [
+      [
+        "R",
+        "[^\\]\\\\]+"
+      ],
+      "EscapeSequence"
+    ]
+  ],
+  "Quantifier": [
+    "R",
+    "[?+*]|\\{\\d+(,\\d+)?\\}"
   ],
   "Name": [
     "R",

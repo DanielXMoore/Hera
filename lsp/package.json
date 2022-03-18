@@ -1,0 +1,116 @@
+{
+  "name": "hera",
+  "displayName": "Hera",
+  "description": "Hera Language Server",
+  "icon": "images/hera.png",
+  "version": "0.1.1",
+  "publisher": "DanielX",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DanielXMoore/hera.git"
+  },
+  "categories": [],
+  "engines": {
+    "vscode": "^1.65.0"
+  },
+  "activationEvents": [
+    "onLanguage:hera"
+  ],
+  "main": "./dist/extension",
+  "contributes": {
+    "languages": [
+      {
+        "id": "hera",
+        "extensions": [
+          ".hera"
+        ],
+        "configuration": "./syntaxes/hera-configuration.json"
+      },
+      {
+        "id": "hera-markdown-injection"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hera",
+        "scopeName": "source.hera",
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript": "javascript"
+        },
+        "path": "./syntaxes/hera.json"
+      },
+      {
+        "language": "hera-markdown-injection",
+        "scopeName": "markdown.hera.codeblock",
+        "path": "./syntaxes/codeblock.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.hera": "hera"
+        }
+      }
+    ]
+  },
+  "mocha": {
+    "extension": [
+      "ts"
+    ],
+    "require": [
+      "source-map-support",
+      "ts-node/register"
+    ],
+    "reporter": "spec",
+    "recursive": true,
+    "spec": [
+      "test"
+    ]
+  },
+  "nyc": {
+    "check-coverage": false,
+    "branches": 100,
+    "lines": 100,
+    "functions": 100,
+    "statements": 100,
+    "reporter": [
+      "lcov",
+      "text"
+    ],
+    "extension": [
+      ".ts"
+    ],
+    "exclude": [
+      "test/"
+    ],
+    "sourceMap": true,
+    "instrument": true
+  },
+  "scripts": {
+    "compile": "node .esbuild.mjs",
+    "e2e": "sh ./scripts/e2e.sh",
+    "lint": "eslint ./src --ext .ts,.tsx",
+    "package": "node .esbuild.mjs && vsce package --yarn",
+    "test": "nyc mocha",
+    "watch": "node .esbuild.mjs --watch"
+  },
+  "devDependencies": {
+    "@danielx/hera": "^0.7.3-pre.0",
+    "@types/mocha": "^9.1.0",
+    "@types/node": "^14.17.0",
+    "@types/vscode": "^1.63.0",
+    "@typescript-eslint/eslint-plugin": "^5.13.0",
+    "@typescript-eslint/parser": "^5.13.0",
+    "@vscode/test-electron": "^2.1.2",
+    "esbuild": "^0.14.25",
+    "eslint": "^8.10.0",
+    "mocha": "^9.2.1",
+    "nyc": "^15.1.0",
+    "source-map-support": "^0.5.21",
+    "ts-node": "^10.6.0",
+    "typescript": "^4.6.2",
+    "vsce": "^2.7.0",
+    "vscode-languageclient": "^7.0.0",
+    "vscode-languageserver": "^7.0.0",
+    "vscode-languageserver-textdocument": "^1.0.4"
+  }
+}

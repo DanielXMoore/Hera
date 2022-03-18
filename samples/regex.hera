@@ -1,0 +1,42 @@
+# WIP Regex parser
+Regex
+  "/" Primary+ "/" Flags*
+
+RegexCharacter
+  /[^\/\\]+/
+  EscapeSequence
+
+Primary
+  CharacterClass
+  Group
+  RegexCharacter
+
+Group
+  "(" GroupPrefix? Primary* ")"
+
+CharacterClass
+  "[" CharacterClassCharacter* "]"
+
+CharacterClassCharacter
+  /[^\]\\]+/
+  EscapeSequence
+
+EscapeSequence
+  Backslash /[^]/ ->
+    return '\\' + $2
+
+GroupPrefix
+  Name
+  NonCapturing
+
+NonCapturing
+  "?:"
+
+Flags
+  /[dgimsuy]/
+
+GroupName
+  "<" Name ">"
+
+Name
+  /[a-zA-Z][a-zA-Z0-9]+/

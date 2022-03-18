@@ -1,6 +1,14 @@
 hera = require "../source/main"
 test = it
 
+compile = (src) ->
+  hera.generate hera.parse(src), true
+
+describe "Build rules", ->
+  it.skip "should update rules file", ->
+    newHera = compile readFile("samples/hera.hera")
+    require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
+
 describe "Hera", ->
   it "should do math example", ->
     grammar = readFile("samples/math.hera")
@@ -31,18 +39,8 @@ describe "Hera", ->
     assert.equal query, "query"
     assert.equal fragment, "fragment"
 
-  it "should parse decompiled rules", ->
-    grammar = hera.decompile(hera.rules)
-
-    # console.log grammar
-    parsedRules = hera.parse grammar
-    # console.log parsedRules, hera.rules
-
-    Object.keys(parsedRules).forEach (key) ->
-      assert.deepEqual(parsedRules[key], hera.rules[key], "#{key} rule doesn't match")
-
-    # TODO: strip trailing whitespace before compare
-    assert.equal grammar, readFile("samples/hera.hera")
+  it "should compile to js string", ->
+    assert hera.compile readFile("samples/math.hera")
 
   it "should consume blank lines as part of EOS", ->
     grammar = """
@@ -139,6 +137,21 @@ describe "Hera", ->
     assert.deepEqual parser.parse("123456789"), [undefined, "456789", "456", "123456789"]
     assert.deepEqual parser.parse("ppqq"), "ppqqqq"
 
+  test "regex that may sometimes be empty with +", ->
+    grammar = """
+      Start
+        Re+ ->
+          return $0.join('')
+
+      Re
+        /a|b?/
+    """
+
+    parser = hera.generate hera.parse(grammar), true
+    assert.deepEqual parser.parse("ab"), "ab"
+    assert.deepEqual parser.parse(""), ""
+    assert.deepEqual parser.parse("bb"), "bb"
+
   test "transitive regex", ->
     grammar = """
       Start
@@ -153,6 +166,32 @@ describe "Hera", ->
     assert.deepEqual parser.parse(""), []
     assert.deepEqual parser.parse("ab"), ["ab"]
     assert.deepEqual parser.parse("ababccbc"), ["ab", "abcc", "bc"]
+
+  it "should parse bare character classes as regexes", ->
+    newHera = compile readFile("samples/hera.hera")
+
+    rules = newHera.parse """
+      Rule
+        [a-z]+[1-9]*
+
+      Flags
+        [dgimsuy]
+
+      Name
+        [_a-zA-Z][_a-zA-Z0-9]*
+
+      Quants
+        [0-9]{3,4}
+
+      Quant2
+        [a]{2}
+    """
+
+    assert.deepEqual rules.Rule, ["R", "[a-z]+[1-9]*"]
+    assert.deepEqual rules.Flags, ["R", "[dgimsuy]"]
+    assert.deepEqual rules.Name, ["R", "[_a-zA-Z][_a-zA-Z0-9]*"]
+    assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
+    assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
 
   it "should return error messages", ->
     assert.throws ->
@@ -181,6 +220,107 @@ describe "Hera", ->
     assert.throws ->
       parser.parse "AAB"
 
+  describe "-> Structural Result", ->
+    it "should map regexp groups into the structure", ->
+      {parse} = compile """
+        Rule
+          /(a)(b)(c)/ -> [2, 3, 1]
+      """
+
+      assert.deepEqual ["b", "c", "a"], parse "abc"
+
+    it "should map sequence items into the structure", ->
+      {parse} = compile """
+        Rule
+          "A" "B" "C" -> [2, 3, 1]
+      """
+
+      assert.deepEqual ["B", "C", "A"], parse "ABC"
+
+    it "should map the entire result as $1", ->
+      {parse} = compile """
+        Rule
+          Sub* -> ["T", 1]
+
+        Sub
+          "A" "B"
+      """
+
+      assert.deepEqual ["T", []], parse ""
+      assert.deepEqual ["T", [["A", "B"]]], parse "AB"
+      assert.deepEqual ["T", [["A", "B"], ["A", "B"]]], parse "ABAB"
+
+  describe "$ Prefix Operator: result text", ->
+    it "should return the whole text of the match", ->
+      {parse} = compile """
+        Rule
+          $("AAA" "B" "C")
+      """
+
+      assert.equal "AAABC", parse "AAABC"
+
+    it "should keep pass through fail states", ->
+      {parse} = compile """
+        Rule
+          $A / $B
+        A
+          [aA]+
+        B
+          [bB]+
+      """
+
+      assert.equal "aaAaa", parse "aaAaa"
+      assert.equal "bBbb", parse "bBbb"
+      assert.throws ->
+        parse "c"
+      , /Expected:\s*A/
+
+    it "should correctly span repetitions", ->
+      {parse} = compile """
+        Rule
+          $("A" "B" "C")*
+      """
+
+      assert.equal "ABCABC", parse "ABCABC"
+      assert.equal "", parse ""
+
+    it "should handle nested rules", ->
+      {parse, rules} = compile """
+        RegExpLiteral
+          "/" !_ $RegExpCharacter* "/" -> ["R", 3]
+          CharacterClassExpression
+
+        CharacterClassExpression
+          $CharacterClass+ -> ["R", 1]
+
+        RegExpCharacter
+          [^\\/\\\\]+
+          EscapeSequence
+
+        CharacterClass
+          "[" CharacterClassCharacter* "]" Quantifier?
+
+        CharacterClassCharacter
+          [^\\]\\\\]+
+          EscapeSequence
+
+        Quantifier
+          /[?+*]|\\{\\d+(,\\d+)?\\}/
+
+        EscapeSequence
+          Backslash [^] ->
+            return '\\\\' + $2
+
+        Backslash
+          "\\\\"
+
+        _
+          [ \\t]+
+      """
+
+      assert.deepEqual ["R", "[abc][bc]"], parse "[abc][bc]"
+      assert.deepEqual ["R", "[^]a\\[\\^b]"], parse "/[^]a\\[\\^b]/"
+
   it "should work with assertions", ->
     rules = hera.parse """
       Rule
@@ -205,29 +345,43 @@ describe "Hera", ->
     assert.equal parser.parse("AAAAAA"), "a"
     assert.equal parser.parse("BBB"), "b"
 
-  it "should decompile nested choices", ->
-    rules = hera.parse """
-      Rule
-        ("A" / "C") ("B" / "D")
-        "Z" -> "z"
-    """
+  describe "starting rules", ->
+    it "should be able to parse from any starting rule", ->
+      assert hera.parse "[]",
+        startRule: "CharacterClassExpression"
 
-    decompiled = hera.decompile rules
-    assert.deepEqual hera.parse(decompiled), rules
+    it "should throw an error when a non-existent starting rule is given ", ->
+      assert.throws ->
+        hera.parse "",
+          startRule: "DoesNotExist"
+      , /Could not find rule/
 
   it "should tokenize", ->
-    rules = hera.parse """
+    source = """
       Rule
-        &"D" "D" -> "d"
-        !"C" "A"+ -> "a"
+        &"D" /D/ -> "d"
+        !"C" A+ -> "a"
         "B"+ -> "b"
+
+      A
+        "A"
     """
+    rules = hera.parse source
+
+    # console.dir hera.parse(source, {tokenize: true}),
+    #   colors: true
+    #   depth: null
 
     parser = hera.generate(rules, true)
 
-    assert.equal parser.parse("AAAAAA", tokenize: true).value[1].value.length, 6
-    assert.equal parser.parse("BBB", tokenize: true).value.length, 3
-    assert.equal parser.parse("D", tokenize: true).value.length, 2
+    results = parser.parse("AAAAAA", tokenize: true)
+    assert.equal results.value[0].loc.length, 6
+
+    results = parser.parse("BBB", tokenize: true)
+    assert.equal results.value.length, 3
+
+    results = parser.parse("D", tokenize: true)
+    assert.equal results.loc.length, 1
 
     # tokenize shouldn't blow up regular parsing
     assert.equal parser.parse("BBB"), "b"
