@@ -1,7 +1,4 @@
 Benchmark = require("benchmark")
-hera = require "../source/main"
-oldHera = require "../source/old_main"
-tsHera = require "../source/exp/compiled"
 
 fs = require "fs"
 path = require "path"
@@ -24,8 +21,12 @@ bench = (alternatives) ->
   suite.run
     async: true
 
-describe "Benchmark", ->
+describe.skip "Benchmark", ->
   it "check console", ->
+    hera = require "../source/main"
+    oldHera = require "../source/old_main"
+    tsHera = require "../source/exp/compiled"
+
     grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
     hera.parse grammar
     oldHera.parse grammar

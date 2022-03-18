@@ -1,8 +1,19 @@
-hera = require "../source/main"
+hera = require "../source/exp/compiled"
+compiler = require "../source/exp/compiler"
 test = it
 
+execMod = (src) ->
+  m = {exports: {}}
+  Function("module", "exports", src)(m, m.exports)
+
+  return m.exports
+
 compile = (src) ->
-  hera.generate hera.parse(src), true
+  src = compiler.compile hera.parse(src), false
+
+  # console.log src
+
+  return execMod(src)
 
 describe "Build rules", ->
   it.skip "should update rules file", ->
@@ -12,9 +23,7 @@ describe "Build rules", ->
 describe "Hera", ->
   it "should do math example", ->
     grammar = readFile("samples/math.hera")
-
-    rules = hera.parse(grammar)
-    parser = hera.generate(rules, true)
+    parser = compile(grammar)
 
     result = parser.parse """
       8 + 3 / (2 + 5)
@@ -24,9 +33,7 @@ describe "Hera", ->
 
   it "should do url example", ->
     grammar = readFile("samples/url.hera")
-
-    rules = hera.parse(grammar)
-    parser = hera.generate(rules, true)
+    parser = compile(grammar)
 
     {scheme, fragment, host, path, port, query} = parser.parse """
       http://danielx.net:443/%21?query#fragment
@@ -38,9 +45,6 @@ describe "Hera", ->
     assert.equal path, "/!"
     assert.equal query, "query"
     assert.equal fragment, "fragment"
-
-  it "should compile to js string", ->
-    assert hera.compile readFile("samples/math.hera")
 
   it "should consume blank lines as part of EOS", ->
     grammar = """
@@ -72,7 +76,7 @@ describe "Hera", ->
       # comment
     """
 
-    parser = hera.generate hera.parse(grammar), true
+    parser = compile(grammar)
     assert parser.parse("a")
 
   it "should handle rules that are aliases", ->
@@ -87,15 +91,14 @@ describe "Hera", ->
         "."
     """
 
-    parser = hera.generate hera.parse(grammar), true
+    parser = compile(grammar)
     assert parser.parse(".")
 
   it "should recursively generate itself", ->
-    f = hera.generate(hera.rules)
-    parser = hera.generate(hera.rules, true)
-    # console.log f.length, f
-    # console.log hera.decompile hera.rules
-    assert.equal f, parser.generate(hera.rules)
+    heraSrc = readFile('samples/hera.hera')
+    {parse} = compile readFile('samples/hera.hera')
+
+    assert.deepEqual hera.parse(heraSrc), parse(heraSrc)
 
     grammar = """
       Grammar
@@ -105,9 +108,9 @@ describe "Hera", ->
         Name StringLiteral? EOS (Indent Choice)+
 
     """
-    assert.deepEqual(parser.parse(grammar), hera.parse(grammar))
+    assert.deepEqual(hera.parse(grammar), parse(grammar))
 
-  test "numbered regex groups in mappings", ->
+  it "numbered regex groups in mappings", ->
     grammar = """
       Start
         Group1
@@ -130,12 +133,12 @@ describe "Hera", ->
           return $0 + $1
     """
 
-    parser = hera.generate hera.parse(grammar), true
+    {parse} = compile(grammar)
 
-    assert.deepEqual parser.parse("aab"), ["aa", "b"]
-    assert.deepEqual parser.parse("cdd"), ["c", "dd"]
-    assert.deepEqual parser.parse("123456789"), [undefined, "456789", "456", "123456789"]
-    assert.deepEqual parser.parse("ppqq"), "ppqqqq"
+    assert.deepEqual parse("aab"), ["aa", "b"]
+    assert.deepEqual parse("cdd"), ["c", "dd"]
+    assert.deepEqual parse("123456789"), [undefined, "456789", "456", "123456789"]
+    assert.deepEqual parse("ppqq"), "ppqqqq"
 
   test "regex that may sometimes be empty with +", ->
     grammar = """
@@ -147,10 +150,10 @@ describe "Hera", ->
         /a|b?/
     """
 
-    parser = hera.generate hera.parse(grammar), true
-    assert.deepEqual parser.parse("ab"), "ab"
-    assert.deepEqual parser.parse(""), ""
-    assert.deepEqual parser.parse("bb"), "bb"
+    {parse} = compile(grammar)
+    assert.deepEqual parse("ab"), "ab"
+    assert.deepEqual parse(""), ""
+    assert.deepEqual parse("bb"), "bb"
 
   test "transitive regex", ->
     grammar = """
@@ -161,11 +164,11 @@ describe "Hera", ->
         /(a?)(b+)c*/
     """
 
-    parser = hera.generate hera.parse(grammar), true
+    {parse} = compile(grammar)
 
-    assert.deepEqual parser.parse(""), []
-    assert.deepEqual parser.parse("ab"), ["ab"]
-    assert.deepEqual parser.parse("ababccbc"), ["ab", "abcc", "bc"]
+    assert.deepEqual parse(""), []
+    assert.deepEqual parse("ab"), ["ab"]
+    assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
   it "should parse bare character classes as regexes", ->
     newHera = compile readFile("samples/hera.hera")
@@ -202,23 +205,21 @@ describe "Hera", ->
       filename: "test.hera"
 
   it "should parse simple grammars", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         "A"+
         "B"+
 
     """
 
-    parser = hera.generate(rules, true)
-
-    parser.parse "AAAAAA"
-    parser.parse "BBB"
+    parse "AAAAAA"
+    parse "BBB"
 
     assert.throws ->
-      parser.parse "BBA"
+      parse "BBA"
 
     assert.throws ->
-      parser.parse "AAB"
+      parse "AAB"
 
   describe "-> Structural Result", ->
     it "should map regexp groups into the structure", ->
@@ -285,7 +286,7 @@ describe "Hera", ->
       assert.equal "", parse ""
 
     it "should handle nested rules", ->
-      {parse, rules} = compile """
+      {parse} = compile """
         RegExpLiteral
           "/" !_ $RegExpCharacter* "/" -> ["R", 3]
           CharacterClassExpression
@@ -322,28 +323,24 @@ describe "Hera", ->
       assert.deepEqual ["R", "[^]a\\[\\^b]"], parse "/[^]a\\[\\^b]/"
 
   it "should work with assertions", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         &"B" "C"+
         &"A" "A"+ ->
           return $2
     """
 
-    parser = hera.generate(rules, true)
-
-    assert.equal parser.parse("AAAAAA").length, 6
+    assert.equal parse("AAAAAA").length, 6
 
   it "should have string handlers", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         "A"+ -> "a"
         "B"+ -> "b"
     """
 
-    parser = hera.generate(rules, true)
-
-    assert.equal parser.parse("AAAAAA"), "a"
-    assert.equal parser.parse("BBB"), "b"
+    assert.equal parse("AAAAAA"), "a"
+    assert.equal parse("BBB"), "b"
 
   describe "starting rules", ->
     it "should be able to parse from any starting rule", ->
@@ -357,7 +354,7 @@ describe "Hera", ->
       , /Could not find rule/
 
   it "should tokenize", ->
-    source = """
+    {parse} = compile """
       Rule
         &"D" /D/ -> "d"
         !"C" A+ -> "a"
@@ -366,80 +363,69 @@ describe "Hera", ->
       A
         "A"
     """
-    rules = hera.parse source
 
-    # console.dir hera.parse(source, {tokenize: true}),
-    #   colors: true
-    #   depth: null
-
-    parser = hera.generate(rules, true)
-
-    results = parser.parse("AAAAAA", tokenize: true)
+    results = parse("AAAAAA", tokenize: true)
     assert.equal results.value[0].loc.length, 6
 
-    results = parser.parse("BBB", tokenize: true)
+    results = parse("BBB", tokenize: true)
     assert.equal results.value.length, 3
 
-    results = parser.parse("D", tokenize: true)
+    results = parse("D", tokenize: true)
     assert.equal results.loc.length, 1
 
     # tokenize shouldn't blow up regular parsing
-    assert.equal parser.parse("BBB"), "b"
+    assert.equal parse("BBB"), "b"
 
   it "should skip infinite zero width loops", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         ""* "a"
     """
 
-    parser = hera.generate(rules, true)
-    result = parser.parse("a")
+    result = parse("a")
     assert.deepEqual result, [[], "a"]
 
   it "should throw an error when there is unconsumed input", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         "a"
     """
 
-    parser = hera.generate(rules, true)
     assert.throws ->
-      parser.parse("aa")
+      parse("aa")
     , /Unconsumed input/
 
   it "should throw an error when there are no failed expectations but still input remaining", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         ""
     """
 
-    parser = hera.generate(rules, true)
     assert.throws ->
-      parser.parse("bb")
+      parse("bb")
     , /Unconsumed input/
 
   it "throws an error when parsing non-strings", ->
-    rules = hera.parse """
+    {parse} = compile """
       Rule
         "a"
     """
 
-    parser = hera.generate(rules, true)
     assert.throws ->
-      parser.parse(undefined)
+      parse(undefined)
     , /Input must be a string/
 
   it "should throw an error when running out of input", ->
-    parser = hera.generate hera.parse("""
+    {parse} = compile """
       Rule
         "aaaa"
         EOF
       EOF
         !/[\s\S]/
-    """), true
+    """
 
     assert.throws ->
-      parser.parse "aaa"
+      parse "aaa"
     , /Rule "aaaa"/
 
   it "should throw an error when mapping to a non-array object", ->
@@ -451,9 +437,8 @@ describe "Hera", ->
     # Hack in a non-array object for the mapping value
     rules.Rule[2] = {}
 
-    parser = hera.generate(rules, true)
     assert.throws ->
-      parser.parse("a")
+      compiler.compile(rules)
     , /non-array object mapping/
 
   it "should throw an error when mapping to an unknown type", ->
@@ -485,25 +470,25 @@ describe "Hera", ->
 
   it "should error when referencing an unknown rule", ->
     assert.throws ->
-      hera.generate hera.parse("""
+      compile """
         Rule
           "aaaa"
           EOF
-      """), true
+      """
     , /No rule with name "EOF"/
 
   it "should give accurate error message with multiline input", ->
-    parser = hera.generate hera.parse("""
+    {parse} = compile """
       Rule
         Line+
       Line
         "aaaa" EOL
       EOL
         /\r\n|\n/
-    """), true
+    """
 
     assert.throws ->
-      parser.parse """
+      parse """
         aaaa
         aaaa
         aaaa

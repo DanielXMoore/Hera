@@ -54,7 +54,7 @@ compileOp = (tuple, defaultHandler) ->
       when "!"
         "$N(#{compileOp(args)})"
       else
-        throw new Error "Unknown op: #{op} ", args
+        throw new Error "Unknown op: #{op} #{JSON.stringify(args)}"
   else # rule reference
     tuple
 
@@ -64,7 +64,12 @@ compileOp = (tuple, defaultHandler) ->
 regExpHandlerParams = ["$loc"].concat [0...10].map (_, i) -> "$#{i}"
 regularHandlerParams = ["$loc", "$0", "$1"]
 
-compileStructuralHandler = (mapping, source, single=false) ->
+# Offset is so sequences start at the first item in the array
+# and regexps start at the second because the first is the entire match
+# TODO: is 0 valid to select the entire sequence result?
+compileStructuralHandler = (mapping, source, single=false, offset) ->
+  offset ?= -1
+
   switch typeof mapping
     when "string"
       JSON.stringify(mapping)
@@ -72,10 +77,12 @@ compileStructuralHandler = (mapping, source, single=false) ->
       if single
         source
       else
-        "#{source}[#{mapping-1}]"
+        "#{source}[#{mapping+offset}] /* #{mapping} #{offset} */"
     when "object"
       if Array.isArray mapping
-        "[#{mapping.map((m) -> compileStructuralHandler(m, source, single)).join(', ')}]"
+        "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"
+      else
+        throw new Error "non-array object mapping"
     else
       throw new Error "Unknown mapping: #{mapping}"
 
@@ -133,9 +140,7 @@ compileHandler = (options, name, arg) ->
         const #{name}_handler = makeResultHandler(function(#{parameters.join(", ")}) {#{h.f}});
       """
   else if h # other mapping
-    if op is "S" or op is "R"
-      parameters = regExpHandlerParams
-
+    if op is "S"
       if types
         returnType = ": MaybeResult<#{compileStructuralHandler(h, "V")}>"
       else
@@ -146,6 +151,26 @@ compileHandler = (options, name, arg) ->
           if (result) {
             const { value } = result
             const mappedValue = #{compileStructuralHandler(h, "value")}
+
+            //@ts-ignore
+            result.value = mappedValue
+            //@ts-ignore
+            return result
+          }
+        };
+      """
+    else if op is "R"
+      if types
+        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V", false, 0)}>"
+      else
+        returnType = ""
+
+      return """
+        // R
+        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
+          if (result) {
+            const { value } = result
+            const mappedValue = #{compileStructuralHandler(h, "value", false, 0)}
 
             //@ts-ignore
             result.value = mappedValue
@@ -225,8 +250,14 @@ compileRule = (options, name, rule) ->
         }
       """
 
+fs = require 'fs'
+typescript = require 'typescript'
+
+defaultOptions =
+  types: false
+
 module.exports =
-  compile: (rules, options={}) ->
+  compile: (rules, options=defaultOptions) ->
     { types } = options
     ruleNames = Object.keys(rules)
 
@@ -235,33 +266,16 @@ module.exports =
     .join("\n\n")
 
     if types
-      stateType = ": ParseState"
       header = """
-      import {
-        $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
-        Loc,
-        MaybeResult,
-        ParseState,
-        defaultRegExpTransform,
-        makeResultHandler_R,
-        makeResultHandler,
-        parserState,
-      } from "./machine"
+      #{fs.readFileSync(__dirname + "/machine.ts", "utf8")}
 
-      const { parse, $L, $R } = parserState(#{ruleNames[0]})
+      const { parse, fail } = parserState(#{ruleNames[0]})
       """
     else
-      stateType = ""
       header = """
-      const {
-        $C, $S, $E, $P, $Q, $TEXT, $N, $Y,
-        parserState,
-        defaultRegExpTransform,
-        makeResultHandler_R,
-        makeResultHandler,
-      } = require("./machine")
+      #{typescript.transpile(fs.readFileSync(__dirname + "/machine.ts", "utf8"))}
 
-      const { parse, $L, $R } = parserState(#{ruleNames[0]})
+      const { parse, fail } = parserState(#{ruleNames[0]})
       """
 
     """
@@ -269,15 +283,13 @@ module.exports =
 
     #{ strDefs.map (str, i) ->
       """
-        const $l#{i} = "#{str}";
-        function $L#{i}(state#{stateType}) { return $L(state, $l#{i}) }
+        const $L#{i} = $L("#{str}", fail);
       """
     .join "\n" }
 
     #{ reDefs.map (r, i) ->
       """
-        const $r#{i} = new RegExp(#{JSON.stringify(r)}, 'suy');
-        function $R#{i}(state#{stateType}) { return $R(state, $r#{i}) }
+        const $R#{i} = $R(new RegExp(#{JSON.stringify(r)}, 'suy'), fail);
       """
 
     .join "\n" }
@@ -285,6 +297,37 @@ module.exports =
     #{body}
 
     module.exports = {
-      parse: parse
+      parse: parse,
+
     }
     """
+
+# Experimental compiler generating
+###
+CoffeeScript = require 'coffeescript'
+
+
+    const compile = (function() {
+      const m = {exports: {}};
+      (function(module) {
+        #{CoffeeScript.compile(fs.readFileSync(__dirname + "/compiler.coffee", "utf8"), bare: true)}
+      })(m)
+      //@ts-ignore
+      return m.exports.compile;
+    }())
+
+      generate: function(rules, vivify) {
+        //@ts-ignore
+        const src = compile(rules)
+
+        if (vivify) {
+          const m = {exports: {}};
+          Function("module", "exports", "__dirname", "require", src)(m, m.exports, __dirname, require);
+
+          return m.exports;
+        } else {
+          return src;
+        }
+      }
+
+###

@@ -57,64 +57,61 @@ export interface Parser<T> {
 /**
  * Match a string literal.
  */
-export function $L<T extends string>(state: ParseState, str: T, fail: Fail): MaybeResult<T> {
-  const { input, pos } = state;
-  const { length } = str;
+export function $L<T extends string>(str: T, fail: Fail): Parser<T> {
+  return function (state: ParseState) {
+    const { input, pos } = state;
+    const { length } = str;
 
-  if (input.substr(pos, length) === str) {
-    return {
-      loc: {
-        pos: pos,
-        length: length
-      },
-      pos: pos + length,
-      value: str
+    if (input.substr(pos, length) === str) {
+      return {
+        loc: {
+          pos: pos,
+          length: length
+        },
+        pos: pos + length,
+        value: str
+      }
     }
-  }
 
-  fail(pos, str)
+    fail(pos, str)
+  }
 }
 
 /**
  * Match a regular expression (must be sticky).
  */
-export function $R(state: ParseState, regExp: RegExp, fail: Fail): MaybeResult<RegExpMatchArray> {
-  const { input, pos } = state
-  regExp.lastIndex = state.pos
+export function $R(regExp: RegExp, fail: Fail): Parser<RegExpMatchArray> {
+  return function (state: ParseState) {
+    const { input, pos } = state
+    regExp.lastIndex = state.pos
 
-  let l, m, v
+    let l, m, v
 
-  if (m = input.match(regExp)) {
-    v = m[0]
-    l = v.length
+    if (m = input.match(regExp)) {
+      v = m[0]
+      l = v.length
 
-    return {
-      loc: {
-        pos: pos,
-        length: l,
-      },
-      pos: pos + l,
-      value: m,
+      return {
+        loc: {
+          pos: pos,
+          length: l,
+        },
+        pos: pos + l,
+        value: m,
+      }
     }
-  }
 
-  fail(pos, regExp)
+    fail(pos, regExp)
+  }
 }
 
-// a / b / c / ...
-// Proioritized choice
-// roughly a(...) || b(...) in JS, generalized to reduce, optimized to loop
 
-// export function $C<A>(a: Parser<A>): Parser<A>
-// export function $C<A, B>(a: Parser<A>, b: Parser<B>): Parser<A | B>
-// export function $C<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<A | B | C>
-// export function $C<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<A | B | C | D>
-// export function $C<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<A | B | C | D | E>
-// export function $C<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<A | B | C | D | E | F>
-// export function $C<A, B, C, D, E, F, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>): Parser<A | B | C | D | E | F | H>
-// export function $C<A, B, C, D, E, F, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>): Parser<A | B | C | D | E | F | H | I>
-// export function $C<A, B, C, D, E, F, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<A | B | C | D | E | F | H | I | J>
 
+/** Choice
+ * A / B / C / ...
+ * Proioritized choice
+ * roughly a(...) || b(...) in JS
+ */
 export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
   return (state: ParseState) => {
     let i = 0
@@ -129,23 +126,17 @@ export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
   }
 }
 
-// export function $S(): Parser<[]>
-// export function $S<A>(fn: Parser<A>): Parser<[A]>
-// export function $S<A, B>(a: Parser<A>, b: Parser<B>): Parser<[A, B]>
-// export function $S<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<[A, B, C]>
-// export function $S<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<[A, B, C, D]>
-// export function $S<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<[A, B, C, D, E]>
-// export function $S<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<[A, B, C, D, E, F]>
-// export function $S<A, B, C, D, E, F, G>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>): Parser<[A, B, C, D, E, F, G]>
-// export function $S<A, B, C, D, E, F, G, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>): Parser<[A, B, C, D, E, F, G, H]>
-// export function $S<A, B, C, D, E, F, G, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>): Parser<[A, B, C, D, E, F, G, H, I]>
-// export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<[A, B, C, D, E, F, G, H, I, J]>
-
+/** Sequence
+ * A B C ...
+ * A followed by by B followed by C followed by ...
+ */
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
   return (state: ParseState) => {
-    let { input, pos } = state
-    let i = 0, value
-    const results = [] as unknown as T, s = pos, l = terms.length
+    let { input, pos } = state,
+      i = 0, value
+    const results = [] as unknown as T,
+      s = pos,
+      l = terms.length
 
     while (i < l) {
       const r = terms[i++]({ input, pos })
@@ -401,7 +392,7 @@ export interface ParserOptions {
   filename?: string
 }
 
-const failHintRegex = /\S+|[^\S]+|$/y
+const failHintRegex = /\S+|\s+|$/y
 
 export function parserState<T>(parser: Parser<T>) {
   // Error tracking
@@ -485,13 +476,10 @@ ${input.slice(result.pos)}
   }
 
   return {
-    $L: function (state: ParseState, str: string) {
-      return $L(state, str, fail)
-    },
-    $R: function (state: ParseState, re: RegExp) {
-      return $R(state, re, fail)
-    },
+    fail: fail,
     parse: (input: string, options: ParserOptions = {}) => {
+      if (typeof input !== "string") throw new Error("Input must be a string")
+
       const filename = options.filename || "<anonymous>";
 
       failIndex = 0
