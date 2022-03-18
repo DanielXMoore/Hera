@@ -35,6 +35,9 @@ toS = (rule, depth=0) ->
       when "L"
         '"' + v + '"' + hToS(h)
       when "R"
+        if v is "."
+          return v + hToS(h)
+
         try
           hera.parse v,
             startRule: "CharacterClassExpression"

@@ -64,15 +64,18 @@ compileOp = (tuple, defaultHandler) ->
 regExpHandlerParams = ["$loc"].concat [0...10].map (_, i) -> "$#{i}"
 regularHandlerParams = ["$loc", "$0", "$1"]
 
-compileStructuralHandler = (mapping, source) ->
+compileStructuralHandler = (mapping, source, single=false) ->
   switch typeof mapping
     when "string"
       JSON.stringify(mapping)
     when "number"
-      "#{source}[#{mapping-1}]"
+      if single
+        source
+      else
+        "#{source}[#{mapping-1}]"
     when "object"
       if Array.isArray mapping
-        "[#{mapping.map((m) -> compileStructuralHandler(m, source)).join(', ')}]"
+        "[#{mapping.map((m) -> compileStructuralHandler(m, source, single)).join(', ')}]"
     else
       throw new Error "Unknown mapping: #{mapping}"
 
@@ -152,7 +155,27 @@ compileHandler = (options, name, arg) ->
         };
       """
     else
-      throw new Error "Structural handling doesn't make sense for #{JSON.stringify(arg)}"
+      parameters = regularHandlerParams
+
+      if types
+        typeVariable = "<V>"
+        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V", true)}>"
+      else
+        returnType = ""
+
+      return """
+        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
+          if (result) {
+            const { value } = result
+            const mappedValue = #{compileStructuralHandler(h, "value", true)}
+
+            //@ts-ignore
+            result.value = mappedValue
+            //@ts-ignore
+            return result
+          }
+        };
+      """
 
   # no mapping
   return

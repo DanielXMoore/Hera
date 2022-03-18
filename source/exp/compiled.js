@@ -14,16 +14,18 @@ const $l1 = ",";
 function $L1(state) { return $L(state, $l1) }
 const $l2 = "\"";
 function $L2(state) { return $L(state, $l2) }
-const $l3 = "[";
+const $l3 = ".";
 function $L3(state) { return $L(state, $l3) }
-const $l4 = "]";
+const $l4 = "[";
 function $L4(state) { return $L(state, $l4) }
-const $l5 = "->";
+const $l5 = "]";
 function $L5(state) { return $L(state, $l5) }
-const $l6 = "\\";
+const $l6 = "->";
 function $L6(state) { return $L(state, $l6) }
-const $l7 = "  ";
+const $l7 = "\\";
 function $L7(state) { return $L(state, $l7) }
+const $l8 = "  ";
+function $L8(state) { return $L(state, $l8) }
 
 const $r0 = new RegExp("[$&!]", 'suy');
 function $R0(state) { return $R(state, $r0) }
@@ -35,7 +37,7 @@ const $r3 = new RegExp("\\d\\d?", 'suy');
 function $R3(state) { return $R(state, $r3) }
 const $r4 = new RegExp("[^\"\\\\]+", 'suy');
 function $R4(state) { return $R(state, $r4) }
-const $r5 = new RegExp("[^]", 'suy');
+const $r5 = new RegExp(".", 'suy');
 function $R5(state) { return $R(state, $r5) }
 const $r6 = new RegExp("[^\\/\\\\]+", 'suy');
 function $R6(state) { return $R(state, $r6) }
@@ -352,16 +354,19 @@ function CommaThenValue(state) {
   return CommaThenValue_handler($S($Q(_), $L1, $Q(_), RValue, $Q(_))(state));
 }
 
-function StringValue_handler_fn($loc, $0, $1, $2, $3) { return $2.join('') }
 function StringValue_handler(result) {
   if (result) {
+    const { value } = result
+    const mappedValue = value[1]
+
     //@ts-ignore
-    result.value = StringValue_handler_fn(result.loc, result.value, ...result.value);
+    result.value = mappedValue
+    //@ts-ignore
     return result
   }
 };
 function StringValue(state) {
-  return StringValue_handler($S($L2, $Q(DoubleStringCharacter), $L2)(state));
+  return StringValue_handler($S($L2, $TEXT($Q(DoubleStringCharacter)), $L2)(state));
 }
 
 
@@ -370,16 +375,8 @@ function DoubleStringCharacter(state) {
   return defaultRegExpTransform($R4)(state) || EscapeSequence(state)
 }
 
-function EscapeSequence_handler_fn($loc, $0, $1, $2) { return '\\' + $2 }
-function EscapeSequence_handler(result) {
-  if (result) {
-    //@ts-ignore
-    result.value = EscapeSequence_handler_fn(result.loc, result.value, ...result.value);
-    return result
-  }
-};
 function EscapeSequence(state) {
-  return EscapeSequence_handler($S(Backslash, defaultRegExpTransform($R5))(state));
+  return $TEXT($S(Backslash, defaultRegExpTransform($R5)))(state);
 }
 
 function StringLiteral_handler(result) {
@@ -397,22 +394,45 @@ function StringLiteral(state) {
   return StringLiteral_handler($S(StringValue)(state));
 }
 
-function RegExpLiteral_0_handler_fn($loc, $0, $1, $2, $3, $4) { return ["R", $3.join('')] }
 function RegExpLiteral_0_handler(result) {
   if (result) {
+    const { value } = result
+    const mappedValue = ["R", value[2]]
+
     //@ts-ignore
-    result.value = RegExpLiteral_0_handler_fn(result.loc, result.value, ...result.value);
+    result.value = mappedValue
+    //@ts-ignore
     return result
   }
 };
+function RegExpLiteral_1_handler(result) {
+  if (result) {
+    const { value } = result
+    const mappedValue = ["R", value]
 
+    //@ts-ignore
+    result.value = mappedValue
+    //@ts-ignore
+    return result
+  }
+};
+function RegExpLiteral_2_handler(result) {
+  if (result) {
+    const { value } = result
+    const mappedValue = ["R", value]
+
+    //@ts-ignore
+    result.value = mappedValue
+    //@ts-ignore
+    return result
+  }
+};
 function RegExpLiteral(state) {
-  return RegExpLiteral_0_handler($S($L0, $N(_), $Q(RegExpCharacter), $L0)(state)) || CharacterClassExpression(state)
+  return RegExpLiteral_0_handler($S($L0, $N(_), $TEXT($Q(RegExpCharacter)), $L0)(state)) || RegExpLiteral_1_handler($TEXT(CharacterClassExpression)(state)) || RegExpLiteral_2_handler($L3(state))
 }
 
-const CharacterClassExpression_handler = makeResultHandler(function ($loc, $0, $1) { return ["R", $1.join('')] });
 function CharacterClassExpression(state) {
-  return CharacterClassExpression_handler($P(CharacterClass)(state));
+  return $P(CharacterClass)(state);
 }
 
 
@@ -421,16 +441,8 @@ function RegExpCharacter(state) {
   return defaultRegExpTransform($R6)(state) || EscapeSequence(state)
 }
 
-function CharacterClass_handler_fn($loc, $0, $1, $2, $3, $4) { return "[" + $2.join('') + "]" + ($4 || "") }
-function CharacterClass_handler(result) {
-  if (result) {
-    //@ts-ignore
-    result.value = CharacterClass_handler_fn(result.loc, result.value, ...result.value);
-    return result
-  }
-};
 function CharacterClass(state) {
-  return CharacterClass_handler($S($L3, $Q(CharacterClassCharacter), $L4, $E(Quantifier))(state));
+  return $S($L4, $Q(CharacterClassCharacter), $L5, $E(Quantifier))(state);
 }
 
 
@@ -448,11 +460,11 @@ function Name(state) {
 }
 
 function Arrow(state) {
-  return $S($L5, $Q(_))(state);
+  return $S($L6, $Q(_))(state);
 }
 
 function Backslash(state) {
-  return $L6(state);
+  return $L7(state);
 }
 
 function OpenBracket(state) {
@@ -472,7 +484,7 @@ function CloseParenthesis(state) {
 }
 
 function Indent(state) {
-  return $L7(state);
+  return $L8(state);
 }
 
 function _(state) {

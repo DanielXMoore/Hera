@@ -18,7 +18,8 @@
         { "include": "#characterClass"},
         { "include": "#operator" },
         { "include": "#comment" },
-        { "include": "#choice"}
+        { "include": "#choice"},
+        { "include": "#dot"}
       ]
     },
     "rule": {
@@ -84,9 +85,13 @@
       "name": "constant.numeric.hera",
       "match": "[$!&?+*]"
     },
+    "dot": {
+      "name": "string.regex.hera",
+      "match": "\\."
+    },
     "regex": {
       "name": "string.regex.hera",
-      "begin": "/(?=[^\n\t ])",
+      "begin": "/(?=[^\\n\\t ])",
       "end": "/",
       "patterns": [{
         "include": "#string-character-escape"

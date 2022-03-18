@@ -17,16 +17,18 @@ const $l1 = ",";
 function $L1(state: ParseState) { return $L(state, $l1) }
 const $l2 = "\"";
 function $L2(state: ParseState) { return $L(state, $l2) }
-const $l3 = "[";
+const $l3 = ".";
 function $L3(state: ParseState) { return $L(state, $l3) }
-const $l4 = "]";
+const $l4 = "[";
 function $L4(state: ParseState) { return $L(state, $l4) }
-const $l5 = "->";
+const $l5 = "]";
 function $L5(state: ParseState) { return $L(state, $l5) }
-const $l6 = "\\";
+const $l6 = "->";
 function $L6(state: ParseState) { return $L(state, $l6) }
-const $l7 = "  ";
+const $l7 = "\\";
 function $L7(state: ParseState) { return $L(state, $l7) }
+const $l8 = "  ";
+function $L8(state: ParseState) { return $L(state, $l8) }
 
 const $r0 = new RegExp("[$&!]", 'suy');
 function $R0(state: ParseState) { return $R(state, $r0) }
@@ -38,7 +40,7 @@ const $r3 = new RegExp("\\d\\d?", 'suy');
 function $R3(state: ParseState) { return $R(state, $r3) }
 const $r4 = new RegExp("[^\"\\\\]+", 'suy');
 function $R4(state: ParseState) { return $R(state, $r4) }
-const $r5 = new RegExp("[^]", 'suy');
+const $r5 = new RegExp(".", 'suy');
 function $R5(state: ParseState) { return $R(state, $r5) }
 const $r6 = new RegExp("[^\\/\\\\]+", 'suy');
 function $R6(state: ParseState) { return $R(state, $r6) }
@@ -355,16 +357,19 @@ function CommaThenValue(state: ParseState) {
   return CommaThenValue_handler($S($Q(_), $L1, $Q(_), RValue, $Q(_))(state));
 }
 
-function StringValue_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2]) { return $2.join('') }
-function StringValue_handler<V extends any[]>(result: MaybeResult<V>) {
+function StringValue_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[1]> {
   if (result) {
+    const { value } = result
+    const mappedValue = value[1]
+
     //@ts-ignore
-    result.value = StringValue_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof StringValue_handler_fn>>
+    result.value = mappedValue
+    //@ts-ignore
+    return result
   }
 };
 function StringValue(state: ParseState) {
-  return StringValue_handler($S($L2, $Q(DoubleStringCharacter), $L2)(state));
+  return StringValue_handler($S($L2, $TEXT($Q(DoubleStringCharacter)), $L2)(state));
 }
 
 
@@ -373,16 +378,8 @@ function DoubleStringCharacter(state: ParseState) {
   return defaultRegExpTransform($R4)(state) || EscapeSequence(state)
 }
 
-function EscapeSequence_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) { return '\\' + $2 }
-function EscapeSequence_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = EscapeSequence_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof EscapeSequence_handler_fn>>
-  }
-};
 function EscapeSequence(state: ParseState) {
-  return EscapeSequence_handler($S(Backslash, defaultRegExpTransform($R5))(state));
+  return $TEXT($S(Backslash, defaultRegExpTransform($R5)))(state);
 }
 
 function StringLiteral_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["L", V[0]]> {
@@ -400,22 +397,45 @@ function StringLiteral(state: ParseState) {
   return StringLiteral_handler($S(StringValue)(state));
 }
 
-function RegExpLiteral_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { return ["R", $3.join('')] }
-function RegExpLiteral_0_handler<V extends any[]>(result: MaybeResult<V>) {
+function RegExpLiteral_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["R", V[2]]> {
   if (result) {
+    const { value } = result
+    const mappedValue = ["R", value[2]]
+
     //@ts-ignore
-    result.value = RegExpLiteral_0_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof RegExpLiteral_0_handler_fn>>
+    result.value = mappedValue
+    //@ts-ignore
+    return result
   }
 };
+function RegExpLiteral_1_handler<V>(result: MaybeResult<V>): MaybeResult<["R", V]> {
+  if (result) {
+    const { value } = result
+    const mappedValue = ["R", value]
 
+    //@ts-ignore
+    result.value = mappedValue
+    //@ts-ignore
+    return result
+  }
+};
+function RegExpLiteral_2_handler<V>(result: MaybeResult<V>): MaybeResult<["R", V]> {
+  if (result) {
+    const { value } = result
+    const mappedValue = ["R", value]
+
+    //@ts-ignore
+    result.value = mappedValue
+    //@ts-ignore
+    return result
+  }
+};
 function RegExpLiteral(state: ParseState) {
-  return RegExpLiteral_0_handler($S($L0, $N(_), $Q(RegExpCharacter), $L0)(state)) || CharacterClassExpression(state)
+  return RegExpLiteral_0_handler($S($L0, $N(_), $TEXT($Q(RegExpCharacter)), $L0)(state)) || RegExpLiteral_1_handler($TEXT(CharacterClassExpression)(state)) || RegExpLiteral_2_handler($L3(state))
 }
 
-const CharacterClassExpression_handler = makeResultHandler(function ($loc, $0, $1) { return ["R", $1.join('')] });
 function CharacterClassExpression(state: ParseState) {
-  return CharacterClassExpression_handler($P(CharacterClass)(state));
+  return $P(CharacterClass)(state);
 }
 
 
@@ -424,16 +444,8 @@ function RegExpCharacter(state: ParseState) {
   return defaultRegExpTransform($R6)(state) || EscapeSequence(state)
 }
 
-function CharacterClass_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { return "[" + $2.join('') + "]" + ($4 || "") }
-function CharacterClass_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = CharacterClass_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof CharacterClass_handler_fn>>
-  }
-};
 function CharacterClass(state: ParseState) {
-  return CharacterClass_handler($S($L3, $Q(CharacterClassCharacter), $L4, $E(Quantifier))(state));
+  return $S($L4, $Q(CharacterClassCharacter), $L5, $E(Quantifier))(state);
 }
 
 
@@ -451,11 +463,11 @@ function Name(state: ParseState) {
 }
 
 function Arrow(state: ParseState) {
-  return $S($L5, $Q(_))(state);
+  return $S($L6, $Q(_))(state);
 }
 
 function Backslash(state: ParseState) {
-  return $L6(state);
+  return $L7(state);
 }
 
 function OpenBracket(state: ParseState) {
@@ -475,7 +487,7 @@ function CloseParenthesis(state: ParseState) {
 }
 
 function Indent(state: ParseState) {
-  return $L7(state);
+  return $L8(state);
 }
 
 function _(state: ParseState) {

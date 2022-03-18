@@ -339,7 +339,7 @@ module.exports = {
         "Backslash",
         [
           "R",
-          "[^]"
+          "."
         ]
       ]
     ]
@@ -385,19 +385,27 @@ module.exports = {
           3
         ]
       ],
-      "CharacterClassExpression"
+      [
+        "$",
+        "CharacterClassExpression",
+        [
+          "R",
+          1
+        ]
+      ],
+      [
+        "L",
+        ".",
+        [
+          "R",
+          1
+        ]
+      ]
     ]
   ],
   "CharacterClassExpression": [
-    "$",
-    [
-      "+",
-      "CharacterClass"
-    ],
-    [
-      "R",
-      1
-    ]
+    "+",
+    "CharacterClass"
   ],
   "RegExpCharacter": [
     "/",

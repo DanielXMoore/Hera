@@ -99,17 +99,18 @@ DoubleStringCharacter
   EscapeSequence
 
 EscapeSequence
-  $( Backslash [^] )
+  $( Backslash . )
 
 StringLiteral
   StringValue -> ["L",1]
 
 RegExpLiteral
   "/" !_ $RegExpCharacter* "/" -> ["R",3]
-  CharacterClassExpression
+  $CharacterClassExpression -> ["R",1]
+  "." -> ["R",1]
 
 CharacterClassExpression
-  $CharacterClass+ -> ["R",1]
+  CharacterClass+
 
 RegExpCharacter
   [^\/\\]+

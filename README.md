@@ -150,7 +150,8 @@ Changelog
 ---
 
 - 0.7.3
-  - Added prefix $ text operator
+  - Added prefix `$` text operator.
+  - Added `.` any character matcher.
   - Fixed structural mapping bug where in `["R", 1]` the `1` would take the
   first element of the result rather than the whole result on non-sequence
   handlers.
