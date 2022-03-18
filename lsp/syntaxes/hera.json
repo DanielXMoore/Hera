@@ -82,7 +82,7 @@
     },
     "operator": {
       "name": "constant.numeric.hera",
-      "match": "[!&?+*]"
+      "match": "[$!&?+*]"
     },
     "regex": {
       "name": "string.regex.hera",

@@ -30,8 +30,8 @@ toS = (rule, depth=0) ->
     switch f
       when "*", "+", "?"
         toS(v, depth+1) + f + hToS(h)
-      when "&", "!"
-        f + toS(v, depth+1)
+      when "$", "&", "!"
+        f + toS(v, depth+1) + hToS(h)
       when "L"
         '"' + v + '"' + hToS(h)
       when "R"

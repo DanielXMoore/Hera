@@ -146,6 +146,22 @@ Regex Groups
 >     Punctuation
 >       "."
 
+Changelog
+---
+
+- 0.7.3
+  - Added prefix $ text operator
+  - Fixed structural mapping bug where in `["R", 1]` the `1` would take the
+  first element of the result rather than the whole result on non-sequence
+  handlers.
+- 0.7.2
+  - VSCode Extension <https://marketplace.visualstudio.com/items?itemName=DanielX.hera>
+  - Bare character class 
+
+Experiments
+---
+
+Compiling parsers to TypeScript.
 
 Glossary
 ---

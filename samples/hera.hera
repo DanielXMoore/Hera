@@ -92,36 +92,31 @@ CommaThenValue
   _* "," _* RValue _* -> 4
 
 StringValue
-  "\"" DoubleStringCharacter* "\"" ->
-    return $2.join('')
+  "\"" $DoubleStringCharacter* "\"" -> 2
 
 DoubleStringCharacter
   [^"\\]+
   EscapeSequence
 
 EscapeSequence
-  Backslash [^] ->
-    return '\\' + $2
+  $( Backslash [^] )
 
 StringLiteral
   StringValue -> ["L",1]
 
 RegExpLiteral
-  "/" !_ RegExpCharacter* "/" ->
-    return ["R", $3.join('')]
+  "/" !_ $RegExpCharacter* "/" -> ["R",3]
   CharacterClassExpression
 
 CharacterClassExpression
-  CharacterClass+ ->
-    return ["R", $1.join('')]
+  $CharacterClass+ -> ["R",1]
 
 RegExpCharacter
   [^\/\\]+
   EscapeSequence
 
 CharacterClass
-  "[" CharacterClassCharacter* "]" Quantifier? ->
-    return "[" + $2.join('') + "]" + ($4 || "")
+  "[" CharacterClassCharacter* "]" Quantifier?
 
 CharacterClassCharacter
   [^\]\\]+

@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.2-pre.2",
+  "version": "0.7.3-pre.0",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/coffeecoverage": "4.0.0-pre.1",

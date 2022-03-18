@@ -308,17 +308,18 @@ module.exports = {
         "\\\""
       ],
       [
-        "*",
-        "DoubleStringCharacter"
+        "$",
+        [
+          "*",
+          "DoubleStringCharacter"
+        ]
       ],
       [
         "L",
         "\\\""
       ]
     ],
-    {
-      "f": "return $2.join('')"
-    }
+    2
   ],
   "DoubleStringCharacter": [
     "/",
@@ -331,17 +332,17 @@ module.exports = {
     ]
   ],
   "EscapeSequence": [
-    "S",
+    "$",
     [
-      "Backslash",
+      "S",
       [
-        "R",
-        "[^]"
+        "Backslash",
+        [
+          "R",
+          "[^]"
+        ]
       ]
-    ],
-    {
-      "f": "return '\\\\' + $2"
-    }
+    ]
   ],
   "StringLiteral": [
     "S",
@@ -368,27 +369,35 @@ module.exports = {
             "_"
           ],
           [
-            "*",
-            "RegExpCharacter"
+            "$",
+            [
+              "*",
+              "RegExpCharacter"
+            ]
           ],
           [
             "L",
             "/"
           ]
         ],
-        {
-          "f": "return [\"R\", $3.join('')]"
-        }
+        [
+          "R",
+          3
+        ]
       ],
       "CharacterClassExpression"
     ]
   ],
   "CharacterClassExpression": [
-    "+",
-    "CharacterClass",
-    {
-      "f": "return [\"R\", $1.join('')]"
-    }
+    "$",
+    [
+      "+",
+      "CharacterClass"
+    ],
+    [
+      "R",
+      1
+    ]
   ],
   "RegExpCharacter": [
     "/",
@@ -419,10 +428,7 @@ module.exports = {
         "?",
         "Quantifier"
       ]
-    ],
-    {
-      "f": "return \"[\" + $2.join('') + \"]\" + ($4 || \"\")"
-    }
+    ]
   ],
   "CharacterClassCharacter": [
     "/",

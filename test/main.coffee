@@ -4,8 +4,8 @@ test = it
 compile = (src) ->
   hera.generate hera.parse(src), true
 
-describe.skip "", ->
-  it "should update rules file", ->
+describe "Build rules", ->
+  it.skip "should update rules file", ->
     newHera = compile readFile("samples/hera.hera")
     require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
 
