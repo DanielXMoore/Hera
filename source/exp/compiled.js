@@ -9,11 +9,22 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parserState = exports.defaultRegExpTransform = exports.defaultRegExpHandler = exports.defaultHandler = exports.makeResultHandler = exports.makeResultHandler_R = exports.makeResultHandler_S = exports.$Y = exports.$N = exports.$TEXT = exports.$P = exports.$Q = exports.$E = exports.$S = exports.$C = exports.$R = exports.$L = void 0;
+exports.parserState = exports.defaultRegExpTransform = exports.defaultRegExpHandler = exports.defaultHandler = exports.makeResultHandler = exports.makeResultHandler_R = exports.makeResultHandler_S = exports.$Y = exports.$N = exports.$TEXT = exports.$P = exports.$Q = exports.$E = exports.$S = exports.$C = exports.$R = exports.$L = exports.$EXPECT = void 0;
+function $EXPECT(parser, fail, t, name) {
+    var expectation = prettyPrint(t, name);
+    return function (state) {
+        var result = parser(state);
+        if (result)
+            return result;
+        var pos = state.pos;
+        fail(pos, expectation);
+    };
+}
+exports.$EXPECT = $EXPECT;
 /**
  * Match a string literal.
  */
-function $L(str, fail) {
+function $L(str) {
     return function (state) {
         var input = state.input, pos = state.pos;
         var length = str.length;
@@ -27,14 +38,13 @@ function $L(str, fail) {
                 value: str
             };
         }
-        fail(pos, str);
     };
 }
 exports.$L = $L;
 /**
  * Match a regular expression (must be sticky).
  */
-function $R(regExp, fail) {
+function $R(regExp) {
     return function (state) {
         var input = state.input, pos = state.pos;
         regExp.lastIndex = state.pos;
@@ -51,7 +61,6 @@ function $R(regExp, fail) {
                 value: m,
             };
         }
-        fail(pos, regExp);
     };
 }
 exports.$R = $R;
@@ -322,7 +331,28 @@ function location(input, pos) {
     return "".concat(line, ":").concat(column);
 }
 var failHintRegex = /\S+|\s+|$/y;
-function parserState(parser) {
+/**
+ * Pretty print a string or RegExp literal
+ */
+function prettyPrint(t, name) {
+    var pv;
+    if (t instanceof RegExp) {
+        // Ignore case is the only external flag that may be allowed so far
+        var s = t.toString();
+        var flags = t.ignoreCase ? "i" : "";
+        pv = s.slice(0, -t.flags.length) + flags;
+    }
+    else {
+        pv = JSON.stringify(t);
+    }
+    if (name) {
+        return "".concat(name, " ").concat(pv);
+    }
+    else {
+        return pv;
+    }
+}
+function parserState(grammar) {
     // Error tracking
     // Goal is zero allocations
     var failExpected = Array(16);
@@ -337,27 +367,6 @@ function parserState(parser) {
         }
         failExpected[failIndex++] = expected;
         return;
-    }
-    // Pretty print a string or RegExp literal
-    // TODO: could expand to all rules?
-    // Includes looking up the name
-    function prettyPrint(v) {
-        var pv;
-        if (v instanceof RegExp) {
-            var s = v.toString();
-            // Would prefer to use -v.flags.length, but IE doesn't support .flags
-            pv = s.slice(0, s.lastIndexOf('/') + 1);
-        }
-        else {
-            pv = JSON.stringify(v);
-        }
-        var name = false; // _names.get(v)
-        if (name) {
-            return "#{name} #{pv}";
-        }
-        else {
-            return pv;
-        }
     }
     function validate(input, result, _a) {
         var filename = _a.filename;
@@ -377,7 +386,7 @@ function parserState(parser) {
                 hint = prettyPrint(hint);
             else
                 hint = "EOF";
-            throw new Error("\n".concat(filename, ":").concat(l, " Failed to parse\nExpected:\n\t").concat(expectations.map(prettyPrint).join("\n\t"), "\nFound: ").concat(hint, "\n"));
+            throw new Error("\n".concat(filename, ":").concat(l, " Failed to parse\nExpected:\n\t").concat(expectations.join("\n\t"), "\nFound: ").concat(hint, "\n"));
         }
         else if (result)
             throw new Error("\nUnconsumed input at ".concat(l, "\n\n").concat(input.slice(result.pos), "\n"));
@@ -386,6 +395,13 @@ function parserState(parser) {
         fail: fail,
         parse: function (input, options) {
             if (options === void 0) { options = {}; }
+            if (typeof input !== "string")
+                throw new Error("Input must be a string");
+            var parser = (options.startRule != null)
+                ? grammar[options.startRule]
+                : Object.values(grammar)[0];
+            if (!parser)
+                throw new Error("Could not find rule with name '#{opts.startRule}'");
             var filename = options.filename || "<anonymous>";
             failIndex = 0;
             maxFailPos = 0;
@@ -399,34 +415,75 @@ function parserState(parser) {
 exports.parserState = parserState;
 
 
-const { parse, fail } = parserState(Grammar)
+const { parse, fail } = parserState({
+  Grammar: Grammar,
+Rule: Rule,
+RuleBody: RuleBody,
+Choice: Choice,
+Sequence: Sequence,
+SequenceExpression: SequenceExpression,
+ChoiceExpression: ChoiceExpression,
+Expression: Expression,
+PrefixOperator: PrefixOperator,
+Suffix: Suffix,
+SuffixOperator: SuffixOperator,
+Primary: Primary,
+Literal: Literal,
+Handling: Handling,
+HandlingExpression: HandlingExpression,
+HandlingExpressionBody: HandlingExpressionBody,
+HandlingExpressionLine: HandlingExpressionLine,
+HandlingExpressionValue: HandlingExpressionValue,
+RValue: RValue,
+CommaThenValue: CommaThenValue,
+StringValue: StringValue,
+DoubleStringCharacter: DoubleStringCharacter,
+EscapeSequence: EscapeSequence,
+StringLiteral: StringLiteral,
+RegExpLiteral: RegExpLiteral,
+CharacterClassExpression: CharacterClassExpression,
+RegExpCharacter: RegExpCharacter,
+CharacterClass: CharacterClass,
+CharacterClassCharacter: CharacterClassCharacter,
+Quantifier: Quantifier,
+Name: Name,
+Arrow: Arrow,
+Backslash: Backslash,
+OpenBracket: OpenBracket,
+CloseBracket: CloseBracket,
+OpenParenthesis: OpenParenthesis,
+CloseParenthesis: CloseParenthesis,
+Indent: Indent,
+_: _,
+EOS: EOS
+})
 
-const $L0 = $L("/", fail);
-const $L1 = $L(",", fail);
-const $L2 = $L("\"", fail);
-const $L3 = $L(".", fail);
-const $L4 = $L("[", fail);
-const $L5 = $L("]", fail);
-const $L6 = $L("->", fail);
-const $L7 = $L("\\", fail);
-const $L8 = $L("  ", fail);
+const $L0 = $L("/");
+const $L1 = $L(",");
+const $L2 = $L("\"");
+const $L3 = $L(".");
+const $L4 = $L("[");
+const $L5 = $L("]");
+const $L6 = $L("->");
+const $L7 = $L("\\");
+const $L8 = $L("  ");
 
-const $R0 = $R(new RegExp("[$&!]", 'suy'), fail);
-const $R1 = $R(new RegExp("[+?*]", 'suy'), fail);
-const $R2 = $R(new RegExp("[^\\n\\r]*", 'suy'), fail);
-const $R3 = $R(new RegExp("\\d\\d?", 'suy'), fail);
-const $R4 = $R(new RegExp("[^\"\\\\]+", 'suy'), fail);
-const $R5 = $R(new RegExp(".", 'suy'), fail);
-const $R6 = $R(new RegExp("[^\\/\\\\]+", 'suy'), fail);
-const $R7 = $R(new RegExp("[^\\]\\\\]+", 'suy'), fail);
-const $R8 = $R(new RegExp("[?+*]|\\{\\d+(,\\d+)?\\}", 'suy'), fail);
-const $R9 = $R(new RegExp("[_a-zA-Z][_a-zA-Z0-9]*", 'suy'), fail);
-const $R10 = $R(new RegExp("\\[[ \\t]*", 'suy'), fail);
-const $R11 = $R(new RegExp("\\][ \\t]*", 'suy'), fail);
-const $R12 = $R(new RegExp("\\([ \\t]*", 'suy'), fail);
-const $R13 = $R(new RegExp("[ \\t]*\\)", 'suy'), fail);
-const $R14 = $R(new RegExp("[ \\t]+", 'suy'), fail);
-const $R15 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'), fail);
+const $R0 = $R(new RegExp("[$&!]", 'suy'));
+const $R1 = $R(new RegExp("[+?*]", 'suy'));
+const $R2 = $R(new RegExp("[^\\n\\r]*", 'suy'));
+const $R3 = $R(new RegExp("\\d\\d?", 'suy'));
+const $R4 = $R(new RegExp("[^\"\\\\]+", 'suy'));
+const $R5 = $R(new RegExp(".", 'suy'));
+const $R6 = $R(new RegExp("[^\\/\\\\]+", 'suy'));
+const $R7 = $R(new RegExp("[^\\]\\\\]+", 'suy'));
+const $R8 = $R(new RegExp("[?+*]|\\{\\d+(,\\d+)?\\}", 'suy'));
+const $R9 = $R(new RegExp("[_a-zA-Z][_a-zA-Z0-9]*", 'suy'));
+const $R10 = $R(new RegExp("\\[[ \\t]*", 'suy'));
+const $R11 = $R(new RegExp("\\][ \\t]*", 'suy'));
+const $R12 = $R(new RegExp("\\([ \\t]*", 'suy'));
+const $R13 = $R(new RegExp("[ \\t]*\\)", 'suy'));
+const $R14 = $R(new RegExp("[ \\t]+", 'suy'));
+const $R15 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
 
 function Grammar_handler_fn($loc, $0, $1, $2){return Object.fromEntries($2)}
 function Grammar_handler(result) {
@@ -436,14 +493,15 @@ function Grammar_handler(result) {
     return result
   }
 };
+const Grammar$0 = $S($Q(EOS), $P(Rule));
 function Grammar(state) {
-  return Grammar_handler($S($Q(EOS), $P(Rule))(state));
+  return Grammar_handler(Grammar$0(state));
 }
 
 function Rule_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = [value[0] /* 1 -1 */, value[2] /* 3 -1 */]
+    const mappedValue = [value[0], value[2]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -451,15 +509,17 @@ function Rule_handler(result) {
     return result
   }
 };
+const Rule$0 = $S(Name, EOS, RuleBody);
 function Rule(state) {
-  return Rule_handler($S(Name, EOS, RuleBody)(state));
+  return Rule_handler(Rule$0(state));
 }
 
 const RuleBody_handler = makeResultHandler(function($loc, $0, $1) {var r = $1.map((a) => a[1])
 if (r.length === 1) return r[0];
 return ["/", r]});
+const RuleBody$0 = $P($S(Indent, Choice));
 function RuleBody(state) {
-  return RuleBody_handler($P($S(Indent, Choice))(state));
+  return RuleBody_handler(RuleBody$0(state));
 }
 
 function Choice_handler_fn($loc, $0, $1, $2){if ($2 !== undefined) {
@@ -476,8 +536,9 @@ function Choice_handler(result) {
     return result
   }
 };
+const Choice$0 = $S(Sequence, Handling);
 function Choice(state) {
-  return Choice_handler($S(Sequence, Handling)(state));
+  return Choice_handler(Choice$0(state));
 }
 
 function Sequence_0_handler_fn($loc, $0, $1, $2){$2.unshift($1)
@@ -506,7 +567,7 @@ function Sequence(state) {
 function SequenceExpression_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[1] /* 2 -1 */
+    const mappedValue = value[1]
 
     //@ts-ignore
     result.value = mappedValue
@@ -514,14 +575,15 @@ function SequenceExpression_handler(result) {
     return result
   }
 };
+const SequenceExpression$0 = $S(_, Expression);
 function SequenceExpression(state) {
-  return SequenceExpression_handler($S(_, Expression)(state));
+  return SequenceExpression_handler(SequenceExpression$0(state));
 }
 
 function ChoiceExpression_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[3] /* 4 -1 */
+    const mappedValue = value[3]
 
     //@ts-ignore
     result.value = mappedValue
@@ -529,15 +591,16 @@ function ChoiceExpression_handler(result) {
     return result
   }
 };
+const ChoiceExpression$0 = $S(_, $EXPECT($L0, fail, "/", "ChoiceExpression"), _, Expression);
 function ChoiceExpression(state) {
-  return ChoiceExpression_handler($S(_, $L0, _, Expression)(state));
+  return ChoiceExpression_handler(ChoiceExpression$0(state));
 }
 
 
 function Expression_1_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = [value[0] /* 1 -1 */, value[1] /* 2 -1 */]
+    const mappedValue = [value[0], value[1]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -549,14 +612,15 @@ function Expression(state) {
   return Suffix(state) || Expression_1_handler($S(PrefixOperator, Suffix)(state))
 }
 
+const PrefixOperator$0 = defaultRegExpTransform($EXPECT($R0, fail, "[$&!]", "PrefixOperator"))
 function PrefixOperator(state) {
-  return defaultRegExpTransform($R0)(state);
+  return PrefixOperator$0(state);
 }
 
 function Suffix_0_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = [value[1] /* 2 -1 */, value[0] /* 1 -1 */]
+    const mappedValue = [value[1], value[0]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -569,8 +633,9 @@ function Suffix(state) {
   return Suffix_0_handler($S(Primary, SuffixOperator)(state)) || Primary(state)
 }
 
+const SuffixOperator$0 = defaultRegExpTransform($EXPECT($R1, fail, "[+?*]", "SuffixOperator"))
 function SuffixOperator(state) {
-  return defaultRegExpTransform($R1)(state);
+  return SuffixOperator$0(state);
 }
 
 
@@ -578,7 +643,7 @@ function SuffixOperator(state) {
 function Primary_2_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[1] /* 2 -1 */
+    const mappedValue = value[1]
 
     //@ts-ignore
     result.value = mappedValue
@@ -607,7 +672,7 @@ function Handling_0_handler(result) {
 function Handling_1_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[2] /* 3 -1 */
+    const mappedValue = value[2]
 
     //@ts-ignore
     result.value = mappedValue
@@ -622,7 +687,7 @@ function Handling(state) {
 function HandlingExpression_0_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[1] /* 2 -1 */
+    const mappedValue = value[1]
 
     //@ts-ignore
     result.value = mappedValue
@@ -633,7 +698,7 @@ function HandlingExpression_0_handler(result) {
 function HandlingExpression_1_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[0] /* 1 -1 */
+    const mappedValue = value[0]
 
     //@ts-ignore
     result.value = mappedValue
@@ -644,7 +709,7 @@ function HandlingExpression_1_handler(result) {
 function HandlingExpression_2_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[0] /* 1 -1 */
+    const mappedValue = value[0]
 
     //@ts-ignore
     result.value = mappedValue
@@ -659,14 +724,15 @@ function HandlingExpression(state) {
 const HandlingExpressionBody_handler = makeResultHandler(function($loc, $0, $1) {return {
   f: $1.join("\n")
 }});
+const HandlingExpressionBody$0 = $P(HandlingExpressionLine);
 function HandlingExpressionBody(state) {
-  return HandlingExpressionBody_handler($P(HandlingExpressionLine)(state));
+  return HandlingExpressionBody_handler(HandlingExpressionBody$0(state));
 }
 
 function HandlingExpressionLine_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[2] /* 3 -1 */
+    const mappedValue = value[2]
 
     //@ts-ignore
     result.value = mappedValue
@@ -674,8 +740,9 @@ function HandlingExpressionLine_handler(result) {
     return result
   }
 };
+const HandlingExpressionLine$0 = $S(Indent, Indent, $EXPECT($R2, fail, "[^\\n\\r]*", "HandlingExpressionLine"), EOS);
 function HandlingExpressionLine(state) {
-  return HandlingExpressionLine_handler($S(Indent, Indent, defaultRegExpTransform($R2), EOS)(state));
+  return HandlingExpressionLine_handler(HandlingExpressionLine$0(state));
 }
 
 
@@ -694,13 +761,13 @@ function HandlingExpressionValue(state) {
 
 const RValue_1_handler = makeResultHandler_R(function($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($0, 10)});
 function RValue(state) {
-  return StringValue(state) || RValue_1_handler($R3(state))
+  return StringValue(state) || RValue_1_handler($EXPECT($R3, fail, "\\d\\d?", "RValue")(state))
 }
 
 function CommaThenValue_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[3] /* 4 -1 */
+    const mappedValue = value[3]
 
     //@ts-ignore
     result.value = mappedValue
@@ -708,14 +775,15 @@ function CommaThenValue_handler(result) {
     return result
   }
 };
+const CommaThenValue$0 = $S($Q(_), $EXPECT($L1, fail, ",", "CommaThenValue"), $Q(_), RValue, $Q(_));
 function CommaThenValue(state) {
-  return CommaThenValue_handler($S($Q(_), $L1, $Q(_), RValue, $Q(_))(state));
+  return CommaThenValue_handler(CommaThenValue$0(state));
 }
 
 function StringValue_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = value[1] /* 2 -1 */
+    const mappedValue = value[1]
 
     //@ts-ignore
     result.value = mappedValue
@@ -723,24 +791,26 @@ function StringValue_handler(result) {
     return result
   }
 };
+const StringValue$0 = $S($EXPECT($L2, fail, "\\\"", "StringValue"), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L2, fail, "\\\"", "StringValue"));
 function StringValue(state) {
-  return StringValue_handler($S($L2, $TEXT($Q(DoubleStringCharacter)), $L2)(state));
+  return StringValue_handler(StringValue$0(state));
 }
 
 
 
 function DoubleStringCharacter(state) {
-  return defaultRegExpTransform($R4)(state) || EscapeSequence(state)
+  return defaultRegExpTransform($EXPECT($R4, fail, "[^\"\\\\]+", "DoubleStringCharacter"))(state) || EscapeSequence(state)
 }
 
+const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R5, fail, ".", "EscapeSequence")))
 function EscapeSequence(state) {
-  return $TEXT($S(Backslash, defaultRegExpTransform($R5)))(state);
+  return EscapeSequence$0(state);
 }
 
 function StringLiteral_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = ["L", value[0] /* 1 -1 */]
+    const mappedValue = ["L", value[0]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -748,14 +818,15 @@ function StringLiteral_handler(result) {
     return result
   }
 };
+const StringLiteral$0 = $S(StringValue);
 function StringLiteral(state) {
-  return StringLiteral_handler($S(StringValue)(state));
+  return StringLiteral_handler(StringLiteral$0(state));
 }
 
 function RegExpLiteral_0_handler(result) {
   if (result) {
     const { value } = result
-    const mappedValue = ["R", value[2] /* 3 -1 */]
+    const mappedValue = ["R", value[2]]
 
     //@ts-ignore
     result.value = mappedValue
@@ -786,71 +857,84 @@ function RegExpLiteral_2_handler(result) {
   }
 };
 function RegExpLiteral(state) {
-  return RegExpLiteral_0_handler($S($L0, $N(_), $TEXT($Q(RegExpCharacter)), $L0)(state)) || RegExpLiteral_1_handler($TEXT(CharacterClassExpression)(state)) || RegExpLiteral_2_handler($L3(state))
+  return RegExpLiteral_0_handler($S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral"))(state)) || RegExpLiteral_1_handler($TEXT(CharacterClassExpression)(state)) || RegExpLiteral_2_handler($EXPECT($L3, fail, ".", "RegExpLiteral")(state))
 }
 
+const CharacterClassExpression$0 = $P(CharacterClass)
 function CharacterClassExpression(state) {
-  return $P(CharacterClass)(state);
+  return CharacterClassExpression$0(state);
 }
 
 
 
 function RegExpCharacter(state) {
-  return defaultRegExpTransform($R6)(state) || EscapeSequence(state)
+  return defaultRegExpTransform($EXPECT($R6, fail, "[^\\/\\\\]+", "RegExpCharacter"))(state) || EscapeSequence(state)
 }
 
+const CharacterClass$0 = $S($EXPECT($L4, fail, "[", "CharacterClass"), $Q(CharacterClassCharacter), $EXPECT($L5, fail, "]", "CharacterClass"), $E(Quantifier))
 function CharacterClass(state) {
-  return $S($L4, $Q(CharacterClassCharacter), $L5, $E(Quantifier))(state);
+  return CharacterClass$0(state);
 }
 
 
 
 function CharacterClassCharacter(state) {
-  return defaultRegExpTransform($R7)(state) || EscapeSequence(state)
+  return defaultRegExpTransform($EXPECT($R7, fail, "[^\\]\\\\]+", "CharacterClassCharacter"))(state) || EscapeSequence(state)
 }
 
+const Quantifier$0 = defaultRegExpTransform($EXPECT($R8, fail, "[?+*]|\\{\\d+(,\\d+)?\\}", "Quantifier"))
 function Quantifier(state) {
-  return defaultRegExpTransform($R8)(state);
+  return Quantifier$0(state);
 }
 
+const Name$0 = defaultRegExpTransform($EXPECT($R9, fail, "[_a-zA-Z][_a-zA-Z0-9]*", "Name"))
 function Name(state) {
-  return defaultRegExpTransform($R9)(state);
+  return Name$0(state);
 }
 
+const Arrow$0 = $S($EXPECT($L6, fail, "->", "Arrow"), $Q(_))
 function Arrow(state) {
-  return $S($L6, $Q(_))(state);
+  return Arrow$0(state);
 }
 
+const Backslash$0 = $EXPECT($L7, fail, "\\\\", "Backslash")
 function Backslash(state) {
-  return $L7(state);
+  return Backslash$0(state);
 }
 
+const OpenBracket$0 = defaultRegExpTransform($EXPECT($R10, fail, "\\[[ \\t]*", "OpenBracket"))
 function OpenBracket(state) {
-  return defaultRegExpTransform($R10)(state);
+  return OpenBracket$0(state);
 }
 
+const CloseBracket$0 = defaultRegExpTransform($EXPECT($R11, fail, "\\][ \\t]*", "CloseBracket"))
 function CloseBracket(state) {
-  return defaultRegExpTransform($R11)(state);
+  return CloseBracket$0(state);
 }
 
+const OpenParenthesis$0 = defaultRegExpTransform($EXPECT($R12, fail, "\\([ \\t]*", "OpenParenthesis"))
 function OpenParenthesis(state) {
-  return defaultRegExpTransform($R12)(state);
+  return OpenParenthesis$0(state);
 }
 
+const CloseParenthesis$0 = defaultRegExpTransform($EXPECT($R13, fail, "[ \\t]*\\)", "CloseParenthesis"))
 function CloseParenthesis(state) {
-  return defaultRegExpTransform($R13)(state);
+  return CloseParenthesis$0(state);
 }
 
+const Indent$0 = $EXPECT($L8, fail, "  ", "Indent")
 function Indent(state) {
-  return $L8(state);
+  return Indent$0(state);
 }
 
+const _$0 = defaultRegExpTransform($EXPECT($R14, fail, "[ \\t]+", "_"))
 function _(state) {
-  return defaultRegExpTransform($R14)(state);
+  return _$0(state);
 }
 
+const EOS$0 = defaultRegExpTransform($EXPECT($R15, fail, "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", "EOS"))
 function EOS(state) {
-  return defaultRegExpTransform($R15)(state);
+  return EOS$0(state);
 }
 
 module.exports = {

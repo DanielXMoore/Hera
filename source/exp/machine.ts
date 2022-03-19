@@ -38,6 +38,14 @@ export type MaybeResult<T> = ParseResult<T> | undefined
  */
 export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
 
+export type Terminal = string | RegExp
+
+export type StructuralHandling = string | number | StructuralHandling[]
+export type Handler = { f: string } | StructuralHandling
+export type TerminalOp = "L" | "R"
+export type NodeOp = "S" | "/" | "+" | "*" | "?" | "&" | "!" | "$"
+export type HeraAST = [NodeOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+
 /**
  * Note failure to find `expectation` at `pos`. This is later used to generate
  * detailed error messages.
@@ -54,10 +62,21 @@ export interface Parser<T> {
   (state: ParseState): MaybeResult<T>
 }
 
+export function $EXPECT<T>(parser: Parser<T>, fail: Fail, t: Terminal, name: string): Parser<T> {
+  const expectation: string = prettyPrint(t, name)
+
+  return function (state: ParseState) {
+    const result = parser(state);
+    if (result) return result;
+    const { pos } = state;
+    fail(pos, expectation)
+  }
+}
+
 /**
  * Match a string literal.
  */
-export function $L<T extends string>(str: T, fail: Fail): Parser<T> {
+export function $L<T extends string>(str: T): Parser<T> {
   return function (state: ParseState) {
     const { input, pos } = state;
     const { length } = str;
@@ -72,15 +91,13 @@ export function $L<T extends string>(str: T, fail: Fail): Parser<T> {
         value: str
       }
     }
-
-    fail(pos, str)
   }
 }
 
 /**
  * Match a regular expression (must be sticky).
  */
-export function $R(regExp: RegExp, fail: Fail): Parser<RegExpMatchArray> {
+export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
   return function (state: ParseState) {
     const { input, pos } = state
     regExp.lastIndex = state.pos
@@ -100,12 +117,8 @@ export function $R(regExp: RegExp, fail: Fail): Parser<RegExpMatchArray> {
         value: m,
       }
     }
-
-    fail(pos, regExp)
   }
 }
-
-
 
 /** Choice
  * A / B / C / ...
@@ -387,14 +400,39 @@ function location(input: string, pos: number) {
   return `${line}:${column}`
 }
 
-export interface ParserOptions {
-  /** The name of the file being parsed */
-  filename?: string
-}
-
 const failHintRegex = /\S+|\s+|$/y
 
-export function parserState<T>(parser: Parser<T>) {
+/**
+ * Pretty print a string or RegExp literal
+ */
+function prettyPrint(t: Terminal, name?: string) {
+  let pv;
+
+  if (t instanceof RegExp) {
+    // Ignore case is the only external flag that may be allowed so far
+    const s = t.toString()
+    const flags = t.ignoreCase ? "i" : "";
+    pv = s.slice(0, -t.flags.length) + flags
+  } else {
+    pv = JSON.stringify(t)
+  }
+
+  if (name) {
+    return `${name} ${pv}`
+  } else {
+    return pv
+  }
+}
+
+type Grammar = { [key: string]: Parser<any> }
+
+export interface ParserOptions<T extends Grammar> {
+  /** The name of the file being parsed */
+  filename?: string
+  startRule?: keyof T
+}
+
+export function parserState<G extends Grammar>(grammar: G) {
   // Error tracking
   // Goal is zero allocations
   const failExpected = Array(16)
@@ -412,29 +450,6 @@ export function parserState<T>(parser: Parser<T>) {
     failExpected[failIndex++] = expected
 
     return
-  }
-
-  // Pretty print a string or RegExp literal
-  // TODO: could expand to all rules?
-  // Includes looking up the name
-  function prettyPrint(v: string | RegExp) {
-    let pv;
-
-    if (v instanceof RegExp) {
-      const s = v.toString()
-      // Would prefer to use -v.flags.length, but IE doesn't support .flags
-      pv = s.slice(0, s.lastIndexOf('/') + 1)
-    } else {
-      pv = JSON.stringify(v)
-    }
-
-    const name = false; // _names.get(v)
-
-    if (name) {
-      return "#{name} #{pv}"
-    } else {
-      return pv
-    }
   }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
@@ -464,7 +479,7 @@ ${input.slice(result.pos)}
       throw new Error(`
 ${filename}:${l} Failed to parse
 Expected:
-\t${expectations.map(prettyPrint).join("\n\t")}
+\t${expectations.join("\n\t")}
 Found: ${hint}
 `)
     } else if (result)
@@ -477,8 +492,14 @@ ${input.slice(result.pos)}
 
   return {
     fail: fail,
-    parse: (input: string, options: ParserOptions = {}) => {
+    parse: (input: keyof G, options: ParserOptions<G> = {}) => {
       if (typeof input !== "string") throw new Error("Input must be a string")
+
+      const parser = (options.startRule != null)
+        ? grammar[options.startRule]
+        : Object.values(grammar)[0]
+
+      if (!parser) throw new Error("Could not find rule with name '#{opts.startRule}'")
 
       const filename = options.filename || "<anonymous>";
 

@@ -21,7 +21,7 @@ bench = (alternatives) ->
   suite.run
     async: true
 
-describe.skip "Benchmark", ->
+describe "Benchmark", ->
   it "check console", ->
     hera = require "../source/main"
     oldHera = require "../source/old_main"

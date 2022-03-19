@@ -25,34 +25,48 @@ defineRe = (re) ->
 
   return id
 
-compileOp = (tuple, defaultHandler) ->
+#
+
+#
+###*
+# @param tuple {HeraAST}
+# @param defaultHandler:boolean
+###
+compileOp = (tuple, name, defaultHandler) ->
   if Array.isArray(tuple)
-    [op, args, h] = tuple
+    [op, args] = tuple
     switch op
       when "L"
-        defineTerminal(args)
+        "$EXPECT(#{defineTerminal(args)}, fail, #{JSON.stringify(args)}, #{JSON.stringify(name)})"
       when "R"
-        f = defineRe(args)
+        f = "$EXPECT(#{defineRe(args)}, fail, #{JSON.stringify(args)}, #{JSON.stringify(name)})"
         if defaultHandler
-          "defaultRegExpTransform(#{f})"
-        else
-          f
+          f ="defaultRegExpTransform(#{f})"
+
+        return f
       when "/"
-        "$C(#{args.map(compileOp).join(", ")})"
+        src = args.map (arg) ->
+          compileOp(arg, name, defaultHandler)
+        .join(", ")
+        "$C(#{src})"
       when "S"
-        "$S(#{args.map(compileOp).join(", ")})"
+        src = args.map (arg) ->
+          compileOp(arg, name, defaultHandler)
+        .join(", ")
+        "$S(#{src})"
       when "*"
-        "$Q(#{compileOp(args)})"
+        # TODO: should default handler get passed down here too?
+        "$Q(#{compileOp(args, name)})"
       when "+"
-        "$P(#{compileOp(args)})"
+        "$P(#{compileOp(args, name)})"
       when "?"
-        "$E(#{compileOp(args)})"
+        "$E(#{compileOp(args, name)})"
       when "$"
-        "$TEXT(#{compileOp(args)})"
+        "$TEXT(#{compileOp(args, name)})"
       when "&"
-        "$Y(#{compileOp(args)})"
+        "$Y(#{compileOp(args, name)})"
       when "!"
-        "$N(#{compileOp(args)})"
+        "$N(#{compileOp(args, name)})"
       else
         throw new Error "Unknown op: #{op} #{JSON.stringify(args)}"
   else # rule reference
@@ -77,14 +91,14 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
       if single
         source
       else
-        "#{source}[#{mapping+offset}] /* #{mapping} #{offset} */"
+        "#{source}[#{mapping+offset}]"
     when "object"
       if Array.isArray mapping
         "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"
       else
         throw new Error "non-array object mapping"
     else
-      throw new Error "Unknown mapping: #{mapping}"
+      throw new Error "Unknown mapping type: #{mapping}"
 
 compileHandler = (options, name, arg) ->
   return unless Array.isArray(arg)
@@ -139,7 +153,7 @@ compileHandler = (options, name, arg) ->
       return """
         const #{name}_handler = makeResultHandler(function(#{parameters.join(", ")}) {#{h.f}});
       """
-  else if h # other mapping
+  else if h? # other mapping
     if op is "S"
       if types
         returnType = ": MaybeResult<#{compileStructuralHandler(h, "V")}>"
@@ -221,9 +235,9 @@ compileRule = (options, name, rule) ->
 
     options = args.map (arg, i) ->
       if handlers[i]
-        "#{name}_#{i}_handler(#{compileOp(arg)}(state))"
+        "#{name}_#{i}_handler(#{compileOp(arg, name)}(state))"
       else
-        "#{compileOp(arg, true)}(state)"
+        "#{compileOp(arg, name, true)}(state)"
     .join(" || ")
 
     """
@@ -239,16 +253,29 @@ compileRule = (options, name, rule) ->
     if handler
       """
         #{handler}
+        const #{name}$0 = #{compileOp(rule, name)};
         function #{name}(state#{stateType}) {
-          return #{name}_handler(#{compileOp(rule)}(state));
+          return #{name}_handler(#{name}$0(state));
         }
       """
     else
       """
+        const #{name}$0 = #{compileOp(rule, name, true)}
         function #{name}(state#{stateType}) {
-          return #{compileOp(rule, true)}(state);
+          return #{name}$0(state);
         }
       """
+
+compileRulesObject = (ruleNames) ->
+  meat = ruleNames.map (name) ->
+    "#{name}: #{name}"
+  .join(",\n")
+
+  """
+  {
+    #{meat}
+  }
+  """
 
 fs = require 'fs'
 typescript = require 'typescript'
@@ -256,7 +283,14 @@ typescript = require 'typescript'
 defaultOptions =
   types: false
 
+tsMachine = fs.readFileSync(__dirname + "/machine.ts", "utf8")
+jsMachine = typescript.transpile tsMachine
+
 module.exports =
+  #
+  ###*
+  # @param rules {[k: string]: HeraAST}
+  ###
   compile: (rules, options=defaultOptions) ->
     { types } = options
     ruleNames = Object.keys(rules)
@@ -266,30 +300,24 @@ module.exports =
     .join("\n\n")
 
     if types
-      header = """
-      #{fs.readFileSync(__dirname + "/machine.ts", "utf8")}
-
-      const { parse, fail } = parserState(#{ruleNames[0]})
-      """
+      header = tsMachine
     else
-      header = """
-      #{typescript.transpile(fs.readFileSync(__dirname + "/machine.ts", "utf8"))}
-
-      const { parse, fail } = parserState(#{ruleNames[0]})
-      """
+      header = jsMachine
 
     """
     #{header}
 
+    const { parse, fail } = parserState(#{compileRulesObject(ruleNames)})
+
     #{ strDefs.map (str, i) ->
       """
-        const $L#{i} = $L("#{str}", fail);
+        const $L#{i} = $L("#{str}");
       """
     .join "\n" }
 
     #{ reDefs.map (r, i) ->
       """
-        const $R#{i} = $R(new RegExp(#{JSON.stringify(r)}, 'suy'), fail);
+        const $R#{i} = $R(new RegExp(#{JSON.stringify(r)}, 'suy'));
       """
 
     .join "\n" }
