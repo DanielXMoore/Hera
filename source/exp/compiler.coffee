@@ -234,10 +234,17 @@ compileRule = (options, name, rule) ->
       compileHandler options, "#{name}_#{i}", arg
 
     options = args.map (arg, i) ->
+      # TODO: this is getting nasty
       if handlers[i]
-        "#{name}_#{i}_handler(#{compileOp(arg, name)}(state))"
+        n = "#{name}$#{i}"
+        handlers.push "const #{n} = #{compileOp(arg, name)}"
+
+        "#{name}_#{i}_handler(#{n}(state))"
       else
-        "#{compileOp(arg, name, true)}(state)"
+        n = "#{name}$#{i}"
+        handlers.push "const #{n} = #{compileOp(arg, name, true)}"
+
+        "#{n}(state)"
     .join(" || ")
 
     """

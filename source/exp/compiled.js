@@ -560,8 +560,11 @@ function Sequence_1_handler(result) {
   }
 };
 
+const Sequence$0 = $S(Expression, $P(SequenceExpression))
+const Sequence$1 = $S(Expression, $P(ChoiceExpression))
+const Sequence$2 = Expression
 function Sequence(state) {
-  return Sequence_0_handler($S(Expression, $P(SequenceExpression))(state)) || Sequence_1_handler($S(Expression, $P(ChoiceExpression))(state)) || Expression(state)
+  return Sequence_0_handler(Sequence$0(state)) || Sequence_1_handler(Sequence$1(state)) || Sequence$2(state)
 }
 
 function SequenceExpression_handler(result) {
@@ -608,8 +611,10 @@ function Expression_1_handler(result) {
     return result
   }
 };
+const Expression$0 = Suffix
+const Expression$1 = $S(PrefixOperator, Suffix)
 function Expression(state) {
-  return Suffix(state) || Expression_1_handler($S(PrefixOperator, Suffix)(state))
+  return Expression$0(state) || Expression_1_handler(Expression$1(state))
 }
 
 const PrefixOperator$0 = defaultRegExpTransform($EXPECT($R0, fail, "[$&!]", "PrefixOperator"))
@@ -629,8 +634,10 @@ function Suffix_0_handler(result) {
   }
 };
 
+const Suffix$0 = $S(Primary, SuffixOperator)
+const Suffix$1 = Primary
 function Suffix(state) {
-  return Suffix_0_handler($S(Primary, SuffixOperator)(state)) || Primary(state)
+  return Suffix_0_handler(Suffix$0(state)) || Suffix$1(state)
 }
 
 const SuffixOperator$0 = defaultRegExpTransform($EXPECT($R1, fail, "[+?*]", "SuffixOperator"))
@@ -651,14 +658,19 @@ function Primary_2_handler(result) {
     return result
   }
 };
+const Primary$0 = Name
+const Primary$1 = Literal
+const Primary$2 = $S(OpenParenthesis, Sequence, CloseParenthesis)
 function Primary(state) {
-  return Name(state) || Literal(state) || Primary_2_handler($S(OpenParenthesis, Sequence, CloseParenthesis)(state))
+  return Primary$0(state) || Primary$1(state) || Primary_2_handler(Primary$2(state))
 }
 
 
 
+const Literal$0 = StringLiteral
+const Literal$1 = RegExpLiteral
 function Literal(state) {
-  return StringLiteral(state) || RegExpLiteral(state)
+  return Literal$0(state) || Literal$1(state)
 }
 
 function Handling_0_handler_fn($loc, $0, $1){return undefined}
@@ -680,8 +692,10 @@ function Handling_1_handler(result) {
     return result
   }
 };
+const Handling$0 = $S(EOS)
+const Handling$1 = $S($Q(_), Arrow, HandlingExpression)
 function Handling(state) {
-  return Handling_0_handler($S(EOS)(state)) || Handling_1_handler($S($Q(_), Arrow, HandlingExpression)(state))
+  return Handling_0_handler(Handling$0(state)) || Handling_1_handler(Handling$1(state))
 }
 
 function HandlingExpression_0_handler(result) {
@@ -717,8 +731,11 @@ function HandlingExpression_2_handler(result) {
     return result
   }
 };
+const HandlingExpression$0 = $S(EOS, HandlingExpressionBody)
+const HandlingExpression$1 = $S(StringValue, EOS)
+const HandlingExpression$2 = $S(HandlingExpressionValue, EOS)
 function HandlingExpression(state) {
-  return HandlingExpression_0_handler($S(EOS, HandlingExpressionBody)(state)) || HandlingExpression_1_handler($S(StringValue, EOS)(state)) || HandlingExpression_2_handler($S(HandlingExpressionValue, EOS)(state))
+  return HandlingExpression_0_handler(HandlingExpression$0(state)) || HandlingExpression_1_handler(HandlingExpression$1(state)) || HandlingExpression_2_handler(HandlingExpression$2(state))
 }
 
 const HandlingExpressionBody_handler = makeResultHandler(function($loc, $0, $1) {return {
@@ -754,14 +771,18 @@ function HandlingExpressionValue_1_handler(result) {
     return result
   }
 };
+const HandlingExpressionValue$0 = RValue
+const HandlingExpressionValue$1 = $S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket)
 function HandlingExpressionValue(state) {
-  return RValue(state) || HandlingExpressionValue_1_handler($S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket)(state))
+  return HandlingExpressionValue$0(state) || HandlingExpressionValue_1_handler(HandlingExpressionValue$1(state))
 }
 
 
 const RValue_1_handler = makeResultHandler_R(function($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($0, 10)});
+const RValue$0 = StringValue
+const RValue$1 = $EXPECT($R3, fail, "\\d\\d?", "RValue")
 function RValue(state) {
-  return StringValue(state) || RValue_1_handler($EXPECT($R3, fail, "\\d\\d?", "RValue")(state))
+  return RValue$0(state) || RValue_1_handler(RValue$1(state))
 }
 
 function CommaThenValue_handler(result) {
@@ -798,8 +819,10 @@ function StringValue(state) {
 
 
 
+const DoubleStringCharacter$0 = defaultRegExpTransform($EXPECT($R4, fail, "[^\"\\\\]+", "DoubleStringCharacter"))
+const DoubleStringCharacter$1 = EscapeSequence
 function DoubleStringCharacter(state) {
-  return defaultRegExpTransform($EXPECT($R4, fail, "[^\"\\\\]+", "DoubleStringCharacter"))(state) || EscapeSequence(state)
+  return DoubleStringCharacter$0(state) || DoubleStringCharacter$1(state)
 }
 
 const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R5, fail, ".", "EscapeSequence")))
@@ -856,8 +879,11 @@ function RegExpLiteral_2_handler(result) {
     return result
   }
 };
+const RegExpLiteral$0 = $S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral"))
+const RegExpLiteral$1 = $TEXT(CharacterClassExpression)
+const RegExpLiteral$2 = $EXPECT($L3, fail, ".", "RegExpLiteral")
 function RegExpLiteral(state) {
-  return RegExpLiteral_0_handler($S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral"))(state)) || RegExpLiteral_1_handler($TEXT(CharacterClassExpression)(state)) || RegExpLiteral_2_handler($EXPECT($L3, fail, ".", "RegExpLiteral")(state))
+  return RegExpLiteral_0_handler(RegExpLiteral$0(state)) || RegExpLiteral_1_handler(RegExpLiteral$1(state)) || RegExpLiteral_2_handler(RegExpLiteral$2(state))
 }
 
 const CharacterClassExpression$0 = $P(CharacterClass)
@@ -867,8 +893,10 @@ function CharacterClassExpression(state) {
 
 
 
+const RegExpCharacter$0 = defaultRegExpTransform($EXPECT($R6, fail, "[^\\/\\\\]+", "RegExpCharacter"))
+const RegExpCharacter$1 = EscapeSequence
 function RegExpCharacter(state) {
-  return defaultRegExpTransform($EXPECT($R6, fail, "[^\\/\\\\]+", "RegExpCharacter"))(state) || EscapeSequence(state)
+  return RegExpCharacter$0(state) || RegExpCharacter$1(state)
 }
 
 const CharacterClass$0 = $S($EXPECT($L4, fail, "[", "CharacterClass"), $Q(CharacterClassCharacter), $EXPECT($L5, fail, "]", "CharacterClass"), $E(Quantifier))
@@ -878,8 +906,10 @@ function CharacterClass(state) {
 
 
 
+const CharacterClassCharacter$0 = defaultRegExpTransform($EXPECT($R7, fail, "[^\\]\\\\]+", "CharacterClassCharacter"))
+const CharacterClassCharacter$1 = EscapeSequence
 function CharacterClassCharacter(state) {
-  return defaultRegExpTransform($EXPECT($R7, fail, "[^\\]\\\\]+", "CharacterClassCharacter"))(state) || EscapeSequence(state)
+  return CharacterClassCharacter$0(state) || CharacterClassCharacter$1(state)
 }
 
 const Quantifier$0 = defaultRegExpTransform($EXPECT($R8, fail, "[?+*]|\\{\\d+(,\\d+)?\\}", "Quantifier"))
