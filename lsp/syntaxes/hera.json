@@ -50,7 +50,7 @@
         }
       },
       "contentName": "meta.embedded.block.javascript",
-      "end": "^(?=[_a-zA-Z#])|^(  )(?=[_a-zA-Z/(\"#])",
+      "end": "^(?=[_a-zA-Z#])|^(  )(?=[^ \t])",
       "endCaptures": {
         "2": "indent"
       },

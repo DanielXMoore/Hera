@@ -10,7 +10,9 @@ TODO
 - [x] Display regexp properly in $EXPECT
 - [x] Handle nested array structures
 - [x] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that number literals can be part of the result.
-  - [ ] Update VSCode Extension
+  - [x] Update VSCode Extension
+    - [x] Fix $ token at start of line not coloring properly
+    - [x] Update to latest Hera
 - [ ] Handle object structure including nesting.
 - [ ] Test $C and handler
 
