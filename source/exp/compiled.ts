@@ -661,7 +661,7 @@ function RuleBody(state: ParseState) {
 
 const Choice$0 = $TS($S(Sequence, Handling), function ($loc, $0, $1, $2) {
   if ($2 !== undefined) {
-    if (!$1.push)
+    if (typeof $1 === "string")
       $1 = ["S", [$1], $2]
     else
       $1.push($2)
@@ -672,11 +672,11 @@ function Choice(state: ParseState) {
   return Choice$0(state);
 }
 
-const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function ($loc, $0, $1, $2) {
+const Sequence$0: Parser<HeraAST> = $TS($S(Expression, $P(SequenceExpression)), function ($loc, $0, $1, $2) {
   $2.unshift($1)
   return ["S", $2]
 });
-const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function ($loc, $0, $1, $2) {
+const Sequence$1: Parser<HeraAST> = $TS($S(Expression, $P(ChoiceExpression)), function ($loc, $0, $1, $2) {
   $2.unshift($1)
   return ["/", $2]
 });
@@ -696,7 +696,7 @@ function ChoiceExpression(state: ParseState) {
 }
 
 const Expression$0 = Suffix;
-const Expression$1 = $T($S(PrefixOperator, Suffix), function (value) { return [value[0], value[1]] });
+const Expression$1: Parser<HeraAST> = $T($S(PrefixOperator, Suffix), function (value) { return [value[0], value[1]] });
 function Expression(state: ParseState) {
   return Expression$0(state) || Expression$1(state)
 }
@@ -706,7 +706,7 @@ function PrefixOperator(state: ParseState) {
   return PrefixOperator$0(state);
 }
 
-const Suffix$0 = $T($S(Primary, SuffixOperator), function (value) { return [value[1], value[0]] });
+const Suffix$0: Parser<HeraAST> = $T($S(Primary, SuffixOperator), function (value) { return [value[1], value[0]] });
 const Suffix$1 = Primary;
 function Suffix(state: ParseState) {
   return Suffix$0(state) || Suffix$1(state)
@@ -719,8 +719,8 @@ function SuffixOperator(state: ParseState) {
 
 const Primary$0 = Name;
 const Primary$1 = Literal;
-const Primary$2 = $T($S(OpenParenthesis, Sequence, CloseParenthesis), function (value) { return value[1] });
-function Primary(state: ParseState) {
+const Primary$2: Parser<HeraAST> = $T($S(OpenParenthesis, Sequence, CloseParenthesis), function (value) { return value[1] });
+function Primary(state: ParseState): MaybeResult<HeraAST> {
   return Primary$0(state) || Primary$1(state) || Primary$2(state)
 }
 
@@ -736,7 +736,7 @@ function Handling(state: ParseState) {
   return Handling$0(state) || Handling$1(state)
 }
 
-const HandlingExpression$0 = $T($S(EOS, HandlingExpressionBody), function (value) { return value[1] });
+const HandlingExpression$0: Parser<Handler> = $T($S(EOS, HandlingExpressionBody), function (value) { return value[1] });
 const HandlingExpression$1 = $T($S(StringValue, EOS), function (value) { return value[0] });
 const HandlingExpression$2 = $T($S(HandlingExpressionValue, EOS), function (value) { return value[0] });
 function HandlingExpression(state: ParseState) {
@@ -758,14 +758,14 @@ function HandlingExpressionLine(state: ParseState) {
 }
 
 const HandlingExpressionValue$0 = RValue;
-const HandlingExpressionValue$1 = $TS($S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket), function ($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 });
+const HandlingExpressionValue$1: Parser<StructuralHandling> = $TS($S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket), function ($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 });
 function HandlingExpressionValue(state: ParseState) {
   return HandlingExpressionValue$0(state) || HandlingExpressionValue$1(state)
 }
 
 const RValue$0 = StringValue;
 const RValue$1 = $TR($EXPECT($R3, fail, "\\d\\d?", "RValue"), function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
-function RValue(state: ParseState) {
+function RValue(state: ParseState): MaybeResult<StructuralTerminal> {
   return RValue$0(state) || RValue$1(state)
 }
 
@@ -790,14 +790,14 @@ function EscapeSequence(state: ParseState) {
   return EscapeSequence$0(state);
 }
 
-const StringLiteral$0 = $T($S(StringValue), function (value) { return ["L", value[0]] });
+const StringLiteral$0: Parser<Literal> = $T($S(StringValue), function (value) { return ["L", value[0]] });
 function StringLiteral(state: ParseState) {
   return StringLiteral$0(state);
 }
 
-const RegExpLiteral$0 = $T($S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral")), function (value) { return ["R", value[2]] });
-const RegExpLiteral$1 = $T($TEXT(CharacterClassExpression), function (value) { return ["R", value] });
-const RegExpLiteral$2 = $T($EXPECT($L3, fail, ".", "RegExpLiteral"), function (value) { return ["R", value] });
+const RegExpLiteral$0: Parser<Literal> = $T($S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral")), function (value) { return ["R", value[2]] });
+const RegExpLiteral$1: Parser<Literal> = $T($TEXT(CharacterClassExpression), function (value) { return ["R", value] });
+const RegExpLiteral$2: Parser<Literal> = $T($EXPECT($L3, fail, ".", "RegExpLiteral"), function (value) { return ["R", value] });
 function RegExpLiteral(state: ParseState) {
   return RegExpLiteral$0(state) || RegExpLiteral$1(state) || RegExpLiteral$2(state)
 }
