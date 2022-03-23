@@ -427,25 +427,6 @@ export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
 // End of machinery
 // Parser specific things below
 
-/** Utility function to convert position in a string input to line:colum */
-function location(input: string, pos: number) {
-  const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
-    const l = line.length + 1
-    if (pos > l) {
-      pos -= l
-      return [row + 1, 1]
-    } else if (pos >= 0) {
-      col += pos
-      pos = -1
-      return [row, col]
-    } else {
-      return [row, col]
-    }
-  }, [1, 1])
-
-  return `${line}:${column}`
-}
-
 const failHintRegex = /\S+|\s+|$/y
 
 // Error tracking
@@ -476,6 +457,25 @@ export interface ParserOptions<T extends Grammar> {
 }
 
 export function parserState<G extends Grammar>(grammar: G) {
+
+  /** Utility function to convert position in a string input to line:colum */
+  function location(input: string, pos: number) {
+    const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
+      const l = line.length + 1
+      if (pos > l) {
+        pos -= l
+        return [row + 1, 1]
+      } else if (pos >= 0) {
+        col += pos
+        pos = -1
+        return [row, col]
+      } else {
+        return [row, col]
+      }
+    }, [1, 1])
+
+    return `${line}:${column}`
+  }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
     if (result && result.pos === input.length)
