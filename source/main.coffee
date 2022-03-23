@@ -216,7 +216,7 @@ create = (create, rules) ->
           mapping.map (n) ->
             mapValue n, value
         else if mapping.v?
-          value[mapping]
+          value[mapping.v]
         else
           throw new Error "non-array object mapping"
       else

@@ -238,6 +238,8 @@ create = (create, rules) ->
         if Array.isArray mapping
           mapping.map (n) ->
             mapValue n, value
+        else if mapping.v?
+          value[mapping.v]
         else
           throw new Error "non-array object mapping"
       when "undefined"

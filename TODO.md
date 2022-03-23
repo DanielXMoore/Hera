@@ -9,9 +9,14 @@ TODO
   - [ ] Compile to Go
 - [x] Display regexp properly in $EXPECT
 - [x] Handle nested array structures
-- [ ] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that number literals can be part of the result.
+- [x] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that number literals can be part of the result.
+  - [ ] Update VSCode Extension
 - [ ] Handle object structure including nesting.
 - [ ] Test $C and handler
+
+TODO but too vague
+---
+
 - [ ] Compile to optimized regexes by aggregating grammar nodes into fewer regexps where possible.
 - [ ] Type annotation for grammar rules
 - [ ] Generate tokens and parse tree

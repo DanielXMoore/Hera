@@ -24,7 +24,7 @@ describe "Experimental", ->
 
       assert.deepEqual parse(heraSrc), rules
 
-    it "should parse from compiled ts", ->
+    it.skip "should parse from compiled ts", ->
       {parse} = require "../source/exp/compiled.ts"
 
       assert.deepEqual parse(heraSrc), rules
