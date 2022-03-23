@@ -32,7 +32,8 @@ defineRe = (re) ->
 # @param tuple {HeraAST}
 # @param defaultHandler:boolean
 ###
-compileOp = (tuple, name, defaultHandler) ->
+compileOp = (tuple, name, defaultHandler, types) ->
+  # TODO: should nested levels have default handler set to true? (only comes into play on regexps)
   if Array.isArray(tuple)
     [op, args] = tuple
     switch op
@@ -41,32 +42,32 @@ compileOp = (tuple, name, defaultHandler) ->
       when "R"
         f = "$EXPECT(#{defineRe(args)}, fail, #{JSON.stringify(args)}, #{JSON.stringify(name)})"
         if defaultHandler
-          f ="defaultRegExpTransform(#{f})"
+          f ="$R$0(#{f})#{reType(types, args)}"
 
         return f
       when "/"
         src = args.map (arg) ->
-          compileOp(arg, name, defaultHandler)
+          compileOp(arg, name, defaultHandler, types)
         .join(", ")
         "$C(#{src})"
       when "S"
         src = args.map (arg) ->
-          compileOp(arg, name, defaultHandler)
+          compileOp(arg, name, defaultHandler, types)
         .join(", ")
         "$S(#{src})"
       when "*"
-        # TODO: should default handler get passed down here too?
-        "$Q(#{compileOp(args, name)})"
+        "$Q(#{compileOp(args, name, defaultHandler, types)})"
       when "+"
-        "$P(#{compileOp(args, name)})"
+        "$P(#{compileOp(args, name, defaultHandler, types)})"
       when "?"
-        "$E(#{compileOp(args, name)})"
+        "$E(#{compileOp(args, name, defaultHandler, types)})"
       when "$"
-        "$TEXT(#{compileOp(args, name)})"
+        # Inside text can ignore all handlers since they are disregarded anyway
+        "$TEXT(#{compileOp(args, name, false, types)})"
       when "&"
-        "$Y(#{compileOp(args, name)})"
+        "$Y(#{compileOp(args, name, defaultHandler, types)})"
       when "!"
-        "$N(#{compileOp(args, name)})"
+        "$N(#{compileOp(args, name, defaultHandler, types)})"
       else
         throw new Error "Unknown op: #{op} #{JSON.stringify(args)}"
   else # rule reference
@@ -76,6 +77,11 @@ compileOp = (tuple, name, defaultHandler) ->
 # or one for the whole deal
 
 regExpHandlerParams = ["$loc"].concat [0...10].map (_, i) -> "$#{i}"
+
+#
+###*
+# @type ["$loc", "$0", "$1"]
+###
 regularHandlerParams = ["$loc", "$0", "$1"]
 
 # Offset is so sequences start at the first item in the array
@@ -100,125 +106,46 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
     else
       throw new Error "Unknown mapping type: #{mapping}"
 
-compileHandler = (options, name, arg) ->
+compileHandler = (options, arg, name) ->
+  if typeof arg is "string"
+    return arg # reference to other named parser function
+
   return unless Array.isArray(arg)
-
-  types = options.types
-
-  if types
-    locType = ": Loc"
-    vType = ": V"
-    resultType = ": MaybeResult<V>"
-    typeVariable = "<V extends any[]>"
-  else
-    locType = ""
-    vType = ""
-    resultType = ""
-    typeVariable = ""
 
   [op, args, h] = arg
 
   if h?.f? # function mapping
+    parser = compileOp(arg, name, false, options.types)
     if op is "S"
-      parameters = ["$loc#{locType}", "$0#{vType}"].concat args.map (_, i) ->
-        if types
-          "$#{i+1}:V[#{i}]"
-        else
-          "$#{i+1}"
-
-      if types
-        returnConversion = " as unknown as MaybeResult<ReturnType<typeof #{name}_handler_fn>>"
-      else
-        returnConversion = ""
+      parameters = ["$loc", "$0"].concat args.map (_, i) -> "$#{i+1}"
 
       return """
-        function #{name}_handler_fn#{typeVariable}(#{parameters.join(", ")}){#{h.f}}
-        function #{name}_handler#{typeVariable}(result#{resultType}) {
-          if (result) {
-            //@ts-ignore
-            result.value = #{name}_handler_fn(result.loc, result.value, ...result.value);
-            return result#{returnConversion}
-          }
-        };
+        $TS(#{parser}, function(#{parameters.join(", ")}) {#{h.f}})
       """
     else if op is "R"
-      parameters = regExpHandlerParams
-
       return """
-        const #{name}_handler = makeResultHandler_R(function(#{parameters.join(", ")}) {#{h.f}});
+        $TR(#{parser}, function(#{regExpHandlerParams.join(", ")}) {#{h.f}})
       """
     else
-      parameters = regularHandlerParams
-
       return """
-        const #{name}_handler = makeResultHandler(function(#{parameters.join(", ")}) {#{h.f}});
+        $TV(#{parser}, function(#{regularHandlerParams.join(", ")}) {#{h.f}})
       """
-  else if h? # other mapping
+  else if h? # structural mapping
+    parser = compileOp(arg, name, false, options.types)
     if op is "S"
-      if types
-        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V")}>"
-      else
-        returnType = ""
-
       return """
-        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
-          if (result) {
-            const { value } = result
-            const mappedValue = #{compileStructuralHandler(h, "value")}
-
-            //@ts-ignore
-            result.value = mappedValue
-            //@ts-ignore
-            return result
-          }
-        };
+        $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value")} })
       """
     else if op is "R"
-      if types
-        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V", false, 0)}>"
-      else
-        returnType = ""
-
       return """
-        // R
-        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
-          if (result) {
-            const { value } = result
-            const mappedValue = #{compileStructuralHandler(h, "value", false, 0)}
-
-            //@ts-ignore
-            result.value = mappedValue
-            //@ts-ignore
-            return result
-          }
-        };
+        $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value", false, 0)} })
       """
     else
-      parameters = regularHandlerParams
-
-      if types
-        typeVariable = "<V>"
-        returnType = ": MaybeResult<#{compileStructuralHandler(h, "V", true)}>"
-      else
-        returnType = ""
-
       return """
-        function #{name}_handler#{typeVariable}(result#{resultType})#{returnType} {
-          if (result) {
-            const { value } = result
-            const mappedValue = #{compileStructuralHandler(h, "value", true)}
-
-            //@ts-ignore
-            result.value = mappedValue
-            //@ts-ignore
-            return result
-          }
-        };
+        $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value", true)} })
       """
-
-  # no mapping
-  return
-
+  else
+    return compileOp(arg, name, true, options.types)
 
 compileRule = (options, name, rule) ->
   [op, args, h] = rule
@@ -228,50 +155,29 @@ compileRule = (options, name, rule) ->
   else
     stateType = ""
 
-  # choice may have nested handlings?
+  # first level choice may have nested handlings
   if op is "/" and !h
-    handlers = args.map (arg, i) ->
-      compileHandler options, "#{name}_#{i}", arg
+    fns = args.map (arg, i) ->
+      "const #{name}$#{i} = #{compileHandler options, arg, name};"
 
-    options = args.map (arg, i) ->
-      # TODO: this is getting nasty
-      if handlers[i]
-        n = "#{name}$#{i}"
-        handlers.push "const #{n} = #{compileOp(arg, name)}"
-
-        "#{name}_#{i}_handler(#{n}(state))"
-      else
-        n = "#{name}$#{i}"
-        handlers.push "const #{n} = #{compileOp(arg, name, true)}"
-
-        "#{n}(state)"
+    options = args.map (_, i) ->
+      "#{name}$#{i}(state)"
     .join(" || ")
 
     """
-      #{handlers.join("\n")}
+      #{fns.join("\n")}
       function #{name}(state#{stateType}) {
         return #{options}
       }
     """
 
   else
-    handler = compileHandler(options, name, rule)
-
-    if handler
-      """
-        #{handler}
-        const #{name}$0 = #{compileOp(rule, name)};
-        function #{name}(state#{stateType}) {
-          return #{name}_handler(#{name}$0(state));
-        }
-      """
-    else
-      """
-        const #{name}$0 = #{compileOp(rule, name, true)}
-        function #{name}(state#{stateType}) {
-          return #{name}$0(state);
-        }
-      """
+    """
+      const #{name}$0 = #{compileHandler(options, rule, name)};
+      function #{name}(state#{stateType}) {
+        return #{name}$0(state);
+      }
+    """
 
 compileRulesObject = (ruleNames) ->
   meat = ruleNames.map (name) ->
@@ -314,7 +220,7 @@ module.exports =
     """
     #{header}
 
-    const { parse, fail } = parserState(#{compileRulesObject(ruleNames)})
+    const { parse } = parserState(#{compileRulesObject(ruleNames)})
 
     #{ strDefs.map (str, i) ->
       """
@@ -332,8 +238,7 @@ module.exports =
     #{body}
 
     module.exports = {
-      parse: parse,
-
+      parse: parse
     }
     """
 
@@ -366,3 +271,23 @@ CoffeeScript = require 'coffeescript'
       }
 
 ###
+
+isSimple = /^[^.*+?{}()\[\]^\\]*$/
+isSimpleCharacterClass = /^\[[^-^\\]*\]$/
+
+reType = (types, str) ->
+  if types
+    specifics =
+      if str.match(isSimple)
+        str.split("|").map (s) ->
+          JSON.stringify(s)
+      else if str.match(isSimpleCharacterClass)
+        str.substring(1, str.length-1).split("").map (s) ->
+          JSON.stringify(s)
+
+    if specifics
+      "as Parser<#{specifics.join("|")}>"
+    else
+      ""
+  else
+    ""

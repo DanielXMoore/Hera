@@ -5,6 +5,8 @@ TODO
 - [x] Decompile regexes to character class expressions when possible.
 - [ ] Compile to typescript?
 - [ ] Compile to fancy regexes?
+- [ ] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that
+number literals can be part of the result.
 
 Features
 --------

@@ -40,11 +40,16 @@ export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T
 
 export type Terminal = string | RegExp
 
-export type StructuralHandling = string | number | StructuralHandling[]
+export type StructuralTerminal = string | number
+export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { f: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
-export type NodeOp = "S" | "/" | "+" | "*" | "?" | "&" | "!" | "$"
-export type HeraAST = [NodeOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+export type SequenceOp = "S" | "/"
+export type NodeOp = "+" | "*" | "?" | "&" | "!" | "$"
+export type Literal = [TerminalOp, string]
+export type HeraAST = [NodeOp, HeraAST, Handler?] | [SequenceOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+
+type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
 
 /**
  * Note failure to find `expectation` at `pos`. This is later used to generate
@@ -70,6 +75,7 @@ export function $EXPECT<T>(parser: Parser<T>, fail: Fail, t: Terminal, name: str
     if (result) return result;
     const { pos } = state;
     fail(pos, expectation)
+    return
   }
 }
 
@@ -91,6 +97,7 @@ export function $L<T extends string>(str: T): Parser<T> {
         value: str
       }
     }
+    return
   }
 }
 
@@ -117,6 +124,7 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
         value: m,
       }
     }
+    return
   }
 }
 
@@ -125,8 +133,20 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
  * Proioritized choice
  * roughly a(...) || b(...) in JS
  */
+
+export function $C(): (state: ParseState) => undefined
+export function $C<A>(a: Parser<A>): Parser<A>
+export function $C<A, B>(a: Parser<A>, b: Parser<B>): Parser<A | B>
+export function $C<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<A | B | C>
+export function $C<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<A | B | C | D>
+export function $C<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<A | B | C | D | E>
+export function $C<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<A | B | C | D | E | F>
+export function $C<A, B, C, D, E, F, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>): Parser<A | B | C | D | E | F | H>
+export function $C<A, B, C, D, E, F, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>): Parser<A | B | C | D | E | F | H | I>
+export function $C<A, B, C, D, E, F, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<A | B | C | D | E | F | H | I | J>
+
 export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
-  return (state: ParseState) => {
+  return (state: ParseState): MaybeResult<T[number]> => {
     let i = 0
     const l = terms.length
 
@@ -143,8 +163,21 @@ export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
  * A B C ...
  * A followed by by B followed by C followed by ...
  */
+
+export function $S(): Parser<[]>
+export function $S<A>(fn: Parser<A>): Parser<[A]>
+export function $S<A, B>(a: Parser<A>, b: Parser<B>): Parser<[A, B]>
+export function $S<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<[A, B, C]>
+export function $S<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<[A, B, C, D]>
+export function $S<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<[A, B, C, D, E]>
+export function $S<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<[A, B, C, D, E, F]>
+export function $S<A, B, C, D, E, F, G>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>): Parser<[A, B, C, D, E, F, G]>
+export function $S<A, B, C, D, E, F, G, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>): Parser<[A, B, C, D, E, F, G, H]>
+export function $S<A, B, C, D, E, F, G, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>): Parser<[A, B, C, D, E, F, G, H, I]>
+export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<[A, B, C, D, E, F, G, H, I, J]>
+
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
-  return (state: ParseState) => {
+  return (state: ParseState): MaybeResult<T> => {
     let { input, pos } = state,
       i = 0, value
     const results = [] as unknown as T,
@@ -315,71 +348,85 @@ export function $Y(fn: Parser<unknown>): Parser<undefined> {
   }
 }
 
-// Result handler for sequence expressions
-// $0 is the whole array followed by first element as $1, second element as $2, etc.
-// export function makeResultHandler_S<A, B, C, S extends [A, B, C], T>(fn: ($loc: Loc, $0: S, $1: A, $2: B, $3: C)): (result: MaybeResult<S>) => (MaybeResult<T>)
+// Transform
+// simplest value mapping transform, doesn't include location data parameter
+export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
 
-export function makeResultHandler_S<S extends any[], T>(fn: ($loc: Loc, $0: S, ...args: S) => T): (result: MaybeResult<S>) => (MaybeResult<T>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, value, ...value)
+    const { value } = result
+    const mappedValue = fn(value)
 
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<T>
-    }
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
   }
 }
+
+// Transform RegExp
 
 // Result handler for regexp match expressions
 // $0 is the whole match, followed by $1, $2, etc.
-export function makeResultHandler_R<T>(fn: ($loc: Loc, ...args: string[]) => T): (result: MaybeResult<string[]>) => (MaybeResult<T>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, ...value)
-
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<T>
-    }
-  }
-}
-
-// Result handler for all other kinds, $loc, $0 and $1 are both the value
-export function makeResultHandler<B>(fn: ($loc: Loc, $0: any, $1: any) => B): (result: MaybeResult<any>) => (MaybeResult<B>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, value, value)
-
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<B>
-    }
-  }
-}
-
-// Identity handler, probably not actually needed
-export function defaultHandler<T>(result: MaybeResult<T>): MaybeResult<T> {
-  return result
-}
-
-export function defaultRegExpHandler(result: MaybeResult<RegExpMatchArray>): MaybeResult<string> {
-  if (result) {
-    //@ts-ignore
-    result.value = result.value[0]
-    //@ts-ignore
-    return result
-  }
-}
-
-export function defaultRegExpTransform(fn: Parser<RegExpMatchArray>): Parser<string> {
+export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($loc: Loc, ...args: string[]) => T): Parser<T> {
   return function (state) {
-    return defaultRegExpHandler(fn(state));
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, ...value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<T>
   }
 }
+
+// Transform sequence
+export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($loc: Loc, value: A, ...args: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, value, ...value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
+  }
+}
+
+// Transform value $0 and $1 are both singular value
+export function $TV<A, B>(parser: Parser<A>, fn: ($loc: Loc, $0: A, $1: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, value, value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
+  }
+}
+
+// Default regexp result handler RegExpMatchArray => $0
+export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const value = result.value[0]
+    //@ts-ignore
+    result.value = value
+    return result as unknown as ParseResult<typeof value>
+  }
+}
+
+// End of machinery
+// Parser specific things below
 
 /** Utility function to convert position in a string input to line:colum */
 function location(input: string, pos: number) {
@@ -424,6 +471,25 @@ function prettyPrint(t: Terminal, name?: string) {
   }
 }
 
+// Error tracking
+// Goal is zero allocations
+const failExpected = Array(16)
+let failIndex = 0
+let maxFailPos = 0
+
+function fail(pos: number, expected: any) {
+  if (pos < maxFailPos) return
+
+  if (pos > maxFailPos) {
+    maxFailPos = pos
+    failExpected.length = failIndex = 0
+  }
+
+  failExpected[failIndex++] = expected
+
+  return
+}
+
 type Grammar = { [key: string]: Parser<any> }
 
 export interface ParserOptions<T extends Grammar> {
@@ -433,24 +499,6 @@ export interface ParserOptions<T extends Grammar> {
 }
 
 export function parserState<G extends Grammar>(grammar: G) {
-  // Error tracking
-  // Goal is zero allocations
-  const failExpected = Array(16)
-  let failIndex = 0
-  let maxFailPos = 0
-
-  function fail(pos: number, expected: any) {
-    if (pos < maxFailPos) return
-
-    if (pos > maxFailPos) {
-      maxFailPos = pos
-      failExpected.length = failIndex = 0
-    }
-
-    failExpected[failIndex++] = expected
-
-    return
-  }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
     if (result && result.pos === input.length)
@@ -467,7 +515,9 @@ ${filename}:${l} Unconsumed input at #{l}
 
 ${input.slice(result.pos)}
     `)
-    } else if (expectations.length) {
+    }
+
+    if (expectations.length) {
       failHintRegex.lastIndex = maxFailPos
       let [hint] = input.match(failHintRegex)!
 
@@ -482,17 +532,22 @@ Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
 `)
-    } else if (result)
+    }
+
+    if (result) {
       throw new Error(`
 Unconsumed input at ${l}
 
 ${input.slice(result.pos)}
 `);
+    }
+
+    throw new Error("No result")
   }
 
   return {
     fail: fail,
-    parse: (input: keyof G, options: ParserOptions<G> = {}) => {
+    parse: (input: string, options: ParserOptions<G> = {}) => {
       if (typeof input !== "string") throw new Error("Input must be a string")
 
       const parser = (options.startRule != null)

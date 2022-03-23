@@ -40,11 +40,16 @@ export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T
 
 export type Terminal = string | RegExp
 
-export type StructuralHandling = string | number | StructuralHandling[]
+export type StructuralTerminal = string | number
+export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { f: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
-export type NodeOp = "S" | "/" | "+" | "*" | "?" | "&" | "!" | "$"
-export type HeraAST = [NodeOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+export type SequenceOp = "S" | "/"
+export type NodeOp = "+" | "*" | "?" | "&" | "!" | "$"
+export type Literal = [TerminalOp, string]
+export type HeraAST = [NodeOp, HeraAST, Handler?] | [SequenceOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+
+type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
 
 /**
  * Note failure to find `expectation` at `pos`. This is later used to generate
@@ -70,6 +75,7 @@ export function $EXPECT<T>(parser: Parser<T>, fail: Fail, t: Terminal, name: str
     if (result) return result;
     const { pos } = state;
     fail(pos, expectation)
+    return
   }
 }
 
@@ -91,6 +97,7 @@ export function $L<T extends string>(str: T): Parser<T> {
         value: str
       }
     }
+    return
   }
 }
 
@@ -117,6 +124,7 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
         value: m,
       }
     }
+    return
   }
 }
 
@@ -125,8 +133,20 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
  * Proioritized choice
  * roughly a(...) || b(...) in JS
  */
+
+export function $C(): (state: ParseState) => undefined
+export function $C<A>(a: Parser<A>): Parser<A>
+export function $C<A, B>(a: Parser<A>, b: Parser<B>): Parser<A | B>
+export function $C<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<A | B | C>
+export function $C<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<A | B | C | D>
+export function $C<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<A | B | C | D | E>
+export function $C<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<A | B | C | D | E | F>
+export function $C<A, B, C, D, E, F, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>): Parser<A | B | C | D | E | F | H>
+export function $C<A, B, C, D, E, F, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>): Parser<A | B | C | D | E | F | H | I>
+export function $C<A, B, C, D, E, F, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<A | B | C | D | E | F | H | I | J>
+
 export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
-  return (state: ParseState) => {
+  return (state: ParseState): MaybeResult<T[number]> => {
     let i = 0
     const l = terms.length
 
@@ -143,8 +163,21 @@ export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
  * A B C ...
  * A followed by by B followed by C followed by ...
  */
+
+export function $S(): Parser<[]>
+export function $S<A>(fn: Parser<A>): Parser<[A]>
+export function $S<A, B>(a: Parser<A>, b: Parser<B>): Parser<[A, B]>
+export function $S<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<[A, B, C]>
+export function $S<A, B, C, D>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>): Parser<[A, B, C, D]>
+export function $S<A, B, C, D, E>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>): Parser<[A, B, C, D, E]>
+export function $S<A, B, C, D, E, F>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>): Parser<[A, B, C, D, E, F]>
+export function $S<A, B, C, D, E, F, G>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>): Parser<[A, B, C, D, E, F, G]>
+export function $S<A, B, C, D, E, F, G, H>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>): Parser<[A, B, C, D, E, F, G, H]>
+export function $S<A, B, C, D, E, F, G, H, I>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>): Parser<[A, B, C, D, E, F, G, H, I]>
+export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<[A, B, C, D, E, F, G, H, I, J]>
+
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
-  return (state: ParseState) => {
+  return (state: ParseState): MaybeResult<T> => {
     let { input, pos } = state,
       i = 0, value
     const results = [] as unknown as T,
@@ -315,71 +348,85 @@ export function $Y(fn: Parser<unknown>): Parser<undefined> {
   }
 }
 
-// Result handler for sequence expressions
-// $0 is the whole array followed by first element as $1, second element as $2, etc.
-// export function makeResultHandler_S<A, B, C, S extends [A, B, C], T>(fn: ($loc: Loc, $0: S, $1: A, $2: B, $3: C)): (result: MaybeResult<S>) => (MaybeResult<T>)
+// Transform
+// simplest value mapping transform, doesn't include location data parameter
+export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
 
-export function makeResultHandler_S<S extends any[], T>(fn: ($loc: Loc, $0: S, ...args: S) => T): (result: MaybeResult<S>) => (MaybeResult<T>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, value, ...value)
+    const { value } = result
+    const mappedValue = fn(value)
 
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<T>
-    }
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
   }
 }
+
+// Transform RegExp
 
 // Result handler for regexp match expressions
 // $0 is the whole match, followed by $1, $2, etc.
-export function makeResultHandler_R<T>(fn: ($loc: Loc, ...args: string[]) => T): (result: MaybeResult<string[]>) => (MaybeResult<T>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, ...value)
-
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<T>
-    }
-  }
-}
-
-// Result handler for all other kinds, $loc, $0 and $1 are both the value
-export function makeResultHandler<B>(fn: ($loc: Loc, $0: any, $1: any) => B): (result: MaybeResult<any>) => (MaybeResult<B>) {
-  return function (result) {
-    if (result) {
-      const { loc, value } = result
-      const mappedValue = fn(loc, value, value)
-
-      //@ts-ignore
-      result.value = mappedValue
-      return result as unknown as ParseResult<B>
-    }
-  }
-}
-
-// Identity handler, probably not actually needed
-export function defaultHandler<T>(result: MaybeResult<T>): MaybeResult<T> {
-  return result
-}
-
-export function defaultRegExpHandler(result: MaybeResult<RegExpMatchArray>): MaybeResult<string> {
-  if (result) {
-    //@ts-ignore
-    result.value = result.value[0]
-    //@ts-ignore
-    return result
-  }
-}
-
-export function defaultRegExpTransform(fn: Parser<RegExpMatchArray>): Parser<string> {
+export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($loc: Loc, ...args: string[]) => T): Parser<T> {
   return function (state) {
-    return defaultRegExpHandler(fn(state));
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, ...value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<T>
   }
 }
+
+// Transform sequence
+export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($loc: Loc, value: A, ...args: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, value, ...value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
+  }
+}
+
+// Transform value $0 and $1 are both singular value
+export function $TV<A, B>(parser: Parser<A>, fn: ($loc: Loc, $0: A, $1: A) => B): Parser<B> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const { loc, value } = result
+    const mappedValue = fn(loc, value, value)
+
+    //@ts-ignore
+    result.value = mappedValue
+    return result as unknown as ParseResult<B>
+  }
+}
+
+// Default regexp result handler RegExpMatchArray => $0
+export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
+  return function (state) {
+    const result = parser(state);
+    if (!result) return
+
+    const value = result.value[0]
+    //@ts-ignore
+    result.value = value
+    return result as unknown as ParseResult<typeof value>
+  }
+}
+
+// End of machinery
+// Parser specific things below
 
 /** Utility function to convert position in a string input to line:colum */
 function location(input: string, pos: number) {
@@ -424,6 +471,25 @@ function prettyPrint(t: Terminal, name?: string) {
   }
 }
 
+// Error tracking
+// Goal is zero allocations
+const failExpected = Array(16)
+let failIndex = 0
+let maxFailPos = 0
+
+function fail(pos: number, expected: any) {
+  if (pos < maxFailPos) return
+
+  if (pos > maxFailPos) {
+    maxFailPos = pos
+    failExpected.length = failIndex = 0
+  }
+
+  failExpected[failIndex++] = expected
+
+  return
+}
+
 type Grammar = { [key: string]: Parser<any> }
 
 export interface ParserOptions<T extends Grammar> {
@@ -433,24 +499,6 @@ export interface ParserOptions<T extends Grammar> {
 }
 
 export function parserState<G extends Grammar>(grammar: G) {
-  // Error tracking
-  // Goal is zero allocations
-  const failExpected = Array(16)
-  let failIndex = 0
-  let maxFailPos = 0
-
-  function fail(pos: number, expected: any) {
-    if (pos < maxFailPos) return
-
-    if (pos > maxFailPos) {
-      maxFailPos = pos
-      failExpected.length = failIndex = 0
-    }
-
-    failExpected[failIndex++] = expected
-
-    return
-  }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
     if (result && result.pos === input.length)
@@ -467,7 +515,9 @@ ${filename}:${l} Unconsumed input at #{l}
 
 ${input.slice(result.pos)}
     `)
-    } else if (expectations.length) {
+    }
+
+    if (expectations.length) {
       failHintRegex.lastIndex = maxFailPos
       let [hint] = input.match(failHintRegex)!
 
@@ -482,17 +532,22 @@ Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
 `)
-    } else if (result)
+    }
+
+    if (result) {
       throw new Error(`
 Unconsumed input at ${l}
 
 ${input.slice(result.pos)}
 `);
+    }
+
+    throw new Error("No result")
   }
 
   return {
     fail: fail,
-    parse: (input: keyof G, options: ParserOptions<G> = {}) => {
+    parse: (input: string, options: ParserOptions<G> = {}) => {
       if (typeof input !== "string") throw new Error("Input must be a string")
 
       const parser = (options.startRule != null)
@@ -515,7 +570,7 @@ ${input.slice(result.pos)}
 }
 
 
-const { parse, fail } = parserState({
+const { parse } = parserState({
   Grammar: Grammar,
   Rule: Rule,
   RuleBody: RuleBody,
@@ -585,46 +640,26 @@ const $R13 = $R(new RegExp("[ \\t]*\\)", 'suy'));
 const $R14 = $R(new RegExp("[ \\t]+", 'suy'));
 const $R15 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
 
-function Grammar_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) { return Object.fromEntries($2) }
-function Grammar_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = Grammar_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof Grammar_handler_fn>>
-  }
-};
-const Grammar$0 = $S($Q(EOS), $P(Rule));
+const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function ($loc, $0, $1, $2) { return Object.fromEntries($2) });
 function Grammar(state: ParseState) {
-  return Grammar_handler(Grammar$0(state));
+  return Grammar$0(state);
 }
 
-function Rule_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0], V[2]]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = [value[0], value[2]]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const Rule$0 = $S(Name, EOS, RuleBody);
+const Rule$0 = $T($S(Name, EOS, RuleBody), function (value) { return [value[0], value[2]] });
 function Rule(state: ParseState) {
-  return Rule_handler(Rule$0(state));
+  return Rule$0(state);
 }
 
-const RuleBody_handler = makeResultHandler(function ($loc, $0, $1) {
+const RuleBody$0 = $TV($P($S(Indent, Choice)), function ($loc, $0, $1) {
   var r = $1.map((a) => a[1])
   if (r.length === 1) return r[0];
   return ["/", r]
 });
-const RuleBody$0 = $P($S(Indent, Choice));
 function RuleBody(state: ParseState) {
-  return RuleBody_handler(RuleBody$0(state));
+  return RuleBody$0(state);
 }
 
-function Choice_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+const Choice$0 = $TS($S(Sequence, Handling), function ($loc, $0, $1, $2) {
   if ($2 !== undefined) {
     if (!$1.push)
       $1 = ["S", [$1], $2]
@@ -632,452 +667,218 @@ function Choice_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]
       $1.push($2)
   }
   return $1
-}
-function Choice_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = Choice_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof Choice_handler_fn>>
-  }
-};
-const Choice$0 = $S(Sequence, Handling);
+});
 function Choice(state: ParseState) {
-  return Choice_handler(Choice$0(state));
+  return Choice$0(state);
 }
 
-function Sequence_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function ($loc, $0, $1, $2) {
   $2.unshift($1)
   return ["S", $2]
-}
-function Sequence_0_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = Sequence_0_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof Sequence_0_handler_fn>>
-  }
-};
-function Sequence_1_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1]) {
+});
+const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function ($loc, $0, $1, $2) {
   $2.unshift($1)
   return ["/", $2]
-}
-function Sequence_1_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = Sequence_1_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof Sequence_1_handler_fn>>
-  }
-};
-
-const Sequence$0 = $S(Expression, $P(SequenceExpression))
-const Sequence$1 = $S(Expression, $P(ChoiceExpression))
-const Sequence$2 = Expression
+});
+const Sequence$2 = Expression;
 function Sequence(state: ParseState) {
-  return Sequence_0_handler(Sequence$0(state)) || Sequence_1_handler(Sequence$1(state)) || Sequence$2(state)
+  return Sequence$0(state) || Sequence$1(state) || Sequence$2(state)
 }
 
-function SequenceExpression_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[1]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[1]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const SequenceExpression$0 = $S(_, Expression);
+const SequenceExpression$0 = $T($S(_, Expression), function (value) { return value[1] });
 function SequenceExpression(state: ParseState) {
-  return SequenceExpression_handler(SequenceExpression$0(state));
+  return SequenceExpression$0(state);
 }
 
-function ChoiceExpression_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[3]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[3]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const ChoiceExpression$0 = $S(_, $EXPECT($L0, fail, "/", "ChoiceExpression"), _, Expression);
+const ChoiceExpression$0 = $T($S(_, $EXPECT($L0, fail, "/", "ChoiceExpression"), _, Expression), function (value) { return value[3] });
 function ChoiceExpression(state: ParseState) {
-  return ChoiceExpression_handler(ChoiceExpression$0(state));
+  return ChoiceExpression$0(state);
 }
 
-
-function Expression_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[0], V[1]]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = [value[0], value[1]]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const Expression$0 = Suffix
-const Expression$1 = $S(PrefixOperator, Suffix)
+const Expression$0 = Suffix;
+const Expression$1 = $T($S(PrefixOperator, Suffix), function (value) { return [value[0], value[1]] });
 function Expression(state: ParseState) {
-  return Expression$0(state) || Expression_1_handler(Expression$1(state))
+  return Expression$0(state) || Expression$1(state)
 }
 
-const PrefixOperator$0 = defaultRegExpTransform($EXPECT($R0, fail, "[$&!]", "PrefixOperator"))
+const PrefixOperator$0 = $R$0($EXPECT($R0, fail, "[$&!]", "PrefixOperator")) as Parser<"$" | "&" | "!">;
 function PrefixOperator(state: ParseState) {
   return PrefixOperator$0(state);
 }
 
-function Suffix_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<[V[1], V[0]]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = [value[1], value[0]]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-
-const Suffix$0 = $S(Primary, SuffixOperator)
-const Suffix$1 = Primary
+const Suffix$0 = $T($S(Primary, SuffixOperator), function (value) { return [value[1], value[0]] });
+const Suffix$1 = Primary;
 function Suffix(state: ParseState) {
-  return Suffix_0_handler(Suffix$0(state)) || Suffix$1(state)
+  return Suffix$0(state) || Suffix$1(state)
 }
 
-const SuffixOperator$0 = defaultRegExpTransform($EXPECT($R1, fail, "[+?*]", "SuffixOperator"))
+const SuffixOperator$0 = $R$0($EXPECT($R1, fail, "[+?*]", "SuffixOperator")) as Parser<"+" | "?" | "*">;
 function SuffixOperator(state: ParseState) {
   return SuffixOperator$0(state);
 }
 
-
-
-function Primary_2_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[1]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[1]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const Primary$0 = Name
-const Primary$1 = Literal
-const Primary$2 = $S(OpenParenthesis, Sequence, CloseParenthesis)
+const Primary$0 = Name;
+const Primary$1 = Literal;
+const Primary$2 = $T($S(OpenParenthesis, Sequence, CloseParenthesis), function (value) { return value[1] });
 function Primary(state: ParseState) {
-  return Primary$0(state) || Primary$1(state) || Primary_2_handler(Primary$2(state))
+  return Primary$0(state) || Primary$1(state) || Primary$2(state)
 }
 
-
-
-const Literal$0 = StringLiteral
-const Literal$1 = RegExpLiteral
+const Literal$0 = StringLiteral;
+const Literal$1 = RegExpLiteral;
 function Literal(state: ParseState) {
   return Literal$0(state) || Literal$1(state)
 }
 
-function Handling_0_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0]) { return undefined }
-function Handling_0_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = Handling_0_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof Handling_0_handler_fn>>
-  }
-};
-function Handling_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[2]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[2]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const Handling$0 = $S(EOS)
-const Handling$1 = $S($Q(_), Arrow, HandlingExpression)
+const Handling$0 = $TS($S(EOS), function ($loc, $0, $1) { return undefined });
+const Handling$1 = $T($S($Q(_), Arrow, HandlingExpression), function (value) { return value[2] });
 function Handling(state: ParseState) {
-  return Handling_0_handler(Handling$0(state)) || Handling_1_handler(Handling$1(state))
+  return Handling$0(state) || Handling$1(state)
 }
 
-function HandlingExpression_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[1]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[1]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-function HandlingExpression_1_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[0]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[0]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-function HandlingExpression_2_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[0]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[0]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const HandlingExpression$0 = $S(EOS, HandlingExpressionBody)
-const HandlingExpression$1 = $S(StringValue, EOS)
-const HandlingExpression$2 = $S(HandlingExpressionValue, EOS)
+const HandlingExpression$0 = $T($S(EOS, HandlingExpressionBody), function (value) { return value[1] });
+const HandlingExpression$1 = $T($S(StringValue, EOS), function (value) { return value[0] });
+const HandlingExpression$2 = $T($S(HandlingExpressionValue, EOS), function (value) { return value[0] });
 function HandlingExpression(state: ParseState) {
-  return HandlingExpression_0_handler(HandlingExpression$0(state)) || HandlingExpression_1_handler(HandlingExpression$1(state)) || HandlingExpression_2_handler(HandlingExpression$2(state))
+  return HandlingExpression$0(state) || HandlingExpression$1(state) || HandlingExpression$2(state)
 }
 
-const HandlingExpressionBody_handler = makeResultHandler(function ($loc, $0, $1) {
+const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function ($loc, $0, $1) {
   return {
     f: $1.join("\n")
   }
 });
-const HandlingExpressionBody$0 = $P(HandlingExpressionLine);
 function HandlingExpressionBody(state: ParseState) {
-  return HandlingExpressionBody_handler(HandlingExpressionBody$0(state));
+  return HandlingExpressionBody$0(state);
 }
 
-function HandlingExpressionLine_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[2]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[2]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const HandlingExpressionLine$0 = $S(Indent, Indent, $EXPECT($R2, fail, "[^\\n\\r]*", "HandlingExpressionLine"), EOS);
+const HandlingExpressionLine$0 = $T($S(Indent, Indent, $EXPECT($R2, fail, "[^\\n\\r]*", "HandlingExpressionLine"), EOS), function (value) { return value[2] });
 function HandlingExpressionLine(state: ParseState) {
-  return HandlingExpressionLine_handler(HandlingExpressionLine$0(state));
+  return HandlingExpressionLine$0(state);
 }
 
-
-function HandlingExpressionValue_1_handler_fn<V extends any[]>($loc: Loc, $0: V, $1: V[0], $2: V[1], $3: V[2], $4: V[3]) { $3.unshift($2); return $3 }
-function HandlingExpressionValue_1_handler<V extends any[]>(result: MaybeResult<V>) {
-  if (result) {
-    //@ts-ignore
-    result.value = HandlingExpressionValue_1_handler_fn(result.loc, result.value, ...result.value);
-    return result as unknown as MaybeResult<ReturnType<typeof HandlingExpressionValue_1_handler_fn>>
-  }
-};
-const HandlingExpressionValue$0 = RValue
-const HandlingExpressionValue$1 = $S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket)
+const HandlingExpressionValue$0 = RValue;
+const HandlingExpressionValue$1 = $TS($S(OpenBracket, RValue, $Q(CommaThenValue), CloseBracket), function ($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 });
 function HandlingExpressionValue(state: ParseState) {
-  return HandlingExpressionValue$0(state) || HandlingExpressionValue_1_handler(HandlingExpressionValue$1(state))
+  return HandlingExpressionValue$0(state) || HandlingExpressionValue$1(state)
 }
 
-
-const RValue_1_handler = makeResultHandler_R(function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
-const RValue$0 = StringValue
-const RValue$1 = $EXPECT($R3, fail, "\\d\\d?", "RValue")
+const RValue$0 = StringValue;
+const RValue$1 = $TR($EXPECT($R3, fail, "\\d\\d?", "RValue"), function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
 function RValue(state: ParseState) {
-  return RValue$0(state) || RValue_1_handler(RValue$1(state))
+  return RValue$0(state) || RValue$1(state)
 }
 
-function CommaThenValue_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[3]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[3]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const CommaThenValue$0 = $S($Q(_), $EXPECT($L1, fail, ",", "CommaThenValue"), $Q(_), RValue, $Q(_));
+const CommaThenValue$0 = $T($S($Q(_), $EXPECT($L1, fail, ",", "CommaThenValue"), $Q(_), RValue, $Q(_)), function (value) { return value[3] });
 function CommaThenValue(state: ParseState) {
-  return CommaThenValue_handler(CommaThenValue$0(state));
+  return CommaThenValue$0(state);
 }
 
-function StringValue_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<V[1]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = value[1]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const StringValue$0 = $S($EXPECT($L2, fail, "\\\"", "StringValue"), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L2, fail, "\\\"", "StringValue"));
+const StringValue$0 = $T($S($EXPECT($L2, fail, "\\\"", "StringValue"), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L2, fail, "\\\"", "StringValue")), function (value) { return value[1] });
 function StringValue(state: ParseState) {
-  return StringValue_handler(StringValue$0(state));
+  return StringValue$0(state);
 }
 
-
-
-const DoubleStringCharacter$0 = defaultRegExpTransform($EXPECT($R4, fail, "[^\"\\\\]+", "DoubleStringCharacter"))
-const DoubleStringCharacter$1 = EscapeSequence
+const DoubleStringCharacter$0 = $R$0($EXPECT($R4, fail, "[^\"\\\\]+", "DoubleStringCharacter"));
+const DoubleStringCharacter$1 = EscapeSequence;
 function DoubleStringCharacter(state: ParseState) {
   return DoubleStringCharacter$0(state) || DoubleStringCharacter$1(state)
 }
 
-const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R5, fail, ".", "EscapeSequence")))
+const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R5, fail, ".", "EscapeSequence")));
 function EscapeSequence(state: ParseState) {
   return EscapeSequence$0(state);
 }
 
-function StringLiteral_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["L", V[0]]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = ["L", value[0]]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const StringLiteral$0 = $S(StringValue);
+const StringLiteral$0 = $T($S(StringValue), function (value) { return ["L", value[0]] });
 function StringLiteral(state: ParseState) {
-  return StringLiteral_handler(StringLiteral$0(state));
+  return StringLiteral$0(state);
 }
 
-function RegExpLiteral_0_handler<V extends any[]>(result: MaybeResult<V>): MaybeResult<["R", V[2]]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = ["R", value[2]]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-function RegExpLiteral_1_handler<V>(result: MaybeResult<V>): MaybeResult<["R", V]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = ["R", value]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-function RegExpLiteral_2_handler<V>(result: MaybeResult<V>): MaybeResult<["R", V]> {
-  if (result) {
-    const { value } = result
-    const mappedValue = ["R", value]
-
-    //@ts-ignore
-    result.value = mappedValue
-    //@ts-ignore
-    return result
-  }
-};
-const RegExpLiteral$0 = $S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral"))
-const RegExpLiteral$1 = $TEXT(CharacterClassExpression)
-const RegExpLiteral$2 = $EXPECT($L3, fail, ".", "RegExpLiteral")
+const RegExpLiteral$0 = $T($S($EXPECT($L0, fail, "/", "RegExpLiteral"), $N(_), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "/", "RegExpLiteral")), function (value) { return ["R", value[2]] });
+const RegExpLiteral$1 = $T($TEXT(CharacterClassExpression), function (value) { return ["R", value] });
+const RegExpLiteral$2 = $T($EXPECT($L3, fail, ".", "RegExpLiteral"), function (value) { return ["R", value] });
 function RegExpLiteral(state: ParseState) {
-  return RegExpLiteral_0_handler(RegExpLiteral$0(state)) || RegExpLiteral_1_handler(RegExpLiteral$1(state)) || RegExpLiteral_2_handler(RegExpLiteral$2(state))
+  return RegExpLiteral$0(state) || RegExpLiteral$1(state) || RegExpLiteral$2(state)
 }
 
-const CharacterClassExpression$0 = $P(CharacterClass)
+const CharacterClassExpression$0 = $P(CharacterClass);
 function CharacterClassExpression(state: ParseState) {
   return CharacterClassExpression$0(state);
 }
 
-
-
-const RegExpCharacter$0 = defaultRegExpTransform($EXPECT($R6, fail, "[^\\/\\\\]+", "RegExpCharacter"))
-const RegExpCharacter$1 = EscapeSequence
+const RegExpCharacter$0 = $R$0($EXPECT($R6, fail, "[^\\/\\\\]+", "RegExpCharacter"));
+const RegExpCharacter$1 = EscapeSequence;
 function RegExpCharacter(state: ParseState) {
   return RegExpCharacter$0(state) || RegExpCharacter$1(state)
 }
 
-const CharacterClass$0 = $S($EXPECT($L4, fail, "[", "CharacterClass"), $Q(CharacterClassCharacter), $EXPECT($L5, fail, "]", "CharacterClass"), $E(Quantifier))
+const CharacterClass$0 = $S($EXPECT($L4, fail, "[", "CharacterClass"), $Q(CharacterClassCharacter), $EXPECT($L5, fail, "]", "CharacterClass"), $E(Quantifier));
 function CharacterClass(state: ParseState) {
   return CharacterClass$0(state);
 }
 
-
-
-const CharacterClassCharacter$0 = defaultRegExpTransform($EXPECT($R7, fail, "[^\\]\\\\]+", "CharacterClassCharacter"))
-const CharacterClassCharacter$1 = EscapeSequence
+const CharacterClassCharacter$0 = $R$0($EXPECT($R7, fail, "[^\\]\\\\]+", "CharacterClassCharacter"));
+const CharacterClassCharacter$1 = EscapeSequence;
 function CharacterClassCharacter(state: ParseState) {
   return CharacterClassCharacter$0(state) || CharacterClassCharacter$1(state)
 }
 
-const Quantifier$0 = defaultRegExpTransform($EXPECT($R8, fail, "[?+*]|\\{\\d+(,\\d+)?\\}", "Quantifier"))
+const Quantifier$0 = $R$0($EXPECT($R8, fail, "[?+*]|\\{\\d+(,\\d+)?\\}", "Quantifier"));
 function Quantifier(state: ParseState) {
   return Quantifier$0(state);
 }
 
-const Name$0 = defaultRegExpTransform($EXPECT($R9, fail, "[_a-zA-Z][_a-zA-Z0-9]*", "Name"))
+const Name$0 = $R$0($EXPECT($R9, fail, "[_a-zA-Z][_a-zA-Z0-9]*", "Name"));
 function Name(state: ParseState) {
   return Name$0(state);
 }
 
-const Arrow$0 = $S($EXPECT($L6, fail, "->", "Arrow"), $Q(_))
+const Arrow$0 = $S($EXPECT($L6, fail, "->", "Arrow"), $Q(_));
 function Arrow(state: ParseState) {
   return Arrow$0(state);
 }
 
-const Backslash$0 = $EXPECT($L7, fail, "\\\\", "Backslash")
+const Backslash$0 = $EXPECT($L7, fail, "\\\\", "Backslash");
 function Backslash(state: ParseState) {
   return Backslash$0(state);
 }
 
-const OpenBracket$0 = defaultRegExpTransform($EXPECT($R10, fail, "\\[[ \\t]*", "OpenBracket"))
+const OpenBracket$0 = $R$0($EXPECT($R10, fail, "\\[[ \\t]*", "OpenBracket"));
 function OpenBracket(state: ParseState) {
   return OpenBracket$0(state);
 }
 
-const CloseBracket$0 = defaultRegExpTransform($EXPECT($R11, fail, "\\][ \\t]*", "CloseBracket"))
+const CloseBracket$0 = $R$0($EXPECT($R11, fail, "\\][ \\t]*", "CloseBracket"));
 function CloseBracket(state: ParseState) {
   return CloseBracket$0(state);
 }
 
-const OpenParenthesis$0 = defaultRegExpTransform($EXPECT($R12, fail, "\\([ \\t]*", "OpenParenthesis"))
+const OpenParenthesis$0 = $R$0($EXPECT($R12, fail, "\\([ \\t]*", "OpenParenthesis"));
 function OpenParenthesis(state: ParseState) {
   return OpenParenthesis$0(state);
 }
 
-const CloseParenthesis$0 = defaultRegExpTransform($EXPECT($R13, fail, "[ \\t]*\\)", "CloseParenthesis"))
+const CloseParenthesis$0 = $R$0($EXPECT($R13, fail, "[ \\t]*\\)", "CloseParenthesis"));
 function CloseParenthesis(state: ParseState) {
   return CloseParenthesis$0(state);
 }
 
-const Indent$0 = $EXPECT($L8, fail, "  ", "Indent")
+const Indent$0 = $EXPECT($L8, fail, "  ", "Indent");
 function Indent(state: ParseState) {
   return Indent$0(state);
 }
 
-const _$0 = defaultRegExpTransform($EXPECT($R14, fail, "[ \\t]+", "_"))
+const _$0 = $R$0($EXPECT($R14, fail, "[ \\t]+", "_"));
 function _(state: ParseState) {
   return _$0(state);
 }
 
-const EOS$0 = defaultRegExpTransform($EXPECT($R15, fail, "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", "EOS"))
+const EOS$0 = $R$0($EXPECT($R15, fail, "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", "EOS"));
 function EOS(state: ParseState) {
   return EOS$0(state);
 }
 
 module.exports = {
-  parse: parse,
-
+  parse: parse
 }
