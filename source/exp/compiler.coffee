@@ -25,7 +25,14 @@ defineRe = (re) ->
 
   return id
 
-#
+# Pretty print a string or RegExp literal
+prettyPrint = (name, terminal, re) ->
+  if re
+    pv = "/#{terminal}/"
+  else
+    pv = JSON.stringify(terminal)
+
+  return "#{name} #{pv}"
 
 #
 ###*
@@ -38,9 +45,9 @@ compileOp = (tuple, name, defaultHandler, types) ->
     [op, args] = tuple
     switch op
       when "L"
-        "$EXPECT(#{defineTerminal(args)}, fail, #{JSON.stringify(args)}, #{JSON.stringify(name)})"
+        "$EXPECT(#{defineTerminal(args)}, fail, #{JSON.stringify(prettyPrint(name, args))})"
       when "R"
-        f = "$EXPECT(#{defineRe(args)}, fail, #{JSON.stringify(args)}, #{JSON.stringify(name)})"
+        f = "$EXPECT(#{defineRe(args)}, fail, #{JSON.stringify(prettyPrint(name, args, true))})"
         if defaultHandler
           f ="$R$0(#{f})#{reType(types, args)}"
 
@@ -87,6 +94,7 @@ regularHandlerParams = ["$loc", "$0", "$1"]
 # Offset is so sequences start at the first item in the array
 # and regexps start at the second because the first is the entire match
 # TODO: is 0 valid to select the entire sequence result?
+# TODO: remove offset and unify handlings
 compileStructuralHandler = (mapping, source, single=false, offset) ->
   offset ?= -1
 
@@ -101,8 +109,22 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
     when "object"
       if Array.isArray mapping
         "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"
+      else if mapping is null
+        "null"
+      else if mapping.v?
+        if single
+          source
+        else
+          "#{source}[#{mapping.v+offset}]"
+      else if mapping.o
+        o = mapping.o
+        "{" + Object.keys(mapping.o).map (key) ->
+          "#{JSON.stringify(key)}: #{compileStructuralHandler(o[key], source, single, offset)}"
+        .join(", ") + "}"
       else
-        throw new Error "non-array object mapping"
+        throw new Error "unknown object mapping"
+    when "undefined"
+      "undefined"
     else
       throw new Error "Unknown mapping type: #{mapping}"
 

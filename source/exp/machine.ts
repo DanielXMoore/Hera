@@ -40,7 +40,8 @@ export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T
 
 export type Terminal = string | RegExp
 
-export type StructuralTerminal = string | number
+export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+export type StructuralTerminal = string | number | { v: PositionalVariable }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { f: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
@@ -67,9 +68,7 @@ export interface Parser<T> {
   (state: ParseState): MaybeResult<T>
 }
 
-export function $EXPECT<T>(parser: Parser<T>, fail: Fail, t: Terminal, name: string): Parser<T> {
-  const expectation: string = prettyPrint(t, name)
-
+export function $EXPECT<T>(parser: Parser<T>, fail: Fail, expectation: string): Parser<T> {
   return function (state: ParseState) {
     const result = parser(state);
     if (result) return result;
@@ -449,28 +448,6 @@ function location(input: string, pos: number) {
 
 const failHintRegex = /\S+|\s+|$/y
 
-/**
- * Pretty print a string or RegExp literal
- */
-function prettyPrint(t: Terminal, name?: string) {
-  let pv;
-
-  if (t instanceof RegExp) {
-    // Ignore case is the only external flag that may be allowed so far
-    const s = t.toString()
-    const flags = t.ignoreCase ? "i" : "";
-    pv = s.slice(0, -t.flags.length) + flags
-  } else {
-    pv = JSON.stringify(t)
-  }
-
-  if (name) {
-    return `${name} ${pv}`
-  } else {
-    return pv
-  }
-}
-
 // Error tracking
 // Goal is zero allocations
 const failExpected = Array(16)
@@ -522,7 +499,7 @@ ${input.slice(result.pos)}
       let [hint] = input.match(failHintRegex)!
 
       if (hint.length)
-        hint = prettyPrint(hint)
+        hint = JSON.stringify(hint)
       else
         hint = "EOF"
 

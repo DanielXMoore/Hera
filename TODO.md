@@ -3,10 +3,19 @@ TODO
 
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
-- [ ] Compile to typescript?
-- [ ] Compile to fancy regexes?
-- [ ] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that
-number literals can be part of the result.
+- [ ] Languages
+  - [x] Compile to TypeScript
+  - [x] Compile to JavaScript
+  - [ ] Compile to Go
+- [x] Display regexp properly in $EXPECT
+- [x] Handle nested array structures
+- [ ] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that number literals can be part of the result.
+- [ ] Handle object structure including nesting.
+- [ ] Test $C and handler
+- [ ] Compile to optimized regexes by aggregating grammar nodes into fewer regexps where possible.
+- [ ] Type annotation for grammar rules
+- [ ] Generate tokens and parse tree
+- [ ] Aggregate errors and warnings
 
 Features
 --------

@@ -17,8 +17,8 @@ compile = (src) ->
 
 describe "Build rules", ->
   it.skip "should update rules file", ->
-    newHera = compile readFile("samples/hera.hera")
-    require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newHera.rules, null, 2))
+    newRules = hera.parse readFile("samples/hera.hera")
+    require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newRules, null, 2))
 
 describe "Hera", ->
   it "should do math example", ->
@@ -251,6 +251,14 @@ describe "Hera", ->
       assert.deepEqual ["T", [["A", "B"]]], parse "AB"
       assert.deepEqual ["T", [["A", "B"], ["A", "B"]]], parse "ABAB"
 
+    it "should work with nested structures", ->
+      {parse} = compile """
+        Rule
+          "A" "B" "C" -> [2, [3, [3, 1]], 1]
+      """
+
+      assert.deepEqual ["B", ["C", ["C", "A"]], "A"], parse "ABC"
+
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
       {parse} = compile """
@@ -429,7 +437,7 @@ describe "Hera", ->
       parse "aaa"
     , /Rule "aaaa"/
 
-  it "should throw an error when mapping to a non-array object", ->
+  it "should throw an error when mapping to an unknown mapping object", ->
     rules = hera.parse """
       Rule
         "a"
@@ -440,7 +448,7 @@ describe "Hera", ->
 
     assert.throws ->
       compiler.compile(rules)
-    , /non-array object mapping/
+    , /unknown object mapping/
 
   it "should throw an error when mapping to an unknown type", ->
     rules = hera.parse """

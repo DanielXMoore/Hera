@@ -13,7 +13,7 @@ Term
     }, $1)
 
 Factor
-  "(" _ Expression _ ")" -> 3
+  "(" _ Expression _ ")" -> $3
   Integer
 
 Integer

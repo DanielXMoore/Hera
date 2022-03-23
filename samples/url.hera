@@ -23,7 +23,7 @@ Authority
     }
 
 Port
-  /:(\d+)/ -> 1
+  /:(\d+)/ -> $1
 
 Host
   IPv4Address / RegisteredName

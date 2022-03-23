@@ -8,20 +8,30 @@ module.exports =
       "#{name}\n  #{value}\n"
     .join("\n")
 
+structuralToSource = (mapping) ->
+  switch typeof mapping
+    when "number"
+      mapping
+    when "string"
+      JSON.stringify(mapping)
+    when "object"
+      if Array.isArray(mapping)
+        "[" + mapping.map (m) ->
+          structuralToSource(m)
+        .join(", ") + "]"
+      else if mapping.v?
+        "$#{mapping.v}"
+      else if mapping.o?
+        throw new Error "TODO"
+
 # handler to source
 hToS = (h) ->
   return "" unless h?
 
-  " -> " + switch typeof h
-    when "number"
-      h
-    when "string"
-      JSON.stringify(h)
-    when "object"
-      if Array.isArray(h)
-        JSON.stringify(h)
-      else
-        "\n#{h.f.replace(/^|\n/g, "$&    ")}"
+  " -> " + if h.f? # functional handler
+    "\n#{h.f.replace(/^|\n/g, "$&    ")}"
+  else # structural handler
+    structuralToSource(h)
 
 # toS and decompile generate a source document from the rules AST
 toS = (rule, depth=0) ->

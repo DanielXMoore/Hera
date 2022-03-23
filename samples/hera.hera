@@ -3,7 +3,7 @@ Grammar
     return Object.fromEntries($2)
 
 Rule
-  Name EOS RuleBody -> [1,3]
+  Name EOS RuleBody -> [$1, $3]
 
 RuleBody
   ( Indent Choice )+ ->
@@ -31,20 +31,20 @@ Sequence
   Expression
 
 SequenceExpression
-  _ Expression -> 2
+  _ Expression -> $2
 
 ChoiceExpression
-  _ "/" _ Expression -> 4
+  _ "/" _ Expression -> $4
 
 Expression
   Suffix
-  PrefixOperator Suffix -> [1,2]
+  PrefixOperator Suffix -> [$1, $2]
 
 PrefixOperator
   [$&!]
 
 Suffix
-  Primary SuffixOperator -> [2,1]
+  Primary SuffixOperator -> [$2, $1]
   Primary
 
 SuffixOperator
@@ -53,7 +53,7 @@ SuffixOperator
 Primary
   Name
   Literal
-  OpenParenthesis Sequence CloseParenthesis -> 2
+  OpenParenthesis Sequence CloseParenthesis -> $2
 
 Literal
   StringLiteral
@@ -62,12 +62,11 @@ Literal
 Handling
   EOS ->
     return undefined
-  _* Arrow HandlingExpression -> 3
+  _* Arrow HandlingExpression -> $3
 
 HandlingExpression
-  EOS HandlingExpressionBody -> 2
-  StringValue EOS -> 1
-  HandlingExpressionValue EOS -> 1
+  EOS HandlingExpressionBody -> $2
+  StructuralMapping EOS -> $1
 
 HandlingExpressionBody
   HandlingExpressionLine+ ->
@@ -76,23 +75,28 @@ HandlingExpressionBody
     }
 
 HandlingExpressionLine
-  Indent Indent [^\n\r]* EOS -> 3
+  Indent Indent [^\n\r]* EOS -> $3
 
-HandlingExpressionValue
-  RValue
-  OpenBracket RValue CommaThenValue* CloseBracket ->
+StructuralMapping
+  StringValue
+  NumberValue
+  Variable
+  OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
     $3.unshift($2); return $3
 
-RValue
-  StringValue
-  /\d\d?/ ->
+CommaThenValue
+  _* "," _* StructuralMapping _* -> $4
+
+Variable
+  /\$(\d)/ ->
+    return {v: parseInt($1, 10)}
+
+NumberValue
+  /\d+/ ->
     return parseInt($0, 10)
 
-CommaThenValue
-  _* "," _* RValue _* -> 4
-
 StringValue
-  "\"" $DoubleStringCharacter* "\"" -> 2
+  "\"" $DoubleStringCharacter* "\"" -> $2
 
 DoubleStringCharacter
   [^"\\]+
@@ -102,12 +106,12 @@ EscapeSequence
   $( Backslash . )
 
 StringLiteral
-  StringValue -> ["L",1]
+  StringValue -> ["L", $1]
 
 RegExpLiteral
-  "/" !_ $RegExpCharacter* "/" -> ["R",3]
-  $CharacterClassExpression -> ["R",1]
-  "." -> ["R",1]
+  "/" !_ $RegExpCharacter* "/" -> ["R", $3]
+  $CharacterClassExpression -> ["R", $1]
+  "." -> ["R", $1]
 
 CharacterClassExpression
   CharacterClass+

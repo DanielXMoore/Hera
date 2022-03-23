@@ -9,8 +9,10 @@ fs = require "fs"
 
 describe "Experimental", ->
   describe "TypeScript Compiler", ->
-    it.skip "should compile to a typescript file", ->
+    it.skip "should compile to a TypeScript file", ->
       fs.writeFileSync "source/exp/compiled.ts", compile(rules, {types: true})
+
+    it.skip "should compile to a JavaScript file", ->
       fs.writeFileSync "source/exp/compiled.js", compile(rules, {types: false})
 
     it.skip "should compile example file", ->
@@ -20,9 +22,9 @@ describe "Experimental", ->
     it "should parse from compiled js", ->
       {parse} = require "../source/exp/compiled.js"
 
-      assert.deepEqual rules, parse heraSrc
+      assert.deepEqual parse(heraSrc), rules
 
     it "should parse from compiled ts", ->
       {parse} = require "../source/exp/compiled.ts"
 
-      assert.deepEqual rules, parse heraSrc
+      assert.deepEqual parse(heraSrc), rules

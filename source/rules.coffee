@@ -23,8 +23,12 @@ module.exports = {
       "RuleBody"
     ],
     [
-      1,
-      3
+      {
+        "v": 1
+      },
+      {
+        "v": 3
+      }
     ]
   ],
   "RuleBody": [
@@ -88,7 +92,9 @@ module.exports = {
       "_",
       "Expression"
     ],
-    2
+    {
+      "v": 2
+    }
   ],
   "ChoiceExpression": [
     "S",
@@ -101,7 +107,9 @@ module.exports = {
       "_",
       "Expression"
     ],
-    4
+    {
+      "v": 4
+    }
   ],
   "Expression": [
     "/",
@@ -114,8 +122,12 @@ module.exports = {
           "Suffix"
         ],
         [
-          1,
-          2
+          {
+            "v": 1
+          },
+          {
+            "v": 2
+          }
         ]
       ]
     ]
@@ -134,8 +146,12 @@ module.exports = {
           "SuffixOperator"
         ],
         [
-          2,
-          1
+          {
+            "v": 2
+          },
+          {
+            "v": 1
+          }
         ]
       ],
       "Primary"
@@ -157,7 +173,9 @@ module.exports = {
           "Sequence",
           "CloseParenthesis"
         ],
-        2
+        {
+          "v": 2
+        }
       ]
     ]
   ],
@@ -190,7 +208,9 @@ module.exports = {
           "Arrow",
           "HandlingExpression"
         ],
-        3
+        {
+          "v": 3
+        }
       ]
     ]
   ],
@@ -203,23 +223,19 @@ module.exports = {
           "EOS",
           "HandlingExpressionBody"
         ],
-        2
+        {
+          "v": 2
+        }
       ],
       [
         "S",
         [
-          "StringValue",
+          "StructuralMapping",
           "EOS"
         ],
-        1
-      ],
-      [
-        "S",
-        [
-          "HandlingExpressionValue",
-          "EOS"
-        ],
-        1
+        {
+          "v": 1
+        }
       ]
     ]
   ],
@@ -241,17 +257,21 @@ module.exports = {
       ],
       "EOS"
     ],
-    3
+    {
+      "v": 3
+    }
   ],
-  "HandlingExpressionValue": [
+  "StructuralMapping": [
     "/",
     [
-      "RValue",
+      "StringValue",
+      "NumberValue",
+      "Variable",
       [
         "S",
         [
           "OpenBracket",
-          "RValue",
+          "StructuralMapping",
           [
             "*",
             "CommaThenValue"
@@ -260,19 +280,6 @@ module.exports = {
         ],
         {
           "f": "$3.unshift($2); return $3"
-        }
-      ]
-    ]
-  ],
-  "RValue": [
-    "/",
-    [
-      "StringValue",
-      [
-        "R",
-        "\\d\\d?",
-        {
-          "f": "return parseInt($0, 10)"
         }
       ]
     ]
@@ -292,13 +299,29 @@ module.exports = {
         "*",
         "_"
       ],
-      "RValue",
+      "StructuralMapping",
       [
         "*",
         "_"
       ]
     ],
-    4
+    {
+      "v": 4
+    }
+  ],
+  "Variable": [
+    "R",
+    "\\$(\\d)",
+    {
+      "f": "return {v: parseInt($1, 10)}"
+    }
+  ],
+  "NumberValue": [
+    "R",
+    "\\d+",
+    {
+      "f": "return parseInt($0, 10)"
+    }
   ],
   "StringValue": [
     "S",
@@ -319,7 +342,9 @@ module.exports = {
         "\\\""
       ]
     ],
-    2
+    {
+      "v": 2
+    }
   ],
   "DoubleStringCharacter": [
     "/",
@@ -351,7 +376,9 @@ module.exports = {
     ],
     [
       "L",
-      1
+      {
+        "v": 1
+      }
     ]
   ],
   "RegExpLiteral": [
@@ -382,7 +409,9 @@ module.exports = {
         ],
         [
           "R",
-          3
+          {
+            "v": 3
+          }
         ]
       ],
       [
@@ -390,7 +419,9 @@ module.exports = {
         "CharacterClassExpression",
         [
           "R",
-          1
+          {
+            "v": 1
+          }
         ]
       ],
       [
@@ -398,7 +429,9 @@ module.exports = {
         ".",
         [
           "R",
-          1
+          {
+            "v": 1
+          }
         ]
       ]
     ]
