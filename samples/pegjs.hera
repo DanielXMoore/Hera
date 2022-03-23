@@ -98,16 +98,19 @@ ChoiceExpression
 
 ActionExpression
   SequenceExpression (__ CodeBlock)? ->
-    return code !== null
-      ? {
-          type: "action",
-          expression: $1,
-          // TODO: not exactly sure if I understood the nested @ correctly
-          code: $2 ? $2[1][0],
-          codeLocation: $2 ? $2[1][1],
-          location: location()
-        }
-      : $1;
+    if ($2 != null) {
+      const code = $2[1]
+      return {
+        type: "action",
+        expression: $1,
+        // TODO: not exactly sure if I understood the nested @ correctly
+        code: code[0],
+        codeLocation: code[1],
+        location: location()
+      }
+    } else {
+      return $1
+    }
 
 SequenceExpression
   LabeledExpression (__ LabeledExpression)* ->
@@ -230,8 +233,7 @@ SemanticPredicateOperator
 # ---- Lexical Grammar -----
 
 SourceCharacter
-  # TODO: single dot
-  [^]
+  .
 
 # TODO: named rule?
 WhiteSpace #"whitespace"
@@ -277,7 +279,7 @@ IdentifierStart
   UnicodeLetter
   "$"
   "_"
-  "\\" UnicodeEscapeSequence -> 2
+  "\\" UnicodeEscapeSequence -> $2
 
 IdentifierPart
   IdentifierStart
@@ -325,13 +327,13 @@ StringLiteral #"string"
 
 DoubleStringCharacter
   # TOMAYBE: Single Quote strings
-  !("\"" / "\\" / LineTerminator) SourceCharacter -> 2
-  "\\" EscapeSequence -> 2
+  !("\"" / "\\" / LineTerminator) SourceCharacter -> $2
+  "\\" EscapeSequence -> $2
   LineContinuation
 
 SingleStringCharacter
-  !("'" / "\\" / LineTerminator) SourceCharacter -> 2
-  "\\" EscapeSequence -> 2
+  !("'" / "\\" / LineTerminator) SourceCharacter -> $2
+  "\\" EscapeSequence -> $2
   LineContinuation
 
 # TODO: named rule
@@ -361,8 +363,8 @@ ClassCharacterRange
     return [$1, $3];
 
 ClassCharacter
-  !("]" / "\\" / LineTerminator) SourceCharacter -> 2
-  "\\" EscapeSequence -> 2
+  !("]" / "\\" / LineTerminator) SourceCharacter -> $2
+  "\\" EscapeSequence -> $2
   LineContinuation
 
 LineContinuation
@@ -390,7 +392,7 @@ SingleEscapeCharacter
   "v"  -> "\v"
 
 NonEscapeCharacter
-  !(EscapeCharacter / LineTerminator) SourceCharacter -> 2
+  !(EscapeCharacter / LineTerminator) SourceCharacter -> $2
 
 EscapeCharacter
   SingleEscapeCharacter
@@ -420,7 +422,7 @@ AnyMatcher
 
 # TODO: named rule
 CodeBlock #"code block"
-  "{" BareCodeBlock "}" -> 2
+  "{" BareCodeBlock "}" -> $2
 
 BareCodeBlock
   Code ->
@@ -513,4 +515,4 @@ EOS
   __ EOF
 
 EOF
-  ![^] # TODO: support single dot?
+  !.
