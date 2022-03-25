@@ -1,47 +1,34 @@
-package main
+package machine
 
 import (
-	"fmt"
 	"regexp"
 )
 
 type Parser func(ParseState) (Result, bool)
 
 type ParseState struct {
-	input string
-	pos   int
+	Input string
+	Pos   int
 }
 
 type Location struct {
-	pos, length int
+	Pos, length int
 }
 
 type Result struct {
-	location Location
-	pos      int
-	value    any
-}
-
-func main() {
-	s := "bbbbcdabcda"
-	parser := Sequence(Plus(L("b")), R("b?c+"), R("dab"), L("cda"))
-
-	res, found := parser(ParseState{input: s, pos: 0})
-
-	if found {
-		fmt.Printf("found %o at %d", res, res.location.pos)
-	} else {
-		fmt.Printf("not found")
-	}
+	Location Location
+	Pos      int
+	Value    any
 }
 
 func R(s string) Parser {
 	re := regexp.MustCompile("^" + s)
 
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
-		input := state.input
-		res := re.FindStringIndex(input[state.pos:])
+		Pos := state.Pos
+		Input := state.Input
+
+		res := re.FindStringIndex(Input[state.Pos:])
 
 		if res == nil {
 			return Result{}, false
@@ -50,12 +37,12 @@ func R(s string) Parser {
 		len := res[1]
 
 		return Result{
-			location: Location{
-				pos:    pos,
+			Location: Location{
+				Pos:    Pos,
 				length: len,
 			},
-			pos:   pos + len,
-			value: input[pos : pos+len],
+			Pos:   Pos + len,
+			Value: Input[Pos : Pos+len],
 		}, true
 	}
 }
@@ -64,56 +51,60 @@ func L(s string) Parser {
 	l := len(s)
 
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
-		input := state.input
+		Pos := state.Pos
+		Input := state.Input
+
+		if Pos+l > len(Input) {
+			return Result{}, false
+		}
 
 		return Result{
-			location: Location{
-				pos:    pos,
+			Location: Location{
+				Pos:    Pos,
 				length: l,
 			},
-			pos:   pos + l,
-			value: input[pos : pos+l],
-		}, input[pos:pos+l] == s
+			Pos:   Pos + l,
+			Value: Input[Pos : Pos+l],
+		}, Input[Pos:Pos+l] == s
 	}
 }
 
 func Sequence(seq ...Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
-		startPos := pos
-		input := state.input
-		values := make([]any, len(seq))
+		Pos := state.Pos
+		startPos := Pos
+		Input := state.Input
+		Values := make([]any, len(seq))
 
 		for index, p := range seq {
-			result, found := p(ParseState{input: input, pos: pos})
+			result, found := p(ParseState{Input: Input, Pos: Pos})
 
 			if !found {
 				return result, false
 			}
 
-			values[index] = result.value
-			pos = result.pos
+			Values[index] = result.Value
+			Pos = result.Pos
 		}
 
 		return Result{
-			location: Location{
-				pos:    startPos,
-				length: pos - startPos,
+			Location: Location{
+				Pos:    startPos,
+				length: Pos - startPos,
 			},
-			pos:   pos,
-			value: values,
+			Pos:   Pos,
+			Value: Values,
 		}, true
 	}
 }
 
 func Choice(seq ...Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
-		input := state.input
+		Pos := state.Pos
+		Input := state.Input
 
 		for _, p := range seq {
-			result, found := p(ParseState{input: input, pos: pos})
+			result, found := p(ParseState{Input: Input, Pos: Pos})
 
 			if found {
 				return result, true
@@ -124,9 +115,24 @@ func Choice(seq ...Parser) Parser {
 	}
 }
 
+func Text(p Parser) Parser {
+	return func(state ParseState) (Result, bool) {
+		Pos := state.Pos
+		Input := state.Input
+		result, found := p(state)
+
+		if found {
+			result.Value = Input[Pos:result.Pos]
+			return result, true
+		}
+
+		return result, false
+	}
+}
+
 func Option(p Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
+		Pos := state.Pos
 		result, found := p(state)
 
 		if found {
@@ -134,44 +140,44 @@ func Option(p Parser) Parser {
 		}
 
 		return Result{
-			location: Location{
-				pos:    pos,
+			Location: Location{
+				Pos:    Pos,
 				length: 0,
 			},
-			pos:   pos,
-			value: nil,
+			Pos:   Pos,
+			Value: nil,
 		}, true
 	}
 }
 
 func Assert(p Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
+		Pos := state.Pos
 		_, found := p(state)
 
 		return Result{
-			location: Location{
-				pos:    pos,
+			Location: Location{
+				Pos:    Pos,
 				length: 0,
 			},
-			pos:   pos,
-			value: nil,
+			Pos:   Pos,
+			Value: nil,
 		}, found
 	}
 }
 
 func Negate(p Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		pos := state.pos
+		Pos := state.Pos
 		_, found := p(state)
 
 		return Result{
-			location: Location{
-				pos:    pos,
+			Location: Location{
+				Pos:    Pos,
 				length: 0,
 			},
-			pos:   pos,
-			value: nil,
+			Pos:   Pos,
+			Value: nil,
 		}, !found
 	}
 }
@@ -179,21 +185,21 @@ func Negate(p Parser) Parser {
 // TODO: Could be Quantified(p, 0, 0)
 func Repetition(p Parser) Parser {
 	return func(state ParseState) (Result, bool) {
-		startPos := state.pos
-		pos := startPos
-		input := state.input
-		values := make([]any, 0)
+		startPos := state.Pos
+		Pos := startPos
+		Input := state.Input
+		Values := make([]any, 0)
 
 		for {
-			result, found := p(ParseState{pos: pos, input: input})
+			result, found := p(ParseState{Pos: Pos, Input: Input})
 			if found {
-				pos = result.pos
+				Pos = result.Pos
 
-				if pos == startPos {
+				if Pos == startPos {
 					// skip zero width repetitions since they would be infinite
 					break
 				}
-				values = append(values, result.value)
+				Values = append(Values, result.Value)
 
 			} else {
 				break
@@ -201,37 +207,38 @@ func Repetition(p Parser) Parser {
 		}
 
 		return Result{
-			location: Location{
-				pos:    startPos,
-				length: pos - startPos,
+			Location: Location{
+				Pos:    startPos,
+				length: Pos - startPos,
 			},
-			pos:   pos,
-			value: values,
+			Pos:   Pos,
+			Value: Values,
 		}, true
 	}
 }
 
 func Quantified(p Parser, min, max int) Parser {
 	return func(state ParseState) (Result, bool) {
-		startPos := state.pos
-		pos := startPos
-		input := state.input
-		values := make([]any, 0)
+		startPos := state.Pos
+
+		Pos := startPos
+		Input := state.Input
+		Values := make([]any, 0)
 		n := 0
 
 		for {
 			if max > 0 && n == max {
 				break
 			}
-			result, found := p(ParseState{pos: pos, input: input})
+			result, found := p(ParseState{Pos: Pos, Input: Input})
 			if found {
-				pos = result.pos
+				Pos = result.Pos
 
-				if pos == startPos {
+				if Pos == startPos {
 					// skip zero width repetitions since they would be infinite
 					break
 				}
-				values = append(values, result.value)
+				Values = append(Values, result.Value)
 
 			} else {
 				break
@@ -242,12 +249,12 @@ func Quantified(p Parser, min, max int) Parser {
 
 		if n >= min {
 			return Result{
-				location: Location{
-					pos:    startPos,
-					length: pos - startPos,
+				Location: Location{
+					Pos:    startPos,
+					length: Pos - startPos,
 				},
-				pos:   pos,
-				value: values,
+				Pos:   Pos,
+				Value: Values,
 			}, true
 		} else {
 			return Result{}, false
@@ -264,7 +271,7 @@ func Transform(p Parser, fn func(any) any) Parser {
 		res, found := p(state)
 
 		if found {
-			res.value = fn(res.value)
+			res.Value = fn(res.Value)
 		}
 
 		return res, found

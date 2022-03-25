@@ -87,11 +87,11 @@ Demos
 ---
 
 If these demos are not interactive then view this page at
-https://danielx.net/hera/docs/README.html
+<https://danielx.net/hera/docs/README.html>
 
 ---
 
-URL Parser https://tools.ietf.org/html/rfc3986
+URL Parser <https://tools.ietf.org/html/rfc3986>
 
 >     #! hera url
 
@@ -125,7 +125,6 @@ Token location example
 >         return {type: "Punctuation", loc: $loc, value: $1}
 >
 
-
 ---
 
 Regex Groups
@@ -150,14 +149,16 @@ Changelog
 ---
 
 - 0.7.3
+  - Added support for number literals in structural handlers.
+  - Changed structural handling to use $1, etc. instead of 1 for positional variables.
   - Added prefix `$` text operator.
   - Added `.` any character matcher.
-  - Fixed structural mapping bug where in `["R", 1]` the `1` would take the
+  - Fixed structural mapping bug where in `["R", $1]` the `$1` would take the
   first element of the result rather than the whole result on non-sequence
   handlers.
 - 0.7.2
   - VSCode Extension <https://marketplace.visualstudio.com/items?itemName=DanielX.hera>
-  - Bare character class 
+  - Bare character class
 
 Experiments
 ---
@@ -200,7 +201,6 @@ be able to re-use the work already done.
 
 One alternative is to make it one rule with an optional section and add
 logic into the handler, but that seems crude.
-
 
 ---
 

@@ -102,10 +102,7 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
     when "string"
       JSON.stringify(mapping)
     when "number"
-      if single
-        source
-      else
-        "#{source}[#{mapping+offset}]"
+      mapping
     when "object"
       if Array.isArray mapping
         "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"

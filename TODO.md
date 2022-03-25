@@ -15,6 +15,9 @@ TODO
     - [x] Update to latest Hera
 - [ ] Handle object structure including nesting.
 - [ ] Test $C and handler
+- [ ] Add undefined rule error in vscode extension
+- [x] Remove _ as a rule name because golang doesn't like it
+- [x] Switch to rules.json
 
 TODO but too vague
 ---

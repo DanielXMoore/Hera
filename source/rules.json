@@ -1,4 +1,4 @@
-module.exports = {
+{
   "Grammar": [
     "S",
     [
@@ -89,7 +89,7 @@ module.exports = {
   "SequenceExpression": [
     "S",
     [
-      "_",
+      "Space",
       "Expression"
     ],
     {
@@ -99,12 +99,12 @@ module.exports = {
   "ChoiceExpression": [
     "S",
     [
-      "_",
+      "Space",
       [
         "L",
         "/"
       ],
-      "_",
+      "Space",
       "Expression"
     ],
     {
@@ -203,7 +203,7 @@ module.exports = {
         [
           [
             "*",
-            "_"
+            "Space"
           ],
           "Arrow",
           "HandlingExpression"
@@ -289,7 +289,7 @@ module.exports = {
     [
       [
         "*",
-        "_"
+        "Space"
       ],
       [
         "L",
@@ -297,12 +297,12 @@ module.exports = {
       ],
       [
         "*",
-        "_"
+        "Space"
       ],
       "StructuralMapping",
       [
         "*",
-        "_"
+        "Space"
       ]
     ],
     {
@@ -318,7 +318,7 @@ module.exports = {
   ],
   "NumberValue": [
     "R",
-    "\\d+",
+    "\\d+(\\.\\d+)?",
     {
       "f": "return parseInt($0, 10)"
     }
@@ -393,7 +393,7 @@ module.exports = {
           ],
           [
             "!",
-            "_"
+            "Space"
           ],
           [
             "$",
@@ -498,7 +498,7 @@ module.exports = {
       ],
       [
         "*",
-        "_"
+        "Space"
       ]
     ]
   ],
@@ -526,7 +526,7 @@ module.exports = {
     "L",
     "  "
   ],
-  "_": [
+  "Space": [
     "R",
     "[ \\t]+"
   ],

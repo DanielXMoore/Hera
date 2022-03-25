@@ -200,16 +200,14 @@ create = (create, rules) ->
     return result
 
   # Converts a handler mapping structure into the mapped value
-  # -> 1 (first item of sequence)
-  # -> [2, 1] (array containing second and first item in that order)
-  # -> [1, [4, 3]] (pair containing first, and a pair with 4th and 3rd item)
+  # -> $1 (first item of sequence)
+  # -> [$2, $1] (array containing second and first item in that order)
+  # -> [$1, [$4, $3]] (pair containing first, and a pair with 4th and 3rd item)
   # -> "yo" (literal "yo)
   # TODO: Map to object literals in a similar way?
   mapValue = (mapping, value) ->
     switch typeof mapping
-      when "number"
-        value[mapping]
-      when "string"
+      when "string", "number"
         mapping
       when "object"
         if Array.isArray mapping

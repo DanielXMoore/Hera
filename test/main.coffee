@@ -18,7 +18,7 @@ compile = (src) ->
 describe "Build rules", ->
   it.skip "should update rules file", ->
     newRules = hera.parse readFile("samples/hera.hera")
-    require('fs').writeFileSync("source/rules.coffee", "module.exports = " + JSON.stringify(newRules, null, 2))
+    require('fs').writeFileSync("source/rules.json", JSON.stringify(newRules, null, 2))
 
 describe "Hera", ->
   it "should do math example", ->
@@ -119,14 +119,14 @@ describe "Hera", ->
         Group4
 
       Group1
-        /(a+)(b+)/ -> [1, 2]
+        /(a+)(b+)/ -> [$1, $2]
 
       Group2
         /(c+)(d+)/ ->
           return [$1, $2];
 
       Group3
-        /123((456)789)/ -> [3, 1, 2, 0]
+        /123((456)789)/ -> [$3, $1, $2, $0]
 
       Group4
         /pp(qq)/ ->
@@ -225,7 +225,7 @@ describe "Hera", ->
     it "should map regexp groups into the structure", ->
       {parse} = compile """
         Rule
-          /(a)(b)(c)/ -> [2, 3, 1]
+          /(a)(b)(c)/ -> [$2, $3, $1]
       """
 
       assert.deepEqual ["b", "c", "a"], parse "abc"
@@ -233,7 +233,7 @@ describe "Hera", ->
     it "should map sequence items into the structure", ->
       {parse} = compile """
         Rule
-          "A" "B" "C" -> [2, 3, 1]
+          "A" "B" "C" -> [$2, $3, $1]
       """
 
       assert.deepEqual ["B", "C", "A"], parse "ABC"
@@ -241,7 +241,7 @@ describe "Hera", ->
     it "should map the entire result as $1", ->
       {parse} = compile """
         Rule
-          Sub* -> ["T", 1]
+          Sub* -> ["T", $1]
 
         Sub
           "A" "B"
@@ -254,7 +254,7 @@ describe "Hera", ->
     it "should work with nested structures", ->
       {parse} = compile """
         Rule
-          "A" "B" "C" -> [2, [3, [3, 1]], 1]
+          "A" "B" "C" -> [$2, [$3, [$3, $1]], $1]
       """
 
       assert.deepEqual ["B", ["C", ["C", "A"]], "A"], parse "ABC"
@@ -296,11 +296,11 @@ describe "Hera", ->
     it "should handle nested rules", ->
       {parse} = compile """
         RegExpLiteral
-          "/" !_ $RegExpCharacter* "/" -> ["R", 3]
+          "/" !_ $RegExpCharacter* "/" -> ["R", $3]
           CharacterClassExpression
 
         CharacterClassExpression
-          $CharacterClass+ -> ["R", 1]
+          $CharacterClass+ -> ["R", $1]
 
         RegExpCharacter
           [^\\/\\\\]+
@@ -317,7 +317,7 @@ describe "Hera", ->
           /[?+*]|\\{\\d+(,\\d+)?\\}/
 
         EscapeSequence
-          Backslash [^] ->
+          Backslash . ->
             return '\\\\' + $2
 
         Backslash

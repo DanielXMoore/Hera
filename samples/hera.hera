@@ -31,10 +31,10 @@ Sequence
   Expression
 
 SequenceExpression
-  _ Expression -> $2
+  Space Expression -> $2
 
 ChoiceExpression
-  _ "/" _ Expression -> $4
+  Space "/" Space Expression -> $4
 
 Expression
   Suffix
@@ -62,7 +62,7 @@ Literal
 Handling
   EOS ->
     return undefined
-  _* Arrow HandlingExpression -> $3
+  Space* Arrow HandlingExpression -> $3
 
 HandlingExpression
   EOS HandlingExpressionBody -> $2
@@ -85,14 +85,14 @@ StructuralMapping
     $3.unshift($2); return $3
 
 CommaThenValue
-  _* "," _* StructuralMapping _* -> $4
+  Space* "," Space* StructuralMapping Space* -> $4
 
 Variable
   /\$(\d)/ ->
     return {v: parseInt($1, 10)}
 
 NumberValue
-  /\d+/ ->
+  /\d+(\.\d+)?/ ->
     return parseInt($0, 10)
 
 StringValue
@@ -109,7 +109,7 @@ StringLiteral
   StringValue -> ["L", $1]
 
 RegExpLiteral
-  "/" !_ $RegExpCharacter* "/" -> ["R", $3]
+  "/" !Space $RegExpCharacter* "/" -> ["R", $3]
   $CharacterClassExpression -> ["R", $1]
   "." -> ["R", $1]
 
@@ -134,7 +134,7 @@ Name
   [_a-zA-Z][_a-zA-Z0-9]*
 
 Arrow
-  "->" _*
+  "->" Space*
 
 Backslash
   "\\"
@@ -154,7 +154,7 @@ CloseParenthesis
 Indent
   "  "
 
-_
+Space
   [ \t]+
 
 EOS
