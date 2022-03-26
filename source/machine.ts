@@ -523,7 +523,6 @@ ${input.slice(result.pos)}
   }
 
   return {
-    fail: fail,
     parse: (input: string, options: ParserOptions<G> = {}) => {
       if (typeof input !== "string") throw new Error("Input must be a string")
 

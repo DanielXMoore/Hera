@@ -1,16 +1,17 @@
 {decompile} = require "../source/util"
-hera = require "../source/main"
+hera = require "../"
+rules = require "../source/rules"
 
 describe "util", ->
   it "should parse decompiled rules", ->
-    grammar = decompile(hera.rules)
+    grammar = decompile(rules)
 
     # console.log grammar
     parsedRules = hera.parse grammar
-    # console.log parsedRules, hera.rules
+    # console.log parsedRules, rules
 
     Object.keys(parsedRules).forEach (key) ->
-      assert.deepEqual(parsedRules[key], hera.rules[key], "#{key} rule doesn't match")
+      assert.deepEqual(parsedRules[key], rules[key], "#{key} rule doesn't match")
 
     # strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')

@@ -3,3 +3,4 @@ coverage/
 bin/
 dist/
 node_modules/
+source/machine.js

@@ -209,14 +209,12 @@ compileRulesObject = (ruleNames) ->
   }
   """
 
-fs = require 'fs'
-typescript = require 'typescript'
+# TODO: bundling for esbuild
+tsMachine = require('fs').readFileSync(__dirname + "/machine.ts", "utf8")
+jsMachine = require('fs').readFileSync(__dirname + "/machine.js", "utf8")
 
 defaultOptions =
   types: false
-
-tsMachine = fs.readFileSync(__dirname + "/machine.ts", "utf8")
-jsMachine = typescript.transpile tsMachine
 
 module.exports =
   #
@@ -260,36 +258,6 @@ module.exports =
       parse: parse
     }
     """
-
-# Experimental compiler generating
-###
-CoffeeScript = require 'coffeescript'
-
-
-    const compile = (function() {
-      const m = {exports: {}};
-      (function(module) {
-        #{CoffeeScript.compile(fs.readFileSync(__dirname + "/compiler.coffee", "utf8"), bare: true)}
-      })(m)
-      //@ts-ignore
-      return m.exports.compile;
-    }())
-
-      generate: function(rules, vivify) {
-        //@ts-ignore
-        const src = compile(rules)
-
-        if (vivify) {
-          const m = {exports: {}};
-          Function("module", "exports", "__dirname", "require", src)(m, m.exports, __dirname, require);
-
-          return m.exports;
-        } else {
-          return src;
-        }
-      }
-
-###
 
 isSimple = /^[^.*+?{}()\[\]^\\]*$/
 isSimpleCharacterClass = /^\[[^-^\\]*\]$/

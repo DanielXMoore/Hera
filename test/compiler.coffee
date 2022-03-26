@@ -1,7 +1,7 @@
 # Experimental compilers, going ham
 
-{rules, parse} = require "../source/main"
-{compile} = require "../source/exp/compiler"
+{compile, parse} = require "../"
+rules = require "../source/rules"
 
 heraSrc = readFile("samples/hera.hera")
 
@@ -20,7 +20,7 @@ describe "Experimental", ->
       fs.writeFileSync "samples/url.js", compile(sampleRules, {types: false})
 
     it "should parse from compiled js", ->
-      {parse} = require "../source/exp/compiled.js"
+      {parse} = require "../source/parser.js"
 
       assert.deepEqual parse(heraSrc), rules
 

@@ -1,5 +1,4 @@
-hera = require "../source/exp/compiled"
-compiler = require "../source/exp/compiler"
+hera = require "../"
 test = it
 
 execMod = (src) ->
@@ -9,7 +8,7 @@ execMod = (src) ->
   return m.exports
 
 compile = (src) ->
-  src = compiler.compile hera.parse(src), false
+  src = hera.compile hera.parse(src), false
 
   # console.log src
 
@@ -447,7 +446,7 @@ describe "Hera", ->
     rules.Rule[2] = {}
 
     assert.throws ->
-      compiler.compile(rules)
+      hera.compile(rules)
     , /unknown object mapping/
 
   it "should throw an error when mapping to an unknown type", ->
@@ -460,7 +459,7 @@ describe "Hera", ->
     rules.Rule[2] = false
 
     assert.throws ->
-      compiler.compile(rules)
+      hera.compile(rules)
     , /Unknown mapping type/
 
   it "throw an error when encountering an unknown operator", ->
@@ -473,7 +472,7 @@ describe "Hera", ->
     rules.Rule[0] = "QQ"
 
     assert.throws ->
-      compiler.compile(rules)
+      hera.compile(rules)
     , /QQ/
 
   it "should error when referencing an unknown rule", ->

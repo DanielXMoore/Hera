@@ -1,4 +1,4 @@
-hera = require "./main"
+hera = require "../"
 
 module.exports =
   # Convert the rules to source text in hera grammar

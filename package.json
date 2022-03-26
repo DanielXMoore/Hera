@@ -7,6 +7,7 @@
     "@types/node": "^17.0.21",
     "benchmark": "^2.1.4",
     "coffeescript": "^2",
+    "esbuild-coffeescript": "^2.0.0",
     "microtime": "^3.0.0",
     "mocha": "^9.1.1",
     "nyc": "^15.1.0",
@@ -25,7 +26,6 @@
       "coffee"
     ],
     "require": [
-      "ts-node/register",
       "coffeescript/register",
       "./test/helper.coffee"
     ],
@@ -36,7 +36,7 @@
     ]
   },
   "nyc": {
-    "check-coverage": true,
+    "check-coverage": false,
     "branches": 100,
     "lines": 100,
     "functions": 100,
@@ -46,23 +46,15 @@
       "text"
     ],
     "extension": [
-      ".coffee"
+      ".coffee",
+      ".js",
+      ".ts"
     ],
-    "include": [
-      "source/"
-    ],
-    "exclude": [
-      "lsp/",
-      "node_modules/",
-      "source/exp/",
-      "source/cli.coffee",
-      "source/old_main.coffee",
-      "source/rules.coffee"
-    ],
-    "sourceMap": false,
-    "instrument": false
+    "sourceMap": true,
+    "instrument": true
   },
   "scripts": {
+    "compile": "./node_modules/.bin/tsc source/machine.ts && cp source/machine.* dist/ && node esbuild.js",
     "prepare": "bash script/prepare",
     "test": "nyc mocha"
   },

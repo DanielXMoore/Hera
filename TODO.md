@@ -1,6 +1,12 @@
 TODO
 ====
 
+- [ ] Restore Coverage data
+- [ ] esbuild
+  - [ ] Browser build
+  - [ ] Node dist
+  - [ ] Test parse -> compile -> parse round trip
+  - [ ] defer on TypeScript compile output if necessary
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
 - [ ] Languages
