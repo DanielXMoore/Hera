@@ -3,16 +3,16 @@ TODO
 
 - [ ] Restore Coverage data
   - [ ] nyc coverage path is source/source for ../source/* files referenced in dist/main.js.map
-  - [ ] Hybrid Coffee + TypeScript coverage
+  - [x] Hybrid Coffee + TypeScript coverage
   - [ ] 100% Coverage
   Looks like it is being broken by coffeeScriptPlugin for esbuild.
 - [ ] esbuild
   - [ ] Browser build
+  - [x] Build cli bin file
   - [x] Node dist
   - [ ] Test parse -> compile -> parse round trip
   - [ ] defer on TypeScript compile output if necessary
-  - [ ] emit sourcemaps
-  - [ ] Build bin file
+  - [x] emit sourcemaps
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
 - [x] Languages

@@ -65,11 +65,11 @@
     "instrument": false
   },
   "scripts": {
-    "compile": "rm -rf dist && mkdir dist && ./node_modules/.bin/tsc source/machine.ts && cp source/machine.* dist/ && node esbuild.js",
+    "compile": "bash script/compile",
     "test": "nyc mocha"
   },
   "bin": {
-    "hera": "bin/hera"
+    "hera": "dist/hera"
   },
   "files": [
     "dist/",
