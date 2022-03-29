@@ -267,6 +267,8 @@
       "StringValue",
       "NumberValue",
       "Variable",
+      "BooleanValue",
+      "NullValue",
       [
         "S",
         [
@@ -316,12 +318,62 @@
       "f": "return {v: parseInt($1, 10)}"
     }
   ],
+  "BooleanValue": [
+    "/",
+    [
+      [
+        "L",
+        "true",
+        {
+          "f": "return true"
+        }
+      ],
+      [
+        "L",
+        "false",
+        {
+          "f": "return false"
+        }
+      ]
+    ]
+  ],
+  "NullValue": [
+    "/",
+    [
+      [
+        "L",
+        "null",
+        {
+          "f": "return null"
+        }
+      ],
+      [
+        "L",
+        "undefined",
+        {
+          "f": "return undefined"
+        }
+      ]
+    ]
+  ],
   "NumberValue": [
-    "R",
-    "\\d+(\\.\\d+)?",
-    {
-      "f": "return parseInt($0, 10)"
-    }
+    "/",
+    [
+      [
+        "R",
+        "0x[\\da-fA-F]+",
+        {
+          "f": "return parseInt($0, 16)"
+        }
+      ],
+      [
+        "R",
+        "\\d+(\\.\\d+)?",
+        {
+          "f": "return parseInt($0, 10)"
+        }
+      ]
+    ]
   ],
   "StringValue": [
     "S",

@@ -101,8 +101,6 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
   switch typeof mapping
     when "string"
       JSON.stringify(mapping)
-    when "number"
-      mapping
     when "object"
       if Array.isArray mapping
         "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"
@@ -120,10 +118,8 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
-    when "undefined"
-      "undefined"
-    else
-      throw new Error "Unknown mapping type: #{mapping}"
+    else # number, boolean, null, undefined
+      String(mapping)
 
 compileHandler = (options, arg, name) ->
   if typeof arg is "string"

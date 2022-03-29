@@ -81,6 +81,8 @@ StructuralMapping
   StringValue
   NumberValue
   Variable
+  BooleanValue
+  NullValue
   OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
     $3.unshift($2); return $3
 
@@ -91,7 +93,21 @@ Variable
   /\$(\d)/ ->
     return {v: parseInt($1, 10)}
 
+BooleanValue
+  "true" ->
+    return true
+  "false" ->
+    return false
+
+NullValue
+  "null" ->
+    return null
+  "undefined" ->
+    return undefined
+
 NumberValue
+  /0x[\da-fA-F]+/ ->
+    return parseInt($0, 16)
   /\d+(\.\d+)?/ ->
     return parseInt($0, 10)
 

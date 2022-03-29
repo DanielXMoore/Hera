@@ -253,6 +253,14 @@ describe "Hera", ->
 
       assert.deepEqual ["B", ["C", ["C", "A"]], "A"], parse "ABC"
 
+    it "should work with basic types", ->
+      {parse} = compile """
+        Rule
+          "" -> [true, false, null, undefined, 0xff, 0xFF, 7, "A"]
+      """
+
+      assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A"], parse ""
+
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
       {parse} = compile """
@@ -443,19 +451,6 @@ describe "Hera", ->
     assert.throws ->
       hera.compile(rules)
     , /unknown object mapping/
-
-  it "should throw an error when mapping to an unknown type", ->
-    rules = hera.parse """
-      Rule
-        "a"
-    """
-
-    # Hack in an unknown type for the mapping value
-    rules.Rule[2] = false
-
-    assert.throws ->
-      hera.compile(rules)
-    , /Unknown mapping type/
 
   it "throw an error when encountering an unknown operator", ->
     rules = hera.parse """
