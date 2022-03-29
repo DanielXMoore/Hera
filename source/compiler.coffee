@@ -125,8 +125,6 @@ compileHandler = (options, arg, name) ->
   if typeof arg is "string"
     return arg # reference to other named parser function
 
-  return unless Array.isArray(arg)
-
   [op, args, h] = arg
 
   if h?.f? # function mapping

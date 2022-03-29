@@ -1,7 +1,5 @@
-hera = require "../source/main"
+{generate} = hera = require "../source/main"
 test = it
-
-compile = (src) -> hera.generate(src)
 
 describe "Build rules", ->
   it.skip "should update rules file", ->
@@ -11,7 +9,7 @@ describe "Build rules", ->
 describe "Hera", ->
   it "should do math example", ->
     grammar = readFile("samples/math.hera")
-    parser = compile(grammar)
+    parser = generate(grammar)
 
     result = parser.parse """
       8 + 3 / (2 + 5)
@@ -21,7 +19,7 @@ describe "Hera", ->
 
   it "should do url example", ->
     grammar = readFile("samples/url.hera")
-    parser = compile(grammar)
+    parser = generate(grammar)
 
     {scheme, fragment, host, path, port, query} = parser.parse """
       http://danielx.net:443/%21?query#fragment
@@ -64,7 +62,7 @@ describe "Hera", ->
       # comment
     """
 
-    parser = compile(grammar)
+    parser = generate(grammar)
     assert parser.parse("a")
 
   it "should handle rules that are aliases", ->
@@ -79,12 +77,12 @@ describe "Hera", ->
         "."
     """
 
-    parser = compile(grammar)
+    parser = generate(grammar)
     assert parser.parse(".")
 
   it "should recursively generate itself", ->
     heraSrc = readFile('samples/hera.hera')
-    {parse} = compile heraSrc
+    {parse} = generate heraSrc
 
     assert.deepEqual hera.parse(heraSrc), parse(heraSrc)
 
@@ -103,6 +101,15 @@ describe "Hera", ->
     tsSrc = hera.compile hera.parse(heraSrc), types: true
 
     assert tsSrc
+
+  it "should annotate simple regexp types when compiling", ->
+    heraSrc = """
+      Rule
+        /abc/
+    """
+    tsSrc = hera.compile hera.parse(heraSrc), types: true
+
+    assert tsSrc.includes('Parser<"abc">')
 
   it "numbered regex groups in mappings", ->
     grammar = """
@@ -127,7 +134,7 @@ describe "Hera", ->
           return $0 + $1
     """
 
-    {parse} = compile(grammar)
+    {parse} = generate(grammar)
 
     assert.deepEqual parse("aab"), ["aa", "b"]
     assert.deepEqual parse("cdd"), ["c", "dd"]
@@ -144,7 +151,7 @@ describe "Hera", ->
         /a|b?/
     """
 
-    {parse} = compile(grammar)
+    {parse} = generate(grammar)
     assert.deepEqual parse("ab"), "ab"
     assert.deepEqual parse(""), ""
     assert.deepEqual parse("bb"), "bb"
@@ -158,14 +165,14 @@ describe "Hera", ->
         /(a?)(b+)c*/
     """
 
-    {parse} = compile(grammar)
+    {parse} = generate(grammar)
 
     assert.deepEqual parse(""), []
     assert.deepEqual parse("ab"), ["ab"]
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
   it "should parse bare character classes as regexes", ->
-    newHera = compile readFile("samples/hera.hera")
+    newHera = generate readFile("samples/hera.hera")
 
     rules = newHera.parse """
       Rule
@@ -199,7 +206,7 @@ describe "Hera", ->
       filename: "test.hera"
 
   it "should parse simple grammars", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         "A"+
         "B"+
@@ -217,7 +224,7 @@ describe "Hera", ->
 
   describe "-> Structural Result", ->
     it "should map regexp groups into the structure", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           /(a)(b)(c)/ -> [$2, $3, $1]
       """
@@ -225,7 +232,7 @@ describe "Hera", ->
       assert.deepEqual ["b", "c", "a"], parse "abc"
 
     it "should map sequence items into the structure", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           "A" "B" "C" -> [$2, $3, $1]
       """
@@ -233,7 +240,7 @@ describe "Hera", ->
       assert.deepEqual ["B", "C", "A"], parse "ABC"
 
     it "should map the entire result as $1", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           Sub* -> ["T", $1]
 
@@ -246,7 +253,7 @@ describe "Hera", ->
       assert.deepEqual ["T", [["A", "B"], ["A", "B"]]], parse "ABAB"
 
     it "should work with nested structures", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           "A" "B" "C" -> [$2, [$3, [$3, $1]], $1]
       """
@@ -254,7 +261,7 @@ describe "Hera", ->
       assert.deepEqual ["B", ["C", ["C", "A"]], "A"], parse "ABC"
 
     it "should work with basic types", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           "" -> [true, false, null, undefined, 0xff, 0xFF, 7, "A"]
       """
@@ -263,7 +270,7 @@ describe "Hera", ->
 
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           $("AAA" "B" "C")
       """
@@ -271,7 +278,7 @@ describe "Hera", ->
       assert.equal "AAABC", parse "AAABC"
 
     it "should keep pass through fail states", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           $A / $B
         A
@@ -287,7 +294,7 @@ describe "Hera", ->
       , /Expected:\s*A/
 
     it "should correctly span repetitions", ->
-      {parse} = compile """
+      {parse} = generate """
         Rule
           $("A" "B" "C")*
       """
@@ -296,7 +303,7 @@ describe "Hera", ->
       assert.equal "", parse ""
 
     it "should handle nested rules", ->
-      {parse} = compile """
+      {parse} = generate """
         RegExpLiteral
           "/" !_ $RegExpCharacter* "/" -> ["R", $3]
           CharacterClassExpression
@@ -333,7 +340,7 @@ describe "Hera", ->
       assert.deepEqual ["R", "[^]a\\[\\^b]"], parse "/[^]a\\[\\^b]/"
 
   it "should work with assertions", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         &"B" "C"+
         &"A" "A"+ ->
@@ -343,7 +350,7 @@ describe "Hera", ->
     assert.equal parse("AAAAAA").length, 6
 
   it "should have string handlers", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         "A"+ -> "a"
         "B"+ -> "b"
@@ -365,7 +372,7 @@ describe "Hera", ->
 
   # TODO: rethink tokenize?
   it.skip "should tokenize", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         &"D" /D/ -> "d"
         !"C" A+ -> "a"
@@ -388,7 +395,7 @@ describe "Hera", ->
     assert.equal parse("BBB"), "b"
 
   it "should skip infinite zero width loops", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         ""* "a"
     """
@@ -397,7 +404,7 @@ describe "Hera", ->
     assert.deepEqual result, [[], "a"]
 
   it "should throw an error when there is unconsumed input", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         "a"
     """
@@ -407,7 +414,7 @@ describe "Hera", ->
     , /Unconsumed input/
 
   it "should throw an error when there are no failed expectations but still input remaining", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         ""
     """
@@ -417,7 +424,7 @@ describe "Hera", ->
     , /Unconsumed input/
 
   it "throws an error when parsing non-strings", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         "a"
     """
@@ -427,7 +434,7 @@ describe "Hera", ->
     , /Input must be a string/
 
   it "should throw an error when running out of input", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         "aaaa"
         EOF
@@ -438,6 +445,21 @@ describe "Hera", ->
     assert.throws ->
       parse "aaa"
     , /Rule "aaaa"/
+
+  it "should compile object mappings", ->
+    rules = hera.parse """
+      Rule
+        "a"
+    """
+
+    # TODO: hacked in object mapping
+    rules.Rule[2] = {
+      o: {
+        a: [{o: true}, "b", {v: 0}]
+      }
+    }
+
+    assert hera.compile rules
 
   it "should throw an error when mapping to an unknown mapping object", ->
     rules = hera.parse """
@@ -468,7 +490,7 @@ describe "Hera", ->
   it "should error when referencing an unknown rule", ->
     assert.throws ->
       # TODO: throw during compile or even at end of parse?
-      {parse} = compile """
+      {parse} = generate """
         Rule
           "aaaa"
           EOF
@@ -478,7 +500,7 @@ describe "Hera", ->
     , /EOF/
 
   it "should give accurate error message with multiline input", ->
-    {parse} = compile """
+    {parse} = generate """
       Rule
         Line+
       Line

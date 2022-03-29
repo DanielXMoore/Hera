@@ -42,7 +42,7 @@
     ]
   },
   "nyc": {
-    "check-coverage": false,
+    "check-coverage": true,
     "branches": 100,
     "lines": 100,
     "functions": 100,
@@ -60,6 +60,7 @@
       "perf/",
       "source/cli.coffee",
       "source/old_main.coffee",
+      "source/parser.js",
       "test/"
     ],
     "sourceMap": false,
