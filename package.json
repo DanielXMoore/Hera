@@ -57,6 +57,7 @@
       ".ts"
     ],
     "exclude": [
+      "perf/",
       "source/cli.coffee",
       "source/old_main.coffee",
       "test/"
