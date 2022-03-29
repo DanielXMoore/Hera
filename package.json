@@ -4,6 +4,7 @@
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",
+    "@babel/plugin-transform-modules-commonjs": "^7.17.7",
     "@babel/plugin-transform-typescript": "^7.16.8",
     "@babel/register": "^7.17.7",
     "@danielx/coffeecoverage": "4.0.0-pre.1",
@@ -78,5 +79,6 @@
     "dist/",
     "register.js"
   ],
-  "main": "dist/main.js"
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts"
 }

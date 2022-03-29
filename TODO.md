@@ -5,7 +5,7 @@ TODO
   - [x] Hybrid Coffee + TypeScript coverage using babel
 - [ ] Testing
   - [ ] 100% Coverage
-  - [ ] Run benchmark separate from tests with non-instrumented code
+  - [x] Run benchmark separate from tests with non-instrumented code
   - [ ] Reconcile source-map-support and CoffeeScript both patching prepareStackTrace
 - [ ] esbuild
   - [ ] Browser build
@@ -13,6 +13,7 @@ TODO
   - [x] Node dist
   - [ ] Test parse -> compile -> parse round trip
   - [x] emit sourcemaps
+  - [x] emit types
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
 - [x] Languages

@@ -50,6 +50,8 @@ export type NodeOp = "+" | "*" | "?" | "&" | "!" | "$"
 export type Literal = [TerminalOp, string]
 export type HeraAST = [NodeOp, HeraAST, Handler?] | [SequenceOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
 
+export type HeraRules = { [key: string]: HeraAST }
+
 type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
 
 /**
