@@ -273,7 +273,7 @@ reType = (types, str) ->
           JSON.stringify(s)
 
     if specifics
-      "as Parser<#{specifics.join("|")}>"
+      " as Parser<#{specifics.join("|")}>"
     else
       ""
   else

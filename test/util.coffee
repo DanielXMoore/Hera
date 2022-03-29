@@ -38,8 +38,6 @@ describe "util", ->
       o: "TODO"
     }
 
-    console.log rules
-
     assert.throws ->
       decompile rules
     , /TODO/
@@ -53,8 +51,6 @@ describe "util", ->
     rules.Rule[2] = {
       yo: "wat"
     }
-
-    console.log rules
 
     assert.throws ->
       decompile rules

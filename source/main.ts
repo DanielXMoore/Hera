@@ -8,10 +8,14 @@ const execMod = (src: string) => {
   return m.exports;
 }
 
+type CompilerOptions = {
+  types: boolean
+}
+
 module.exports = {
   parse: parse,
-  compile: (src: string) => {
-    return compile(src)
+  compile: (src: string, options?: CompilerOptions) => {
+    return compile(src, options)
   },
   generate: (src: string) => execMod(compile(parse(src)))
 }

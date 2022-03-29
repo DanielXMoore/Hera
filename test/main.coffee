@@ -84,7 +84,7 @@ describe "Hera", ->
 
   it "should recursively generate itself", ->
     heraSrc = readFile('samples/hera.hera')
-    {parse} = compile readFile('samples/hera.hera')
+    {parse} = compile heraSrc
 
     assert.deepEqual hera.parse(heraSrc), parse(heraSrc)
 
@@ -97,6 +97,12 @@ describe "Hera", ->
 
     """
     assert.deepEqual(hera.parse(grammar), parse(grammar))
+
+  it "should compile to ts", ->
+    heraSrc = readFile('samples/hera.hera')
+    tsSrc = hera.compile hera.parse(heraSrc), types: true
+
+    assert tsSrc
 
   it "numbered regex groups in mappings", ->
     grammar = """

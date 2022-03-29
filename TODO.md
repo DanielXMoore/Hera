@@ -2,16 +2,16 @@ TODO
 ====
 
 - [ ] Restore Coverage data
-  - [ ] nyc coverage path is source/source for ../source/* files referenced in dist/main.js.map
-  - [x] Hybrid Coffee + TypeScript coverage
+  - [x] Hybrid Coffee + TypeScript coverage using babel
+- [ ] Testing
   - [ ] 100% Coverage
-  Looks like it is being broken by coffeeScriptPlugin for esbuild.
+  - [ ] Run benchmark separate from tests with non-instrumented code
+  - [ ] Reconcile source-map-support and CoffeeScript both patching prepareStackTrace
 - [ ] esbuild
   - [ ] Browser build
   - [x] Build cli bin file
   - [x] Node dist
   - [ ] Test parse -> compile -> parse round trip
-  - [ ] defer on TypeScript compile output if necessary
   - [x] emit sourcemaps
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
@@ -26,7 +26,6 @@ TODO
     - [x] Fix $ token at start of line not coloring properly
     - [x] Update to latest Hera
 - [ ] Handle object structure including nesting.
-- [ ] Test $C and handler
 - [ ] Add undefined rule error in vscode extension
 - [x] Remove _ as a rule name because golang doesn't like it
 - [x] Switch to rules.json
