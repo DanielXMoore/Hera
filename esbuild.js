@@ -18,7 +18,7 @@ const coffeeScriptPlugin = require('esbuild-coffeescript')
 // }).catch(() => process.exit(1))
 
 esbuild.build({
-  entryPoints: ['source/main.coffee'],
+  entryPoints: ['source/main.ts'],
   tsconfig: "./tsconfig.json",
   bundle: true,
   external: ["fs"],

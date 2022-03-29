@@ -1,5 +1,5 @@
 {decompile} = require "../source/util"
-hera = require "../"
+hera = require "../source/main"
 rules = require "../source/rules"
 
 describe "util", ->
@@ -22,7 +22,40 @@ describe "util", ->
       Rule
         ("A" / "C") ("B" / "D")
         "Z" -> "z"
+        "N" -> 0
     """
 
     decompiled = decompile rules
     assert.deepEqual hera.parse(decompiled), rules
+
+  it "currently throws an error when decompiling to an object format", ->
+    rules = hera.parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[2] = {
+      o: "TODO"
+    }
+
+    console.log rules
+
+    assert.throws ->
+      decompile rules
+    , /TODO/
+
+  it "should throw an error when decompiling an unknown format", ->
+    rules = hera.parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[2] = {
+      yo: "wat"
+    }
+
+    console.log rules
+
+    assert.throws ->
+      decompile rules
+    , /Unknown/

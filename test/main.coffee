@@ -1,18 +1,7 @@
-hera = require "../"
+hera = require "../source/main"
 test = it
 
-execMod = (src) ->
-  m = {exports: {}}
-  Function("module", "exports", src)(m, m.exports)
-
-  return m.exports
-
-compile = (src) ->
-  src = hera.compile hera.parse(src), false
-
-  # console.log src
-
-  return execMod(src)
+compile = (src) -> hera.generate(src)
 
 describe "Build rules", ->
   it.skip "should update rules file", ->

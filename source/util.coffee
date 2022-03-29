@@ -1,4 +1,4 @@
-hera = require "../"
+hera = require "./main"
 
 module.exports =
   # Convert the rules to source text in hera grammar
@@ -23,6 +23,8 @@ structuralToSource = (mapping) ->
         "$#{mapping.v}"
       else if mapping.o?
         throw new Error "TODO"
+      else
+        throw new Error "Unknown mapping object"
 
 # handler to source
 hToS = (h) ->

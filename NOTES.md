@@ -65,3 +65,62 @@ type RegExpCharacterClass<T> = [T, T] // $0 and $1 are the same
 type $R0_T = Parser<RegExpCharacterClass<"$" | "&" | "!">>
 type $R1_T = Parser<RegExpCharacterClass<"+" | "?" | "*">>
 ```
+
+Istanbul TypeScript + CoffeeScript code coverage
+------------------------------------------------
+
+It would be nice to have really good code coverage regardless of JS, TS, or
+CoffeeScript. CoffeeScript has good coverage reports when using
+@danielx/coffeecoverage. CoffeeScript coverage is not good when using
+sourcemaps, but TS coverage seems ok with them.
+
+Istanbul/ncy works ok with either CoffeeScript or TS but combining both is a
+challenge because it is difficult to split out which files should be instrumented
+by nyc and which should be instrumented by coffeecoverage.
+
+It seems promising to use a custom istanbul instrumentor to handle instrumenting
+TS/JS and use coffeecoverage for CoffeeScript. This should give reliabel reports
+with minor changes to configuration and setup.
+
+An alternative approach would be to use sourcemaps and istanbuls built in
+instrumentation for everything. This has the benefit of testing the actuall
+dist/main.js bundle but the source maps aren't great and become much worse after
+minification even for TS code. For high quality coverage, especially at
+thresholds around 100%, this seems like too much work to get all sourcemaps to
+be viable.
+
+Thought: since nyc + istanbul uses babel underneath anyway, why not use a babel
+config to handle this for testing? There are probably many more documented cases
+of people mixing and matching languages and plugins using babel and since we're
+already using babel via nyc it's not clogging up our dependencies any extra.
+
+Babel
+-----
+
+What is the differenc between presets and plugins?
+
+Presets are collections of plugins. Plugins run before presets in the order
+they are listed. Presets run after in the reverse order they are listed.
+
+What is @babel/preset-env?
+
+@babel/preset-env transpiles JavaScript language features to different runtime
+environments. It does this automatically without you needing to specify
+individual babel plugins but only specifing the target runtime (browsers, node,
+es*, etc.).
+
+What is @babel/plugin-transform-runtime?
+
+Babel polyfills runtime code like _extend in each file that uses those
+features. Using transform-runtime will make all those references use
+@babel/runtime to cut down on duplication across files.
+
+Babel + CoffeeCoverage Line numbers
+-----------------------------------
+
+@babel/register installs source-map-support which hooks into
+Error.prepareStackTrace the first time a .ts or .js file is compiled with babel.
+This override the CoffeeCoverage/CoffeeScript hook to Error.prepareStackTrace.
+
+Not sure how to get these to play nice yet so just going with the Coffee stack
+traces for now.

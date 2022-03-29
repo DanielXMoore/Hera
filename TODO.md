@@ -2,17 +2,23 @@ TODO
 ====
 
 - [ ] Restore Coverage data
+  - [ ] nyc coverage path is source/source for ../source/* files referenced in dist/main.js.map
+  - [ ] Hybrid Coffee + TypeScript coverage
+  - [ ] 100% Coverage
+  Looks like it is being broken by coffeeScriptPlugin for esbuild.
 - [ ] esbuild
   - [ ] Browser build
-  - [ ] Node dist
+  - [x] Node dist
   - [ ] Test parse -> compile -> parse round trip
   - [ ] defer on TypeScript compile output if necessary
+  - [ ] emit sourcemaps
+  - [ ] Build bin file
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
-- [ ] Languages
+- [x] Languages
   - [x] Compile to TypeScript
   - [x] Compile to JavaScript
-  - [ ] Compile to Go
+  - [ ] ~~Compile to Go~~
 - [x] Display regexp properly in $EXPECT
 - [x] Handle nested array structures
 - [x] Change structural handlers to use $1, $2 rather than 1, 2, etc. so that number literals can be part of the result.

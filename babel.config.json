@@ -1,0 +1,13 @@
+{
+  "plugins": [
+    "@babel/plugin-transform-typescript",
+    "istanbul"
+  ],
+  "only": [
+    "**/*.js",
+    "**/*.ts"
+  ],
+  "ignore": [
+    "**/*.coffee"
+  ]
+}
