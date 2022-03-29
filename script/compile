@@ -10,4 +10,5 @@ node esbuild.js
 coffee --compile --bare --no-header --output dist/ source/cli.coffee
 BIN="dist/hera"
 echo "#!/usr/bin/env node" | cat - dist/cli.js > "$BIN"
+chmod +x "$BIN"
 rm dist/cli.js
