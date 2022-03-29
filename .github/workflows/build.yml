@@ -20,6 +20,7 @@ jobs:
         yarn
         yarn compile
         yarn test
+        yarn benchmark
 
     - name: Coveralls
       uses: coverallsapp/github-action@master

@@ -21,18 +21,18 @@ bench = (alternatives) ->
   suite.run
     async: true
 
-describe.skip "Benchmark", ->
-  it "check console", ->
-    oldHera = require "../source/old_main"
-    compiledHera = require "../source/parser"
+console.log "running benchmark"
 
-    grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
+oldHera = require "../source/old_main"
+compiledHera = require "../source/parser"
+
+grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
+oldHera.parse grammar
+compiledHera.parse grammar
+
+bench
+  oldHera: ->
     oldHera.parse grammar
+
+  compiledHera: ->
     compiledHera.parse grammar
-
-    bench
-      oldHera: ->
-        oldHera.parse grammar
-
-      compiledHera: ->
-        compiledHera.parse grammar

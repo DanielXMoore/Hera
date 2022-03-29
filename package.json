@@ -65,6 +65,7 @@
     "instrument": false
   },
   "scripts": {
+    "benchmark": "coffee perf/benchmark.coffee",
     "compile": "bash script/compile",
     "test": "nyc mocha"
   },
