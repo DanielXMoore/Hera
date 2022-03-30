@@ -1,0 +1,15 @@
+{ readFile } = require 'fs/promises'
+path = require 'path'
+{ parse, compile } = require "./"
+
+module.exports =
+  name: 'hera'
+  setup: (build) ->
+    build.onLoad { filter: /.\.hera$/ }, (args) ->
+      readFile(args.path, 'utf8')
+      .then (source) ->
+        filename = path.relative(process.cwd(), args.path)
+
+        contents: compile parse(source, {filename})
+      .catch (e) ->
+        errors: [ text: e.message ]

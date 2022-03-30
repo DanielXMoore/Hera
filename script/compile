@@ -5,10 +5,15 @@ rm -rf dist
 mkdir dist
 tsc source/machine.ts
 cp source/machine.* dist/
-node esbuild.js
+coffee esbuild.coffee
 
+# Build types
 tsc source/main.ts --declaration --emitDeclarationOnly --outfile dist/main.d.ts
 
+# build hera esbuild-plugin
+coffee --compile --bare --no-header --output ./ source/esbuild-plugin.coffee
+
+# Build 'hera' cli
 coffee --compile --bare --no-header --output dist/ source/cli.coffee
 BIN="dist/hera"
 echo "#!/usr/bin/env node" | cat - dist/cli.js > "$BIN"

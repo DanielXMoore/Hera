@@ -450,15 +450,15 @@ function fail(pos: number, expected: any) {
   return
 }
 
-type Grammar = { [key: string]: Parser<any> }
+export type HeraGrammar = { [key: string]: Parser<any> }
 
-export interface ParserOptions<T extends Grammar> {
+export interface ParserOptions<T extends HeraGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T
 }
 
-export function parserState<G extends Grammar>(grammar: G) {
+export function parserState<G extends HeraGrammar>(grammar: G) {
 
   /** Utility function to convert position in a string input to line:colum */
   function location(input: string, pos: number) {

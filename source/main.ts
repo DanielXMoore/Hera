@@ -1,4 +1,4 @@
-import { HeraRules, Parser } from "./machine"
+import { HeraGrammar, HeraRules, ParserOptions } from "./machine"
 
 import parser from "./parser"
 //@ts-ignore
@@ -15,10 +15,18 @@ type CompilerOptions = {
   types: boolean
 }
 
-const compile: (rules: HeraRules, options?: CompilerOptions) => string = compiler.compile
-const parse: (input: string) => HeraRules = parser.parse
+const compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string = (rulesOrString, options) => {
+  var rules: HeraRules
+  if (typeof rulesOrString === "string") {
+    rules = parse(rulesOrString)
+  } else {
+    rules = rulesOrString
+  }
+  return compiler.compile(rules, options)
+}
+const parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules = parser.parse
 
-const generate = (src: string) => execMod(compile(parse(src))) as Parser<unknown>
+const generate = <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as (input: string, options?: ParserOptions<T>) => unknown
 
 export {
   parse,

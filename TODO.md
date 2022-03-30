@@ -9,11 +9,13 @@ TODO
   - [ ] Reconcile source-map-support and CoffeeScript both patching prepareStackTrace
 - [ ] esbuild
   - [ ] Browser build
+    - [ ] need to merge in fs.readFileSync machine.ts and machine.js contents
   - [x] Build cli bin file
   - [x] Node dist
-  - [ ] Test parse -> compile -> parse round trip
+  - [x] Test parse -> compile -> parse round trip
   - [x] emit sourcemaps
   - [x] emit types
+- [x] Hera esbuild-plugin
 - [x] Split out decompile to util
 - [x] Decompile regexes to character class expressions when possible.
 - [x] Languages

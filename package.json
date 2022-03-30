@@ -77,6 +77,7 @@
   },
   "files": [
     "dist/",
+    "esbuild-plugin.js",
     "register.js"
   ],
   "main": "dist/main.js",
