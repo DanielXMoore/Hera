@@ -98,7 +98,7 @@ describe "Hera", ->
 
   it "should compile to ts", ->
     heraSrc = readFile('samples/hera.hera')
-    tsSrc = hera.compile hera.parse(heraSrc), types: true
+    tsSrc = hera.compile heraSrc, types: true
 
     assert tsSrc
 

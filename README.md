@@ -149,6 +149,14 @@ Changelog
 ---
 
 - 0.7.3
+  - Using compiled parser instead of VM for performance boost.
+  - Publishing TypeScript types with package.
+  - cjs loader ```javascript
+    require("hera/register")
+    const {parse} = require("./parser.hera")
+  ```
+  - esbuild plugin `require("hera/esbuild-plugin")`
+  - `hera` CLI tool with experimental TypeScript output support `hera --types < cool-app.hera > parser.ts`
   - Added support for number literals in structural handlers.
   - Changed structural handling to use $1, etc. instead of 1 for positional variables.
   - Added prefix `$` text operator.
@@ -168,13 +176,9 @@ Compiling parsers to TypeScript.
 Glossary
 ---
 
-`EOL` - End of line
-
 `EOS` - End of statement
 
 `EOF` - End of file/input
-
-`_` - Whitespace
 
 V2 Ideas
 ---

@@ -4,7 +4,7 @@ TODO
 - [ ] Restore Coverage data
   - [x] Hybrid Coffee + TypeScript coverage using babel
 - [ ] Testing
-  - [ ] 100% Coverage
+  - [x] 100% Coverage
   - [x] Run benchmark separate from tests with non-instrumented code
   - [ ] Reconcile source-map-support and CoffeeScript both patching prepareStackTrace
 - [ ] esbuild
