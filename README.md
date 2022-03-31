@@ -3,7 +3,7 @@ Hera
 
 > I sing of golden-throned Hera whom Rhea bare. Queen of the Immortals is she, surpassing all in beauty: she is the sister and wife of loud-thundering Zeus,--the glorious one whom all the blessed throughout high Olympos reverence and honour even as Zeus who delights in thunder.
 >
-> — Homeric Hymn 12 to Hera (trans. Evelyn-White) (Greek epic C7th to 4th B.C.
+> — Homeric Hymn 12 to Hera (trans. Evelyn-White) (Greek epic C7th to 4th B.C.)
 
 [![Build](https://github.com/DanielXMoore/hera/actions/workflows/build.yml/badge.svg)](https://github.com/DanielXMoore/hera/actions/workflows/build.yml)
 [![Coverage Status](https://coveralls.io/repos/github/DanielXMoore/Hera/badge.svg?branch=main)](https://coveralls.io/github/DanielXMoore/Hera?branch=main)
@@ -152,10 +152,10 @@ Changelog
   - Using compiled parser instead of VM for performance boost.
   - Publishing TypeScript types with package.
   - cjs loader ```javascript
-    require("hera/register")
+    require("@danielx/hera/register")
     const {parse} = require("./parser.hera")
   ```
-  - esbuild plugin `require("hera/esbuild-plugin")`
+  - esbuild plugin `require("@danielx/hera/esbuild-plugin")`
   - `hera` CLI tool with experimental TypeScript output support `hera --types < cool-app.hera > parser.ts`
   - Added support for number literals in structural handlers.
   - Changed structural handling to use $1, etc. instead of 1 for positional variables.
