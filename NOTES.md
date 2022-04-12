@@ -120,7 +120,7 @@ Babel + CoffeeCoverage Line numbers
 
 @babel/register installs source-map-support which hooks into
 Error.prepareStackTrace the first time a .ts or .js file is compiled with babel.
-This override the CoffeeCoverage/CoffeeScript hook to Error.prepareStackTrace.
+This override the CoffeeScript hook to Error.prepareStackTrace.
 
 Not sure how to get these to play nice yet so just going with the Coffee stack
 traces for now.
