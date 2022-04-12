@@ -1,7 +1,7 @@
 TODO
 ====
 
-- [ ] Restore Coverage data
+- [x] Restore Coverage data
   - [x] Hybrid Coffee + TypeScript coverage using babel
 - [ ] Testing
   - [x] 100% Coverage
@@ -28,6 +28,7 @@ TODO
   - [x] Update VSCode Extension
     - [x] Fix $ token at start of line not coloring properly
     - [x] Update to latest Hera
+- [ ] Add `import` so grammars can import rules from sub-grammars.
 - [ ] Handle object structure including nesting.
 - [ ] Add undefined rule error in vscode extension
 - [x] Remove _ as a rule name because golang doesn't like it
