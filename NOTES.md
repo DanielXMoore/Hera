@@ -46,6 +46,8 @@ function Arrow(state: ParseState) {
 
 Pulling fail out of the parser constructor fixes it.
 
+https://kyleshevlin.com/discriminated-unions-and-destructuring-in-typescript
+
 Cool Ideas
 ----------
 

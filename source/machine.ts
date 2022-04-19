@@ -41,14 +41,21 @@ export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T
 export type Terminal = string | RegExp
 
 export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-export type StructuralTerminal = string | number | { v: PositionalVariable }
+export type StructuralTerminal =
+  string |
+  number |
+  { v: PositionalVariable } |
+  { o: { [key: string]: StructuralHandling } }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { f: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
 export type SequenceOp = "S" | "/"
 export type NodeOp = "+" | "*" | "?" | "&" | "!" | "$"
 export type Literal = [TerminalOp, string]
-export type HeraAST = [NodeOp, HeraAST, Handler?] | [SequenceOp, HeraAST[], Handler?] | [TerminalOp, string, Handler?] | string
+export type TerminalNode = [TerminalOp, string, Handler?]
+export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
+export type OperatorNode = [NodeOp, HeraAST, Handler?]
+export type HeraAST = OperatorNode | SequenceNode | TerminalNode | string
 
 export type HeraRules = { [key: string]: HeraAST }
 
