@@ -26,7 +26,7 @@ EscapeSequence
     return '\\' + $2
 
 GroupPrefix
-  Name
+  GroupName
   NonCapturing
 
 NonCapturing
