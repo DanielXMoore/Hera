@@ -11,3 +11,19 @@ if process.argv.includes '--ast'
 
 process.stdout.write compile ast,
   types: process.argv.includes '--types'
+
+# Write out cli io
+if process.argv.includes '--cli'
+  process.stdout.write """
+
+
+    if (require.main === module) {
+      const encoding = "utf8"
+      const fs = require("fs")
+
+      const input = fs.readFileSync(process.stdin.fd, encoding)
+      const ast = parse(input)
+
+      process.stdout.write(JSON.stringify(ast, null, 2))
+    }
+  """
