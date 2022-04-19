@@ -534,10 +534,12 @@ function ChoiceExpression(state) {
   return ChoiceExpression$0(state);
 }
 
-const Expression$0 = Suffix;
-const Expression$1 = $T($S(PrefixOperator, Suffix), function (value) { return [value[0], value[1]] });
+const Expression$0 = $TS($S($E(PrefixOperator), Suffix), function ($loc, $0, $1, $2) {
+  if ($1) return [$1, $2]
+  else return $2
+});
 function Expression(state) {
-  return Expression$0(state) || Expression$1(state)
+  return Expression$0(state);
 }
 
 const PrefixOperator$0 = $R$0($EXPECT($R0, fail, "PrefixOperator /[$&!]/"));
@@ -545,10 +547,12 @@ function PrefixOperator(state) {
   return PrefixOperator$0(state);
 }
 
-const Suffix$0 = $T($S(Primary, SuffixOperator), function (value) { return [value[1], value[0]] });
-const Suffix$1 = Primary;
+const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function ($loc, $0, $1, $2) {
+  if ($2) return [$2, $1]
+  else return $1
+});
 function Suffix(state) {
-  return Suffix$0(state) || Suffix$1(state)
+  return Suffix$0(state);
 }
 
 const SuffixOperator$0 = $R$0($EXPECT($R1, fail, "SuffixOperator /[+?*]/"));

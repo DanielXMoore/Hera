@@ -37,15 +37,17 @@ ChoiceExpression
   Space "/" Space Expression -> $4
 
 Expression
-  Suffix
-  PrefixOperator Suffix -> [$1, $2]
+  PrefixOperator? Suffix ->
+    if ($1) return [$1, $2]
+    else return $2
 
 PrefixOperator
   [$&!]
 
 Suffix
-  Primary SuffixOperator -> [$2, $1]
-  Primary
+  Primary SuffixOperator? ->
+    if ($2) return [$2, $1]
+    else return $1
 
 SuffixOperator
   [+?*]

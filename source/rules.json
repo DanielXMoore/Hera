@@ -112,50 +112,34 @@
     }
   ],
   "Expression": [
-    "/",
+    "S",
     [
-      "Suffix",
       [
-        "S",
-        [
-          "PrefixOperator",
-          "Suffix"
-        ],
-        [
-          {
-            "v": 1
-          },
-          {
-            "v": 2
-          }
-        ]
-      ]
-    ]
+        "?",
+        "PrefixOperator"
+      ],
+      "Suffix"
+    ],
+    {
+      "f": "if ($1) return [$1, $2]\nelse return $2"
+    }
   ],
   "PrefixOperator": [
     "R",
     "[$&!]"
   ],
   "Suffix": [
-    "/",
+    "S",
     [
+      "Primary",
       [
-        "S",
-        [
-          "Primary",
-          "SuffixOperator"
-        ],
-        [
-          {
-            "v": 2
-          },
-          {
-            "v": 1
-          }
-        ]
-      ],
-      "Primary"
-    ]
+        "?",
+        "SuffixOperator"
+      ]
+    ],
+    {
+      "f": "if ($2) return [$2, $1]\nelse return $1"
+    }
   ],
   "SuffixOperator": [
     "R",
