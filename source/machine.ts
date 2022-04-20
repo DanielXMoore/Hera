@@ -447,7 +447,6 @@ const failExpected = Array(16)
 let failIndex = 0
 let maxFailPos = 0
 
-//@ts-expect-error
 function fail(pos: number, expected: any) {
   if (pos < maxFailPos) return
 

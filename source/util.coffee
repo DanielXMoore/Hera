@@ -2,7 +2,7 @@ hera = require "./main"
 
 module.exports =
   ###*
-  Convert the rules to source text in hera grammar
+  Convert HeraRules to a Hera source text
   @param rules {import("./machine").HeraRules}
   ###
   decompile: (rules) ->
