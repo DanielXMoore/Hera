@@ -1,3 +1,4 @@
+#@ts-nocheck
 ###
 Hand rolling a self compiling PEG compiler.
 

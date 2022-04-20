@@ -50,15 +50,18 @@ export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { f: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
 export type SequenceOp = "S" | "/"
-export type NodeOp = "+" | "*" | "?" | "&" | "!" | "$"
+export type PrefixOp = "&" | "!" | "$"
+export type SuffixOp = "+" | "*" | "?"
 export type Literal = [TerminalOp, string]
 export type TerminalNode = [TerminalOp, string, Handler?]
 export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
-export type OperatorNode = [NodeOp, HeraAST, Handler?]
-export type HeraAST = OperatorNode | SequenceNode | TerminalNode | string
+export type PrefixNode = [PrefixOp, HeraAST, Handler?]
+export type SuffixNode = [SuffixOp, HeraAST, Handler?]
+export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | string
 
 export type HeraRules = { [key: string]: HeraAST }
 
+//@ts-ignore
 type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
 
 /**
@@ -444,6 +447,7 @@ const failExpected = Array(16)
 let failIndex = 0
 let maxFailPos = 0
 
+//@ts-expect-error
 function fail(pos: number, expected: any) {
   if (pos < maxFailPos) return
 

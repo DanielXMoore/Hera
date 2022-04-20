@@ -1,17 +1,25 @@
 hera = require "./main"
 
 module.exports =
-  # Convert the rules to source text in hera grammar
+  ###*
+  Convert the rules to source text in hera grammar
+  @param rules {import("./machine").HeraRules}
+  ###
   decompile: (rules) ->
     Object.keys(rules).map (name) ->
       value = toS rules[name]
       "#{name}\n  #{value}\n"
     .join("\n")
 
+#
+###*
+@param mapping {import("./machine").StructuralHandling}
+@return {string}
+###
 structuralToSource = (mapping) ->
   switch typeof mapping
     when "number"
-      mapping
+      mapping.toString()
     when "string"
       JSON.stringify(mapping)
     when "object"
@@ -19,34 +27,45 @@ structuralToSource = (mapping) ->
         "[" + mapping.map (m) ->
           structuralToSource(m)
         .join(", ") + "]"
-      else if mapping.v?
+      else if "v" of mapping
         "$#{mapping.v}"
-      else if mapping.o?
+      else if "o" of mapping
         throw new Error "TODO"
       else
         throw new Error "Unknown mapping object"
-
-# handler to source
+#
+###*
+handler to source
+@param h {import("./machine").Handler | undefined}
+###
 hToS = (h) ->
   return "" unless h?
 
-  " -> " + if h.f? # functional handler
+  " -> " +
+  if typeof h is "object" and "f" of h # functional handler
     "\n#{h.f.replace(/^|\n/g, "$&    ")}"
   else # structural handler
     structuralToSource(h)
 
-# toS and decompile generate a source document from the rules AST
+#
+###*
+Generate a source document from the rules AST
+
+@param rule {import("./machine").HeraAST}
+@return {string}
+###
 toS = (rule, depth=0) ->
   if Array.isArray(rule)
-    [f, v, h] = rule
-    switch f
+    [ , , h] = rule
+    switch rule[0]
       when "*", "+", "?"
-        toS(v, depth+1) + f + hToS(h)
+        toS(rule[1], depth+1) + rule[0] + hToS(h)
       when "$", "&", "!"
-        f + toS(v, depth+1) + hToS(h)
+        rule[0] + toS(rule[1], depth+1) + hToS(h)
       when "L"
-        '"' + v + '"' + hToS(h)
+        '"' + rule[1] + '"' + hToS(h)
       when "R"
+        v = rule[1]
         if v is "."
           return v + hToS(h)
 
@@ -58,7 +77,7 @@ toS = (rule, depth=0) ->
           '/' + v + '/' + hToS(h)
 
       when "S"
-        terms = v.map (i) ->
+        terms = rule[1].map (i) ->
           toS i, depth+1
 
         if depth < 1
@@ -67,7 +86,7 @@ toS = (rule, depth=0) ->
           "( " + terms.join(" ") + " )"
 
       when "/"
-        terms = v.map (i) ->
+        terms = rule[1].map (i) ->
           toS i, depth and depth+1
 
         if depth is 0 and !h
