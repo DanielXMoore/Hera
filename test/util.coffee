@@ -1,3 +1,4 @@
+assert = require "assert"
 {decompile} = require "../source/util"
 hera = require "../source/main"
 rules = require "../source/rules"

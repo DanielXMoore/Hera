@@ -118,13 +118,13 @@ compileOp = (tuple, name, defaultHandler, types) ->
 # Only rules have handlers, either one per choice line,
 # or one for the whole deal
 
-regExpHandlerParams = ["$loc"].concat [0...10].map (_, i) -> "$#{i}"
+regExpHandlerParams = ["$skip", "$loc"].concat [0...10].map (_, i) -> "$#{i}"
 
 #
 ###*
-# @type ["$loc", "$0", "$1"]
+# @type ["$skip", "$loc", "$0", "$1"]
 ###
-regularHandlerParams = ["$loc", "$0", "$1"]
+regularHandlerParams = ["$skip", "$loc", "$0", "$1"]
 
 # Offset is so sequences start at the first item in the array
 # and regexps start at the second because the first is the entire match
@@ -184,7 +184,7 @@ compileHandler = (options, arg, name) ->
     if typeof h is "object" and "f" of h # function mapping
       parser = compileOp(arg, name, false, options.types)
       if arg[0] is "S"
-        parameters = ["$loc", "$0"].concat arg[1].map (_, i) -> "$#{i+1}"
+        parameters = ["$skip", "$loc", "$0"].concat arg[1].map (_, i) -> "$#{i+1}"
 
         return """
           $TS(#{parser}, function(#{parameters.join(", ")}) {#{h.f}})

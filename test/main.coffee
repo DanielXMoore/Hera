@@ -1,3 +1,5 @@
+assert = require "assert"
+
 {generate} = hera = require "../source/main"
 test = it
 
@@ -263,10 +265,10 @@ describe "Hera", ->
     it "should work with basic types", ->
       {parse} = generate """
         Rule
-          "" -> [true, false, null, undefined, 0xff, 0xFF, 7, "A"]
+          "" -> [true, false, null, undefined, 0xff, 0xFF, 7, "A", []]
       """
 
-      assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A"], parse ""
+      assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A", []], parse ""
 
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
@@ -517,3 +519,19 @@ describe "Hera", ->
         aaa
       """
     , /3:6/
+
+  it "should skip rules programmatically", ->
+    {parse} = generate """
+      Rule
+        Skipped
+        V
+
+      Skipped
+        "" ->
+          return $skip
+
+      V
+        "" -> true
+    """
+
+    assert parse ""

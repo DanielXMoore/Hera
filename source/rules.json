@@ -257,6 +257,20 @@
         "S",
         [
           "OpenBracket",
+          [
+            "*",
+            "Space"
+          ],
+          "CloseBracket"
+        ],
+        {
+          "f": "return []"
+        }
+      ],
+      [
+        "S",
+        [
+          "OpenBracket",
           "StructuralMapping",
           [
             "*",

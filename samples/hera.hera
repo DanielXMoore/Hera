@@ -85,6 +85,8 @@ StructuralMapping
   Variable
   BooleanValue
   NullValue
+  OpenBracket Space* CloseBracket ->
+    return []
   OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
     $3.unshift($2); return $3
 

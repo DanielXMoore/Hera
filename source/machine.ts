@@ -379,13 +379,18 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
 
 // Result handler for regexp match expressions
 // $0 is the whole match, followed by $1, $2, etc.
-export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($loc: Loc, ...args: string[]) => T): Parser<T> {
+export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP, $loc: Loc, ...args: string[]) => T): Parser<T> {
   return function (state) {
     const result = parser(state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(loc, ...value)
+    const mappedValue = fn(SKIP, loc, ...value)
+
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return
+    }
 
     //@ts-ignore
     result.value = mappedValue
@@ -394,13 +399,18 @@ export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($loc: Loc, ...args
 }
 
 // Transform sequence
-export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($loc: Loc, value: A, ...args: A) => B): Parser<B> {
+export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
   return function (state) {
     const result = parser(state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(loc, value, ...value)
+    const mappedValue = fn(SKIP, loc, value, ...value)
+
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return
+    }
 
     //@ts-ignore
     result.value = mappedValue
@@ -409,13 +419,18 @@ export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($loc: Loc, value
 }
 
 // Transform value $0 and $1 are both singular value
-export function $TV<A, B>(parser: Parser<A>, fn: ($loc: Loc, $0: A, $1: A) => B): Parser<B> {
+export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, $0: A, $1: A) => B): Parser<B> {
   return function (state) {
     const result = parser(state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(loc, value, value)
+    const mappedValue = fn(SKIP, loc, value, value)
+
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return
+    }
 
     //@ts-ignore
     result.value = mappedValue
@@ -435,6 +450,8 @@ export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
     return result as unknown as ParseResult<typeof value>
   }
 }
+
+const SKIP = {}
 
 // End of machinery
 // Parser specific things below

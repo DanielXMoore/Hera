@@ -2,8 +2,10 @@ TODO
 ====
 
 - [ ] Add `import` so grammars can import rules from sub-grammars.
-- [ ] Handle object structure including nesting.
 - [ ] Add undefined rule error in vscode extension
+- [x] Programatically skip rules
+- [x] Empty mapping `-> []`
+- [x] Handle object structure including nesting.
 - [x] Restore Coverage data
   - [x] Hybrid Coffee + TypeScript coverage using babel
 - [ ] Testing

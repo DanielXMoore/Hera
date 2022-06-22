@@ -1,4 +1,3 @@
-//@ts-nocheck
 "use strict";
 var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
   if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
@@ -266,7 +265,11 @@ function $TR(parser, fn) {
     if (!result)
       return;
     var loc = result.loc, value = result.value;
-    var mappedValue = fn.apply(void 0, __spreadArray([loc], value, false));
+    var mappedValue = fn.apply(void 0, __spreadArray([SKIP, loc], value, false));
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return;
+    }
     //@ts-ignore
     result.value = mappedValue;
     return result;
@@ -280,7 +283,11 @@ function $TS(parser, fn) {
     if (!result)
       return;
     var loc = result.loc, value = result.value;
-    var mappedValue = fn.apply(void 0, __spreadArray([loc, value], value, false));
+    var mappedValue = fn.apply(void 0, __spreadArray([SKIP, loc, value], value, false));
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return;
+    }
     //@ts-ignore
     result.value = mappedValue;
     return result;
@@ -294,7 +301,11 @@ function $TV(parser, fn) {
     if (!result)
       return;
     var loc = result.loc, value = result.value;
-    var mappedValue = fn(loc, value, value);
+    var mappedValue = fn(SKIP, loc, value, value);
+    if (mappedValue === SKIP) {
+      // TODO track fail?
+      return;
+    }
     //@ts-ignore
     result.value = mappedValue;
     return result;
@@ -314,6 +325,7 @@ function $R$0(parser) {
   };
 }
 exports.$R$0 = $R$0;
+var SKIP = {};
 // End of machinery
 // Parser specific things below
 var failHintRegex = /\S+|\s+|$/y;
@@ -480,7 +492,7 @@ const $R15 = $R(new RegExp("[ \\t]*\\)", 'suy'));
 const $R16 = $R(new RegExp("[ \\t]+", 'suy'));
 const $R17 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
 
-const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function ($loc, $0, $1, $2) { return Object.fromEntries($2) });
+const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function ($skip, $loc, $0, $1, $2) { return Object.fromEntries($2) });
 function Grammar(state) {
   return Grammar$0(state);
 }
@@ -490,7 +502,7 @@ function Rule(state) {
   return Rule$0(state);
 }
 
-const RuleBody$0 = $TV($P($S(Indent, Choice)), function ($loc, $0, $1) {
+const RuleBody$0 = $TV($P($S(Indent, Choice)), function ($skip, $loc, $0, $1) {
   var r = $1.map((a) => a[1])
   if (r.length === 1) return r[0];
   return ["/", r]
@@ -499,7 +511,7 @@ function RuleBody(state) {
   return RuleBody$0(state);
 }
 
-const Choice$0 = $TS($S(Sequence, Handling), function ($loc, $0, $1, $2) {
+const Choice$0 = $TS($S(Sequence, Handling), function ($skip, $loc, $0, $1, $2) {
   if ($2 !== undefined) {
     if (!$1.push)
       $1 = ["S", [$1], $2]
@@ -512,11 +524,11 @@ function Choice(state) {
   return Choice$0(state);
 }
 
-const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function ($loc, $0, $1, $2) {
+const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function ($skip, $loc, $0, $1, $2) {
   $2.unshift($1)
   return ["S", $2]
 });
-const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function ($loc, $0, $1, $2) {
+const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function ($skip, $loc, $0, $1, $2) {
   $2.unshift($1)
   return ["/", $2]
 });
@@ -535,7 +547,7 @@ function ChoiceExpression(state) {
   return ChoiceExpression$0(state);
 }
 
-const Expression$0 = $TS($S($E(PrefixOperator), Suffix), function ($loc, $0, $1, $2) {
+const Expression$0 = $TS($S($E(PrefixOperator), Suffix), function ($skip, $loc, $0, $1, $2) {
   if ($1) return [$1, $2]
   else return $2
 });
@@ -548,7 +560,7 @@ function PrefixOperator(state) {
   return PrefixOperator$0(state);
 }
 
-const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function ($loc, $0, $1, $2) {
+const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function ($skip, $loc, $0, $1, $2) {
   if ($2) return [$2, $1]
   else return $1
 });
@@ -574,7 +586,7 @@ function Literal(state) {
   return Literal$0(state) || Literal$1(state)
 }
 
-const Handling$0 = $TS($S(EOS), function ($loc, $0, $1) { return undefined });
+const Handling$0 = $TS($S(EOS), function ($skip, $loc, $0, $1) { return undefined });
 const Handling$1 = $T($S($Q(Space), Arrow, HandlingExpression), function (value) { return value[2] });
 function Handling(state) {
   return Handling$0(state) || Handling$1(state)
@@ -586,7 +598,7 @@ function HandlingExpression(state) {
   return HandlingExpression$0(state) || HandlingExpression$1(state)
 }
 
-const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function ($loc, $0, $1) {
+const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function ($skip, $loc, $0, $1) {
   return {
     f: $1.join("\n")
   }
@@ -605,9 +617,10 @@ const StructuralMapping$1 = NumberValue;
 const StructuralMapping$2 = Variable;
 const StructuralMapping$3 = BooleanValue;
 const StructuralMapping$4 = NullValue;
-const StructuralMapping$5 = $TS($S(OpenBracket, StructuralMapping, $Q(CommaThenValue), CloseBracket), function ($loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 });
+const StructuralMapping$5 = $TS($S(OpenBracket, $Q(Space), CloseBracket), function ($skip, $loc, $0, $1, $2, $3) { return [] });
+const StructuralMapping$6 = $TS($S(OpenBracket, StructuralMapping, $Q(CommaThenValue), CloseBracket), function ($skip, $loc, $0, $1, $2, $3, $4) { $3.unshift($2); return $3 });
 function StructuralMapping(state) {
-  return StructuralMapping$0(state) || StructuralMapping$1(state) || StructuralMapping$2(state) || StructuralMapping$3(state) || StructuralMapping$4(state) || StructuralMapping$5(state)
+  return StructuralMapping$0(state) || StructuralMapping$1(state) || StructuralMapping$2(state) || StructuralMapping$3(state) || StructuralMapping$4(state) || StructuralMapping$5(state) || StructuralMapping$6(state)
 }
 
 const CommaThenValue$0 = $T($S($Q(Space), $EXPECT($L1, fail, "CommaThenValue \",\""), $Q(Space), StructuralMapping, $Q(Space)), function (value) { return value[3] });
@@ -615,25 +628,25 @@ function CommaThenValue(state) {
   return CommaThenValue$0(state);
 }
 
-const Variable$0 = $TR($EXPECT($R3, fail, "Variable /\\$(\\d)/"), function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return { v: parseInt($1, 10) } });
+const Variable$0 = $TR($EXPECT($R3, fail, "Variable /\\$(\\d)/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return { v: parseInt($1, 10) } });
 function Variable(state) {
   return Variable$0(state);
 }
 
-const BooleanValue$0 = $TV($EXPECT($L2, fail, "BooleanValue \"true\""), function ($loc, $0, $1) { return true });
-const BooleanValue$1 = $TV($EXPECT($L3, fail, "BooleanValue \"false\""), function ($loc, $0, $1) { return false });
+const BooleanValue$0 = $TV($EXPECT($L2, fail, "BooleanValue \"true\""), function ($skip, $loc, $0, $1) { return true });
+const BooleanValue$1 = $TV($EXPECT($L3, fail, "BooleanValue \"false\""), function ($skip, $loc, $0, $1) { return false });
 function BooleanValue(state) {
   return BooleanValue$0(state) || BooleanValue$1(state)
 }
 
-const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function ($loc, $0, $1) { return null });
-const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function ($loc, $0, $1) { return undefined });
+const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function ($skip, $loc, $0, $1) { return null });
+const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function ($skip, $loc, $0, $1) { return undefined });
 function NullValue(state) {
   return NullValue$0(state) || NullValue$1(state)
 }
 
-const NumberValue$0 = $TR($EXPECT($R4, fail, "NumberValue /0x[\\da-fA-F]+/"), function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 16) });
-const NumberValue$1 = $TR($EXPECT($R5, fail, "NumberValue /\\d+(\\.\\d+)?/"), function ($loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
+const NumberValue$0 = $TR($EXPECT($R4, fail, "NumberValue /0x[\\da-fA-F]+/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 16) });
+const NumberValue$1 = $TR($EXPECT($R5, fail, "NumberValue /\\d+(\\.\\d+)?/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
 function NumberValue(state) {
   return NumberValue$0(state) || NumberValue$1(state)
 }
