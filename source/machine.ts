@@ -57,7 +57,8 @@ export type TerminalNode = [TerminalOp, string, Handler?]
 export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
 export type PrefixNode = [PrefixOp, HeraAST, Handler?]
 export type SuffixNode = [SuffixOp, HeraAST, Handler?]
-export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | string
+export type NameNode = [{ name: string }, HeraAST, Handler?]
+export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
 
 export type HeraRules = { [key: string]: HeraAST }
 

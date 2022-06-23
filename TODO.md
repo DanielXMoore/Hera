@@ -1,8 +1,11 @@
 TODO
 ====
 
+- [ ] Registering CoffeeCoverage is slow in the current config
 - [ ] Add `import` so grammars can import rules from sub-grammars.
 - [ ] Add undefined rule error in vscode extension
+- [ ] Structural mapping to object `-> {}`
+- [x] Named parameters
 - [x] Programatically skip rules
 - [x] Empty mapping `-> []`
 - [x] Handle object structure including nesting.
@@ -88,7 +91,7 @@ Quants
 
 ---
 
-Named variables
+Named variables - Added!
 
 ```hera
 Grammar

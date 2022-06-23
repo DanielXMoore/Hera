@@ -33,6 +33,7 @@ structuralToSource = (mapping) ->
         throw new Error "TODO"
       else
         throw new Error "Unknown mapping object"
+
 #
 ###*
 handler to source

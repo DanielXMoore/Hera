@@ -111,7 +111,10 @@ compileOp = (tuple, name, defaultHandler, types) ->
       when "!"
         "$N(#{compileOp(tuple[1], name, defaultHandler, types)})"
       else
-        throw new Error "Unknown op: #{tuple[0]} #{JSON.stringify(tuple[1])}"
+        if tuple[0].name
+          compileOp(tuple[1], name, defaultHandler, types)
+        else
+          throw new Error "Unknown op: #{tuple[0]} #{JSON.stringify(tuple[1])}"
   else # rule reference
     tuple
 
@@ -157,7 +160,10 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
         if single
           source
         else
-          "#{source}[#{mapping.v+offset}]"
+          if typeof mapping.v is 'number'
+            "#{source}[#{mapping.v+offset}]"
+          else
+            mapping.v
       else if "o" of mapping
         o = mapping.o
         "{" + Object.keys(mapping.o).map (key) ->
@@ -183,31 +189,50 @@ compileHandler = (options, arg, name) ->
     h = arg[2]
     if typeof h is "object" and "f" of h # function mapping
       parser = compileOp(arg, name, false, options.types)
+
       if arg[0] is "S"
+        # Gather names from each element in arg[1]
+        # Only handle top level names for now
+        # TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
+        namedParameters = arg[1].map (node, i) ->
+          getParameterDeclaration(node, i+1)
+        .join("")
+
         parameters = ["$skip", "$loc", "$0"].concat arg[1].map (_, i) -> "$#{i+1}"
 
         return """
-          $TS(#{parser}, function(#{parameters.join(", ")}) {#{h.f}})
+          $TS(#{parser}, function(#{parameters.join(", ")}) {#{namedParameters}#{h.f}})
         """
       else if arg[0] is "R"
+        # NOTE: RegExp named groups may go here later
         return """
           $TR(#{parser}, function(#{regExpHandlerParams.join(", ")}) {#{h.f}})
         """
       else
+        namedParameters = getParameterDeclaration(arg, 0)
+
         return """
-          $TV(#{parser}, function(#{regularHandlerParams.join(", ")}) {#{h.f}})
+          $TV(#{parser}, function(#{regularHandlerParams.join(", ")}) {#{namedParameters}#{h.f}})
         """
     else # structural mapping
       parser = compileOp(arg, name, false, options.types)
       if arg[0] is "S"
+        namedParameters = arg[1].map (node, i) ->
+          varName = getNamedVariable(node[0])
+          if varName
+            "var #{varName} = value[#{i}];"
+          else
+            ""
+        .join("")
         return """
-          $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value")} })
+          $T(#{parser}, function(value) {#{namedParameters}return #{compileStructuralHandler(h, "value")} })
         """
       else if arg[0] is "R"
         return """
           $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value", false, 0)} })
         """
       else
+        # This is 'single' so if there is a named variable it comes out as 'value'
         return """
           $T(#{parser}, function(value) { return #{compileStructuralHandler(h, "value", true)} })
         """
@@ -265,6 +290,32 @@ compileRulesObject = (ruleNames) ->
     #{meat}
   }
   """
+
+#
+###*
+Get a JS declaration string for nodes that have named parameters.
+
+@param node {HeraAST}
+@param i {number}
+###
+getParameterDeclaration = (node, i) ->
+  name = getNamedVariable node[0]
+  if name
+    "var #{name} = $#{i};"
+  else
+    ""
+
+#
+###*
+Get a JS declaration string for nodes that have named parameters.
+
+@param op {HeraAST[0]}
+@return {string | undefined }
+###
+getNamedVariable = (op) ->
+  if typeof op is "object" and "name" of op
+    return op.name
+  return undefined
 
 # TODO: bundling for esbuild
 tsMachine = require('fs').readFileSync(__dirname + "/machine.ts", "utf8")

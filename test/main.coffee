@@ -270,6 +270,14 @@ describe "Hera", ->
 
       assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A", []], parse ""
 
+    it.skip "should map object structures", ->
+      {parse} = generate """
+        Rule
+          "" -> [{}, {a: true}, {b: [0], c: 1}]
+      """
+
+      assert.deepEqual [{}, {a: true}, {b: [0], c: 1}], parse ""
+
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
       {parse} = generate """
@@ -535,3 +543,71 @@ describe "Hera", ->
     """
 
     assert parse ""
+
+  describe "named parameters", ->
+    it "should provide named parameters for a sequence", ->
+      {parse} = generate """
+        Rule
+          A:a B:b ->
+            return [a, b]
+
+        A
+          "a"
+
+        B
+          "b"
+      """
+
+      assert.deepEqual parse("ab"), ["a", "b"]
+
+    it "should provide named parameters for a single string", ->
+      {parse} = generate """
+        A
+          "a":a ->
+            return a
+      """
+
+      assert.equal parse("a"), "a"
+
+    it "should provide named parameters for a single regexp", ->
+      {parse} = generate """
+        A
+          /a+/:a ->
+            return a
+      """
+
+      assert.equal parse("aaa"), "aaa"
+
+    it "should provide named parameters for an alias", ->
+      {parse} = generate """
+        Rule
+          A:a ->
+            return a
+
+        A
+          /a+/:a ->
+            return a
+      """
+
+      assert.equal parse("aa"), "aa"
+
+    it "should allow named parameters in structural mappings", ->
+      {parse} = generate """
+        A
+          "a":a -> [a, a]
+      """
+
+      assert.deepEqual parse("a"), ["a", "a"]
+
+      {parse} = generate """
+        Rule
+          A:a B:b -> [b, a]
+
+        A
+          [a]+
+
+        B
+          [b]+
+      """
+
+      assert.deepEqual parse("abb"), ["bb", "a"]

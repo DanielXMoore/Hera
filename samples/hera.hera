@@ -36,10 +36,17 @@ SequenceExpression
 ChoiceExpression
   Space "/" Space Expression -> $4
 
+ParameterName
+  ":" Name -> $2
+
 Expression
-  PrefixOperator? Suffix ->
-    if ($1) return [$1, $2]
-    else return $2
+  PrefixOperator? Suffix ParameterName? ->
+    var result = null
+    if ($1) result = [$1, $2]
+    else result = $2
+    if ($3)
+      return [{name: $3}, result]
+    return result
 
 PrefixOperator
   [$&!]
@@ -82,9 +89,9 @@ HandlingExpressionLine
 StructuralMapping
   StringValue
   NumberValue
-  Variable
   BooleanValue
   NullValue
+  Variable
   OpenBracket Space* CloseBracket ->
     return []
   OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
@@ -96,6 +103,9 @@ CommaThenValue
 Variable
   /\$(\d)/ ->
     return {v: parseInt($1, 10)}
+  Name ->
+    // TODO: Prevent reserved words: `return`, etc.
+    return {v: $1}
 
 BooleanValue
   "true" ->

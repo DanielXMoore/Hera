@@ -111,6 +111,19 @@
       "v": 4
     }
   ],
+  "ParameterName": [
+    "S",
+    [
+      [
+        "L",
+        ":"
+      ],
+      "Name"
+    ],
+    {
+      "v": 2
+    }
+  ],
   "Expression": [
     "S",
     [
@@ -118,10 +131,14 @@
         "?",
         "PrefixOperator"
       ],
-      "Suffix"
+      "Suffix",
+      [
+        "?",
+        "ParameterName"
+      ]
     ],
     {
-      "f": "if ($1) return [$1, $2]\nelse return $2"
+      "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result]\nreturn result"
     }
   ],
   "PrefixOperator": [
@@ -250,9 +267,9 @@
     [
       "StringValue",
       "NumberValue",
-      "Variable",
       "BooleanValue",
       "NullValue",
+      "Variable",
       [
         "S",
         [
@@ -310,11 +327,25 @@
     }
   ],
   "Variable": [
-    "R",
-    "\\$(\\d)",
-    {
-      "f": "return {v: parseInt($1, 10)}"
-    }
+    "/",
+    [
+      [
+        "R",
+        "\\$(\\d)",
+        {
+          "f": "return {v: parseInt($1, 10)}"
+        }
+      ],
+      [
+        "S",
+        [
+          "Name"
+        ],
+        {
+          "f": "// TODO: Prevent reserved words: `return`, etc.\nreturn {v: $1}"
+        }
+      ]
+    ]
   ],
   "BooleanValue": [
     "/",
