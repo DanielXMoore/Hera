@@ -42,8 +42,11 @@ export type Terminal = string | RegExp
 
 export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 export type StructuralTerminal =
-  string |
+  boolean |
+  null |
   number |
+  string |
+  undefined |
   { v: PositionalVariable } |
   { o: { [key: string]: StructuralHandling } }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]

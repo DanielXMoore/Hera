@@ -1,0 +1,20 @@
+Rule
+  I J K N F T
+
+I
+  "" -> 7
+
+J
+  "" -> -3.1
+
+K
+  "" -> 2.7
+
+N
+  "" -> null
+
+F
+  "" -> false
+
+T
+  "" -> true

@@ -480,7 +480,7 @@ const $R1 = $R(new RegExp("[+?*]", 'suy'));
 const $R2 = $R(new RegExp("[^\\n\\r]*", 'suy'));
 const $R3 = $R(new RegExp("\\$(\\d)", 'suy'));
 const $R4 = $R(new RegExp("0x[\\da-fA-F]+", 'suy'));
-const $R5 = $R(new RegExp("\\d+(\\.\\d+)?", 'suy'));
+const $R5 = $R(new RegExp("[-+]?\\d+(\\.\\d+)?", 'suy'));
 const $R6 = $R(new RegExp("[^\"\\\\]+", 'suy'));
 const $R7 = $R(new RegExp(".", 'suy'));
 const $R8 = $R(new RegExp("[^\\/\\\\]+", 'suy'));
@@ -660,7 +660,7 @@ function NullValue(state) {
 }
 
 const NumberValue$0 = $TR($EXPECT($R4, fail, "NumberValue /0x[\\da-fA-F]+/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 16) });
-const NumberValue$1 = $TR($EXPECT($R5, fail, "NumberValue /\\d+(\\.\\d+)?/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseInt($0, 10) });
+const NumberValue$1 = $TR($EXPECT($R5, fail, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function ($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) { return parseFloat($0) });
 function NumberValue(state) {
   return NumberValue$0(state) || NumberValue$1(state)
 }

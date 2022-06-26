@@ -122,8 +122,8 @@ NullValue
 NumberValue
   /0x[\da-fA-F]+/ ->
     return parseInt($0, 16)
-  /\d+(\.\d+)?/ ->
-    return parseInt($0, 10)
+  /[-+]?\d+(\.\d+)?/ ->
+    return parseFloat($0)
 
 StringValue
   "\"" $DoubleStringCharacter* "\"" -> $2

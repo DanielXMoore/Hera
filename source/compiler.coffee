@@ -185,9 +185,9 @@ compileHandler = (options, arg, name) ->
   if typeof arg is "string"
     return arg # reference to other named parser function
 
-  if arg[2]
+  if arg.length is 3
     h = arg[2]
-    if typeof h is "object" and "f" of h # function mapping
+    if h and typeof h is "object" and "f" of h # function mapping
       parser = compileOp(arg, name, false, options.types)
 
       if arg[0] is "S"

@@ -225,6 +225,40 @@ describe "Hera", ->
       parse "AAB"
 
   describe "-> Structural Result", ->
+    it "should map to literals", ->
+      {parse} = generate """
+        Rule
+          I J K N F T
+
+        I
+          "" -> 7
+
+        J
+          "" -> -3.1
+
+        K
+          "" -> 2.7
+
+        N
+          "" -> null
+
+        F
+          "" -> false
+
+        T
+          "" -> true
+      """
+
+      assert.deepEqual parse(""), [7, -3.1, 2.7, null, false, true]
+
+    it.skip "should allow for bare undefined", ->
+      {parse} = generate """
+        Rule
+          "" -> undefined
+      """
+
+      assert.deepEqual parse(""), undefined
+
     it "should map regexp groups into the structure", ->
       {parse} = generate """
         Rule

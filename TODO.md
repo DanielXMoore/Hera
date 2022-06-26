@@ -2,9 +2,13 @@ TODO
 ====
 
 - [ ] Registering CoffeeCoverage is slow in the current config
+- [ ] Restore `tokenize` parser option to return token tree with location data
+- [ ] Structural mapping
+  - [ ] to object `-> {}`
+  - [ ] top level undefined `-> undefined`
+  - [x] Negative numbers, floats, null, and false in bare structural mappings
 - [ ] Add `import` so grammars can import rules from sub-grammars.
 - [ ] Add undefined rule error in vscode extension
-- [ ] Structural mapping to object `-> {}`
 - [x] Named parameters
 - [x] Programatically skip rules
 - [x] Empty mapping `-> []`
@@ -44,7 +48,6 @@ TODO but too vague
 
 - [ ] Compile to optimized regexes by aggregating grammar nodes into fewer regexps where possible.
 - [ ] Type annotation for grammar rules
-- [ ] Generate tokens and parse tree
 - [ ] Aggregate errors and warnings
 
 Features
