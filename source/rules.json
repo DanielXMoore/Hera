@@ -274,31 +274,6 @@
       "JSObject"
     ]
   ],
-  "CommaThenValue": [
-    "S",
-    [
-      [
-        "*",
-        "Space"
-      ],
-      [
-        "L",
-        ","
-      ],
-      [
-        "*",
-        "Space"
-      ],
-      "StructuralMapping",
-      [
-        "*",
-        "Space"
-      ]
-    ],
-    {
-      "v": 4
-    }
-  ],
   "JSArray": [
     "S",
     [

@@ -95,9 +95,6 @@ StructuralMapping
   JSArray
   JSObject
 
-CommaThenValue
-  Space* "," Space* StructuralMapping Space* -> $4
-
 JSArray
   OpenBracket ArrayItem* CloseBracket -> $2
 
