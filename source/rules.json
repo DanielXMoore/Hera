@@ -270,35 +270,7 @@
       "BooleanValue",
       "NullValue",
       "Variable",
-      [
-        "S",
-        [
-          "OpenBracket",
-          [
-            "*",
-            "Space"
-          ],
-          "CloseBracket"
-        ],
-        {
-          "f": "return []"
-        }
-      ],
-      [
-        "S",
-        [
-          "OpenBracket",
-          "StructuralMapping",
-          [
-            "*",
-            "CommaThenValue"
-          ],
-          "CloseBracket"
-        ],
-        {
-          "f": "$3.unshift($2); return $3"
-        }
-      ],
+      "JSArray",
       "JSObject"
     ]
   ],
@@ -325,6 +297,33 @@
     ],
     {
       "v": 4
+    }
+  ],
+  "JSArray": [
+    "S",
+    [
+      "OpenBracket",
+      [
+        "*",
+        "ArrayItem"
+      ],
+      "CloseBracket"
+    ],
+    {
+      "v": 2
+    }
+  ],
+  "ArrayItem": [
+    "S",
+    [
+      "StructuralMapping",
+      [
+        "R",
+        ",\\s*|\\s*(?=\\])"
+      ]
+    ],
+    {
+      "v": 1
     }
   ],
   "JSObject": [
@@ -633,7 +632,7 @@
   ],
   "OpenBrace": [
     "R",
-    "\\{[ \\t]*"
+    "\\{\\s*"
   ],
   "CloseBrace": [
     "R",
@@ -641,7 +640,7 @@
   ],
   "OpenBracket": [
     "R",
-    "\\[[ \\t]*"
+    "\\[\\s*"
   ],
   "CloseBracket": [
     "R",

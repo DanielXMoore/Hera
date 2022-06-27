@@ -4,8 +4,9 @@ TODO
 - [ ] Registering CoffeeCoverage is slow in the current config
 - [ ] Restore `tokenize` parser option to return token tree with location data
 - [ ] Structural mapping
-  - [ ] to object `-> {}`
   - [ ] top level undefined `-> undefined`
+  - [x] Multi-line objects and arrays
+  - [x] to object `-> {}`
   - [x] Negative numbers, floats, null, and false in bare structural mappings
 - [ ] Add `import` so grammars can import rules from sub-grammars.
 - [ ] Add undefined rule error in vscode extension

@@ -92,14 +92,17 @@ StructuralMapping
   BooleanValue
   NullValue
   Variable
-  OpenBracket Space* CloseBracket ->
-    return []
-  OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
-    $3.unshift($2); return $3
+  JSArray
   JSObject
 
 CommaThenValue
   Space* "," Space* StructuralMapping Space* -> $4
+
+JSArray
+  OpenBracket ArrayItem* CloseBracket -> $2
+
+ArrayItem
+  StructuralMapping /,\s*|\s*(?=\])/ -> $1
 
 JSObject
   OpenBrace ObjectField* CloseBrace ->
@@ -180,13 +183,13 @@ Backslash
   "\\"
 
 OpenBrace
-  /\{[ \t]*/
+  /\{\s*/
 
 CloseBrace
   /\}[ \t]*/
 
 OpenBracket
-  /\[[ \t]*/
+  /\[\s*/
 
 CloseBracket
   /\][ \t]*/

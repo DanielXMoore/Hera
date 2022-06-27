@@ -304,6 +304,20 @@ describe "Hera", ->
 
       assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A", []], parse ""
 
+    it "should handle multi-line arrays", ->
+      {parse} = generate """
+        Rule
+          "" -> [
+            [
+              1,
+              2
+            ],
+            3
+          ]
+      """
+
+      assert.deepEqual [[1, 2], 3], parse ""
+
     it "should map object structures", ->
       {parse} = generate """
         Rule
@@ -311,6 +325,27 @@ describe "Hera", ->
       """
 
       assert.deepEqual [{}, {a: true}, {b: [0], c: 1}], parse ""
+
+    it "should map nested structures", ->
+      {parse} = generate """
+        Rule
+          "a" -> [{b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}]
+          "b" -> {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}
+      """
+
+      assert.deepEqual [{b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}], parse "a"
+      assert.deepEqual {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}, parse "b"
+
+    it "should work with multi-line objects", ->
+      {parse} = generate """
+        Rule
+          "a" -> {
+            b: [{x: 2, y: [{z: -1.3}]}, [{}]],
+            c: 1
+          }
+      """
+
+      assert.deepEqual {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}, parse "a"
 
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
