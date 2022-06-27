@@ -304,7 +304,7 @@ describe "Hera", ->
 
       assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A", []], parse ""
 
-    it.skip "should map object structures", ->
+    it "should map object structures", ->
       {parse} = generate """
         Rule
           "" -> [{}, {a: true}, {b: [0], c: 1}]

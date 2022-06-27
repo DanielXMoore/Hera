@@ -96,9 +96,19 @@ StructuralMapping
     return []
   OpenBracket StructuralMapping CommaThenValue* CloseBracket ->
     $3.unshift($2); return $3
+  JSObject
 
 CommaThenValue
   Space* "," Space* StructuralMapping Space* -> $4
+
+JSObject
+  OpenBrace ObjectField* CloseBrace ->
+    return {
+      o: Object.fromEntries($2)
+    }
+
+ObjectField
+  ( StringValue / Name ) /:[ \t]*/ StructuralMapping /,\s*|\s*(?=\})/ -> [$1, $3]
 
 Variable
   /\$(\d)/ ->
@@ -168,6 +178,12 @@ Arrow
 
 Backslash
   "\\"
+
+OpenBrace
+  /\{[ \t]*/
+
+CloseBrace
+  /\}[ \t]*/
 
 OpenBracket
   /\[[ \t]*/

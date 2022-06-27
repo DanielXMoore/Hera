@@ -298,7 +298,8 @@
         {
           "f": "$3.unshift($2); return $3"
         }
-      ]
+      ],
+      "JSObject"
     ]
   ],
   "CommaThenValue": [
@@ -325,6 +326,49 @@
     {
       "v": 4
     }
+  ],
+  "JSObject": [
+    "S",
+    [
+      "OpenBrace",
+      [
+        "*",
+        "ObjectField"
+      ],
+      "CloseBrace"
+    ],
+    {
+      "f": "return {\n  o: Object.fromEntries($2)\n}"
+    }
+  ],
+  "ObjectField": [
+    "S",
+    [
+      [
+        "/",
+        [
+          "StringValue",
+          "Name"
+        ]
+      ],
+      [
+        "R",
+        ":[ \\t]*"
+      ],
+      "StructuralMapping",
+      [
+        "R",
+        ",\\s*|\\s*(?=\\})"
+      ]
+    ],
+    [
+      {
+        "v": 1
+      },
+      {
+        "v": 3
+      }
+    ]
   ],
   "Variable": [
     "/",
@@ -586,6 +630,14 @@
   "Backslash": [
     "L",
     "\\\\"
+  ],
+  "OpenBrace": [
+    "R",
+    "\\{[ \\t]*"
+  ],
+  "CloseBrace": [
+    "R",
+    "\\}[ \\t]*"
   ],
   "OpenBracket": [
     "R",
