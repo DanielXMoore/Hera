@@ -18,7 +18,7 @@ jobs:
     - name: Install and Test
       run: |
         yarn
-        yarn compile
+        yarn build
         yarn test
         yarn benchmark
 
