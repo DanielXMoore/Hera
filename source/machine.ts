@@ -1,5 +1,3 @@
-import { stringify } from "querystring"
-
 /**
  * Location information within a string. A position and a length. Can be
  * converted into line numbers when reporting errors.
