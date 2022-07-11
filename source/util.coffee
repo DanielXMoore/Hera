@@ -20,17 +20,22 @@ structuralToSource = (mapping) ->
   switch typeof mapping
     when "number"
       mapping.toString()
-    when "string"
+    when "string", "undefined"
       JSON.stringify(mapping)
     when "object"
-      if Array.isArray(mapping)
+      if mapping is null
+        JSON.stringify(mapping)
+      else if Array.isArray(mapping)
         "[" + mapping.map (m) ->
           structuralToSource(m)
         .join(", ") + "]"
       else if "v" of mapping
         "$#{mapping.v}"
       else if "o" of mapping
-        throw new Error "TODO"
+        "{" + Object.keys(mapping.o).map( (key) ->
+          value = mapping.o[key]
+          "#{key}: #{structuralToSource(value)}"
+        ).join(", ") + "}"
       else
         throw new Error "Unknown mapping object"
 

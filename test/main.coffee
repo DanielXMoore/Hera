@@ -341,12 +341,12 @@ describe "Hera", ->
         Rule
           A:a B:b -> {a, b}
         A
-          "a"
+          "a" -> 1
         B
-          "b"
+          "b" -> 2
       """
 
-      assert.deepEqual parse("ab"), {"a": "a", "b": "b"}
+      assert.deepEqual parse("ab"), {"a": 1, "b": 2}
 
     it "should work with multi-line objects", ->
       {parse} = generate """

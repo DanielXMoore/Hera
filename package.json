@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -62,6 +62,7 @@
       "perf/",
       "source/cli.coffee",
       "source/esbuild-plugin.coffee",
+      "source/machine.js",
       "source/old_main.coffee",
       "source/parser.js",
       "test/"

@@ -29,19 +29,15 @@ describe "util", ->
     decompiled = decompile rules
     assert.deepEqual hera.parse(decompiled), rules
 
-  it "currently throws an error when decompiling to an object format", ->
-    rules = hera.parse """
+  it "decompiles to an object format", ->
+    grammar = """
       Rule
-        "X" -> 0
+        "X" -> {a: 1, b: null}
+
     """
+    rules = hera.parse grammar
 
-    rules.Rule[2] = {
-      o: "TODO"
-    }
-
-    assert.throws ->
-      decompile rules
-    , /TODO/
+    assert.equal decompile(rules), grammar
 
   it "should throw an error when decompiling an unknown format", ->
     rules = hera.parse """

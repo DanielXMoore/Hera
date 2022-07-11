@@ -1,4 +1,11 @@
-import { HeraGrammar, HeraRules, ParserOptions } from "./machine"
+import {
+  HeraAST,
+  HeraGrammar,
+  HeraRules,
+  ParserOptions,
+  Loc,
+  Token,
+} from "./machine"
 
 import parser from "./parser"
 //@ts-ignore
@@ -26,10 +33,15 @@ const compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
 }
 const parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules = parser.parse
 
-const generate = <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as (input: string, options?: ParserOptions<T>) => unknown
+const generate = <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as {
+  parse: (input: string, options?: ParserOptions<T>) => unknown
+}
 
 export {
   parse,
   compile,
-  generate
+  generate,
+  HeraAST,
+  Loc,
+  Token
 }
