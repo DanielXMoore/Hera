@@ -257,7 +257,11 @@ compileRule = (options, name, rule) ->
     """
       const #{name}$0 = #{compileHandler(options, rule, name)};
       function #{name}(state#{stateType}) {
-        return #{name}$0(state);
+        if (state.tokenize) {
+          return $TOKEN(#{JSON.stringify(name)}, state, #{name}$0(state));
+        } else {
+          return #{name}$0(state);
+        }
       }
     """
   else
@@ -272,7 +276,11 @@ compileRule = (options, name, rule) ->
     """
       #{fns.join("\n")}
       function #{name}(state#{stateType}) {
-        return #{choices}
+        if (state.tokenize) {
+          return $TOKEN(#{JSON.stringify(name)}, state, #{choices});
+        } else {
+          return #{choices}
+        }
       }
     """
 

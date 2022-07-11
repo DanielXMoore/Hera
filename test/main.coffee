@@ -333,8 +333,20 @@ describe "Hera", ->
           "b" -> {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}
       """
 
-      assert.deepEqual [{b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}], parse "a"
-      assert.deepEqual {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}, parse "b"
+      assert.deepEqual parse("a"), [{b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}]
+      assert.deepEqual parse("b"), {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}
+
+    it "should map object shorthand", ->
+      {parse} = generate """
+        Rule
+          A:a B:b -> {a, b}
+        A
+          "a"
+        B
+          "b"
+      """
+
+      assert.deepEqual parse("ab"), {"a": "a", "b": "b"}
 
     it "should work with multi-line objects", ->
       {parse} = generate """
@@ -449,8 +461,7 @@ describe "Hera", ->
           startRule: "DoesNotExist"
       , /Could not find rule/
 
-  # TODO: rethink tokenize?
-  it.skip "should tokenize", ->
+  it "should tokenize", ->
     {parse} = generate """
       Rule
         &"D" /D/ -> "d"
@@ -461,14 +472,15 @@ describe "Hera", ->
         "A"
     """
 
-    results = parse("AAAAAA", tokenize: true)
-    assert.equal results.value[0].loc.length, 6
+    result = parse("AAAAAA", tokenize: true)
+    assert.equal result.children[1].length, 6
 
-    results = parse("BBB", tokenize: true)
-    assert.equal results.value.length, 3
+    result = parse("BBB", tokenize: true)
+    assert.equal result.children.length, 3
 
-    results = parse("D", tokenize: true)
-    assert.equal results.loc.length, 1
+    result = parse("D", tokenize: true)
+    # TODO: Regex tokenize?
+    # assert.deepEqual result.children[1], 1
 
     # tokenize shouldn't blow up regular parsing
     assert.equal parse("BBB"), "b"

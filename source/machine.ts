@@ -1,3 +1,5 @@
+import { stringify } from "querystring"
+
 /**
  * Location information within a string. A position and a length. Can be
  * converted into line numbers when reporting errors.
@@ -14,6 +16,7 @@ export interface Loc {
 export interface ParseState {
   input: string
   pos: number
+  tokenize: boolean
 }
 
 /**
@@ -64,6 +67,13 @@ export type NameNode = [{ name: string }, HeraAST, Handler?]
 export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
 
 export type HeraRules = { [key: string]: HeraAST }
+
+export type Token = {
+  type: string
+  children: (Token | string)[]
+  token: string
+  loc: Loc
+}
 
 //@ts-ignore
 type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
@@ -193,14 +203,14 @@ export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: 
 
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
   return (state: ParseState): MaybeResult<T> => {
-    let { input, pos } = state,
+    let { input, pos, tokenize } = state,
       i = 0, value
     const results = [] as unknown as T,
       s = pos,
       l = terms.length
 
     while (i < l) {
-      const r = terms[i++]({ input, pos })
+      const r = terms[i++]({ input, pos, tokenize })
 
       if (r) {
         ({ pos, value } = r)
@@ -248,7 +258,7 @@ export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
 // `!x+ == !x`.
 export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   return (state) => {
-    let { input, pos } = state
+    let { input, pos, tokenize } = state
     let value: T
 
     const s = pos
@@ -256,7 +266,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 
     while (true) {
       const prevPos = pos
-      const r = fn({ input, pos })
+      const r = fn({ input, pos, tokenize })
       if (r == undefined) break
 
       ({ pos, value } = r)
@@ -280,7 +290,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 // + one or more
 export function $P<T>(fn: Parser<T>): Parser<T[]> {
   return (state: ParseState) => {
-    const { input, pos: s } = state
+    const { input, pos: s, tokenize } = state
     let value: T
 
     const first = fn(state)
@@ -292,7 +302,7 @@ export function $P<T>(fn: Parser<T>): Parser<T[]> {
     while (true) {
       const prevPos = pos
 
-      const r = fn({ input, pos })
+      const r = fn({ input, pos, tokenize })
       if (!r) break
 
       ({ pos, value } = r)
@@ -323,6 +333,20 @@ export function $TEXT(fn: Parser<unknown>): Parser<string> {
     newState.value = state.input.substring(state.pos, newState.pos)
     return newState as ParseResult<string>
   }
+}
+
+export function $TOKEN(name: string, state: ParseState, newState: MaybeResult<unknown>): MaybeResult<Token> {
+  if (!newState) return
+
+  newState.value = {
+    type: name,
+    //@ts-ignore
+    children: [].concat(newState.value),
+    token: state.input.substring(state.pos, newState.pos),
+    loc: newState.loc
+  }
+
+  return newState as ParseResult<Token>
 }
 
 // ! prefix operator
@@ -369,6 +393,8 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
   return function (state) {
     const result = parser(state);
     if (!result) return
+    // NOTE: This is a lie, tokenize returns an unmodified result
+    if (state.tokenize) return result as unknown as ParseResult<B>
 
     const { value } = result
     const mappedValue = fn(value)
@@ -387,6 +413,8 @@ export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP
   return function (state) {
     const result = parser(state);
     if (!result) return
+    // NOTE: This is a lie, tokenize returns an unmodified result
+    if (state.tokenize) return result as unknown as ParseResult<T>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, ...value)
@@ -407,6 +435,8 @@ export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SK
   return function (state) {
     const result = parser(state);
     if (!result) return
+    // NOTE: This is a lie, tokenize returns an unmodified result
+    if (state.tokenize) return result as unknown as ParseResult<B>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, ...value)
@@ -427,6 +457,8 @@ export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc,
   return function (state) {
     const result = parser(state);
     if (!result) return
+    // NOTE: This is a lie, tokenize returns an unmodified result
+    if (state.tokenize) return result as unknown as ParseResult<B>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, value)
@@ -487,6 +519,7 @@ export interface ParserOptions<T extends HeraGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T
+  tokenize?: boolean
 }
 
 export function parserState<G extends HeraGrammar>(grammar: G) {
@@ -571,7 +604,11 @@ ${input.slice(result.pos)}
       maxFailPos = 0
       failExpected.length = 0
 
-      return validate(input, parser({ input, pos: 0 }), {
+      return validate(input, parser({
+        input,
+        pos: 0,
+        tokenize: options.tokenize || false,
+      }), {
         filename: filename
       })
     }

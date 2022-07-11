@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -71,7 +71,7 @@
   },
   "scripts": {
     "benchmark": "coffee perf/benchmark.coffee",
-    "compile": "bash script/compile",
+    "build": "bash script/compile",
     "test": "nyc mocha"
   },
   "bin": {
