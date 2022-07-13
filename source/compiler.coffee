@@ -325,10 +325,6 @@ getNamedVariable = (op) ->
     return op.name
   return undefined
 
-# TODO: bundling for esbuild
-tsMachine = require('fs').readFileSync(__dirname + "/machine.ts", "utf8")
-jsMachine = require('fs').readFileSync(__dirname + "/machine.js", "utf8")
-
 defaultOptions =
   types: false
 
@@ -338,6 +334,11 @@ module.exports =
   @param rules {{[k: string]: HeraAST}}
   ###
   compile: (rules, options=defaultOptions) ->
+    # NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
+    # TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
+    tsMachine = require('fs').readFileSync(__dirname + "/machine.ts", "utf8")
+    jsMachine = require('fs').readFileSync(__dirname + "/machine.js", "utf8")
+
     { types } = options
     ruleNames = Object.keys(rules)
 
