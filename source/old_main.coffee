@@ -208,18 +208,25 @@ create = (create, rules) ->
   # TODO: Map to object literals in a similar way?
   mapValue = (mapping, value) ->
     switch typeof mapping
-      when "string", "number"
+      when "string", "number", "boolean", "undefined"
         mapping
       when "object"
         if Array.isArray mapping
           mapping.map (n) ->
             mapValue n, value
-        else if mapping.v?
+        else if "v" of mapping
           value[mapping.v]
+        else if "o" of mapping
+          {o} = mapping
+          "{" + Object.keys(o).map (key) ->
+            "#{JSON.stringify(key)}: #{mapValue(o[key], value)}"
+          .join(", ") + "}"
+        else if "l" of mapping
+          mapping.l
         else
           throw new Error "non-array object mapping"
       else
-        throw new Error "Unknown mapping type"
+        throw new Error "Unknown mapping type", JSON.stringify(mapping)
 
   # These are primitive functions that rules refer to
   fns =
