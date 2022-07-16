@@ -91,7 +91,7 @@ StructuralMapping
   NumberValue
   BooleanValue
   NullValue
-  Variable
+  Variable -> {v: $1}
   JSArray
   JSObject
 
@@ -113,22 +113,18 @@ ObjectField
 
 Variable
   /\$(\d)/ ->
-    return {v: parseInt($1, 10)}
-  Name ->
-    // TODO: Prevent reserved words: `return`, etc.
-    return {v: $1}
+    return parseInt($1, 10)
+  Name
 
 BooleanValue
-  "true" ->
-    return true
-  "false" ->
-    return false
+  "true" -> true
+  "false" -> false
 
 NullValue
   "null" ->
     return null
   "undefined" ->
-    return undefined
+    return {l: undefined}
 
 NumberValue
   /0x[\da-fA-F]+/ ->

@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.7.9",
+  "version": "0.7.11",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",

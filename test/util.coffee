@@ -29,6 +29,15 @@ describe "util", ->
     decompiled = decompile rules
     assert.deepEqual hera.parse(decompiled), rules
 
+  it "should decompile literal undefined", ->
+    grammar = """
+      Rule
+        "X" -> undefined
+
+    """
+    rules = hera.parse grammar
+    assert.equal decompile(rules), grammar
+
   it "decompiles to an object format", ->
     grammar = """
       Rule

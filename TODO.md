@@ -4,8 +4,8 @@ TODO
 - [ ] Registering CoffeeCoverage is slow in the current config
 - [x] Restore `tokenize` parser option to return token tree with location data
 - [ ] Prevent identifiers from using JS reserved words
-- [ ] Structural mapping
-  - [ ] top level undefined `-> undefined`
+- [x] Structural mapping
+  - [x] top level undefined `-> undefined`
   - [x] Object fields shorthand ` -> {x, y}`
   - [x] Multi-line objects and arrays
   - [x] to object `-> {}`

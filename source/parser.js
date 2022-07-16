@@ -723,7 +723,7 @@ const StructuralMapping$0 = StringValue;
 const StructuralMapping$1 = NumberValue;
 const StructuralMapping$2 = BooleanValue;
 const StructuralMapping$3 = NullValue;
-const StructuralMapping$4 = Variable;
+const StructuralMapping$4 = $T($S(Variable), function(value) {return {"v": value[0]} });
 const StructuralMapping$5 = JSArray;
 const StructuralMapping$6 = JSObject;
 function StructuralMapping(state) {
@@ -773,9 +773,8 @@ function ObjectField(state) {
   }
 }
 
-const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return {v: parseInt($1, 10)}});
-const Variable$1 = $TS($S(Name), function($skip, $loc, $0, $1) {// TODO: Prevent reserved words: `return`, etc.
-return {v: $1}});
+const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($1, 10)});
+const Variable$1 = Name;
 function Variable(state) {
   if (state.tokenize) {
     return $TOKEN("Variable", state, Variable$0(state) || Variable$1(state));
@@ -784,8 +783,8 @@ function Variable(state) {
   }
 }
 
-const BooleanValue$0 = $TV($EXPECT($L2, fail, "BooleanValue \"true\""), function($skip, $loc, $0, $1) {return true});
-const BooleanValue$1 = $TV($EXPECT($L3, fail, "BooleanValue \"false\""), function($skip, $loc, $0, $1) {return false});
+const BooleanValue$0 = $T($EXPECT($L2, fail, "BooleanValue \"true\""), function(value) { return true });
+const BooleanValue$1 = $T($EXPECT($L3, fail, "BooleanValue \"false\""), function(value) { return false });
 function BooleanValue(state) {
   if (state.tokenize) {
     return $TOKEN("BooleanValue", state, BooleanValue$0(state) || BooleanValue$1(state));
@@ -795,7 +794,7 @@ function BooleanValue(state) {
 }
 
 const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function($skip, $loc, $0, $1) {return null});
-const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {return undefined});
+const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {return {l: undefined}});
 function NullValue(state) {
   if (state.tokenize) {
     return $TOKEN("NullValue", state, NullValue$0(state) || NullValue$1(state));

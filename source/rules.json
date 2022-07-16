@@ -269,7 +269,19 @@
       "NumberValue",
       "BooleanValue",
       "NullValue",
-      "Variable",
+      [
+        "S",
+        [
+          "Variable"
+        ],
+        {
+          "o": {
+            "v": {
+              "v": 1
+            }
+          }
+        }
+      ],
       "JSArray",
       "JSObject"
     ]
@@ -378,18 +390,10 @@
         "R",
         "\\$(\\d)",
         {
-          "f": "return {v: parseInt($1, 10)}"
+          "f": "return parseInt($1, 10)"
         }
       ],
-      [
-        "S",
-        [
-          "Name"
-        ],
-        {
-          "f": "// TODO: Prevent reserved words: `return`, etc.\nreturn {v: $1}"
-        }
-      ]
+      "Name"
     ]
   ],
   "BooleanValue": [
@@ -398,16 +402,12 @@
       [
         "L",
         "true",
-        {
-          "f": "return true"
-        }
+        true
       ],
       [
         "L",
         "false",
-        {
-          "f": "return false"
-        }
+        false
       ]
     ]
   ],
@@ -425,7 +425,7 @@
         "L",
         "undefined",
         {
-          "f": "return undefined"
+          "f": "return {l: undefined}"
         }
       ]
     ]

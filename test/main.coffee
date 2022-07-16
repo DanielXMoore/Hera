@@ -251,7 +251,7 @@ describe "Hera", ->
 
       assert.deepEqual parse(""), [7, -3.1, 2.7, null, false, true]
 
-    it.skip "should allow for bare undefined", ->
+    it "should allow for bare undefined", ->
       {parse} = generate """
         Rule
           "" -> undefined

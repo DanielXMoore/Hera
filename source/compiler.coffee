@@ -156,6 +156,8 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
         "[#{mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]"
       else if mapping is null
         "null"
+      else if "l" of mapping
+        String(mapping.l)
       else if "v" of mapping
         if single
           source
@@ -171,7 +173,7 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
-    else # number, boolean, null, undefined
+    else # number, boolean, undefined
       String(mapping)
 
 #
