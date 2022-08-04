@@ -1,7 +1,34 @@
 TODO
 ====
 
+- [ ] BUG: String values are extra escaped in mapping
+```hera
+InsertNewlineLiteral
+  # Gets inserted as "\\n"
+  "" -> "\n"
+
+InsertNewlineJS
+  # Gets inserted correctly as "\n"
+  "" ->
+    return "\n"
+```
+- [ ] Explore rules that are higher order functions
+```hera
+NestedItems(X)
+  PushIndent NestedItem(X)*:items PopIndent:indent -> [indent, items]
+
+NestedItem(X)
+  $Nested X &EOS
+```
+- [ ] Explore `drop` prefix. Items match as normal but are dropped from the sequence's handler.
+```
+Rule
+  ~A B ~C
+```
 - [ ] Registering CoffeeCoverage is slow in the current config
+- [ ] Explore consuming a variable length of input
+- [ ] Explore getting byte arrays, length then bytes (MIDI, etc.)
+- [ ] Define literal code to be included in parser.
 - [x] Restore `tokenize` parser option to return token tree with location data
 - [ ] Prevent identifiers from using JS reserved words
 - [x] Structural mapping
@@ -10,7 +37,7 @@ TODO
   - [x] Multi-line objects and arrays
   - [x] to object `-> {}`
   - [x] Negative numbers, floats, null, and false in bare structural mappings
-- [ ] Add `import` so grammars can import rules from sub-grammars.
+- [ ] Add `import` so grammars can import rules from sub-grammars. (Maybe superceded by literal code block)
 - [ ] Add undefined rule error in vscode extension
 - [ ] Test regex mapping to named parameters
 - [x] Named parameters
@@ -69,7 +96,7 @@ EOF = /(?![^])/y // must be sticky mode
 
 Quantifiers
 
-`{n}`, `{n,}`, `{n,m}`
+`{n}`, `{n,}`, `{n,m}`, `{,m}`
 
 Implement quantifiers and unify with `?,+,*` implementations.
 

@@ -259,6 +259,7 @@ compileRule = (options, name, rule) ->
     """
       const #{name}$0 = #{compileHandler(options, rule, name)};
       function #{name}(state#{stateType}) {
+        if (state.verbose) console.log("ENTER:", #{JSON.stringify(name)});
         if (state.tokenize) {
           return $TOKEN(#{JSON.stringify(name)}, state, #{name}$0(state));
         } else {

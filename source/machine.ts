@@ -15,6 +15,7 @@ export interface ParseState {
   input: string
   pos: number
   tokenize: boolean
+  verbose: boolean
 }
 
 /**
@@ -202,14 +203,14 @@ export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: 
 
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
   return (state: ParseState): MaybeResult<T> => {
-    let { input, pos, tokenize } = state,
+    let { input, pos, tokenize, verbose } = state,
       i = 0, value
     const results = [] as unknown as T,
       s = pos,
       l = terms.length
 
     while (i < l) {
-      const r = terms[i++]({ input, pos, tokenize })
+      const r = terms[i++]({ input, pos, tokenize, verbose })
 
       if (r) {
         ({ pos, value } = r)
@@ -257,7 +258,7 @@ export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
 // `!x+ == !x`.
 export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   return (state) => {
-    let { input, pos, tokenize } = state
+    let { input, pos, tokenize, verbose } = state
     let value: T
 
     const s = pos
@@ -265,7 +266,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 
     while (true) {
       const prevPos = pos
-      const r = fn({ input, pos, tokenize })
+      const r = fn({ input, pos, tokenize, verbose })
       if (r == undefined) break
 
       ({ pos, value } = r)
@@ -289,7 +290,7 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 // + one or more
 export function $P<T>(fn: Parser<T>): Parser<T[]> {
   return (state: ParseState) => {
-    const { input, pos: s, tokenize } = state
+    const { input, pos: s, tokenize, verbose } = state
     let value: T
 
     const first = fn(state)
@@ -301,7 +302,7 @@ export function $P<T>(fn: Parser<T>): Parser<T[]> {
     while (true) {
       const prevPos = pos
 
-      const r = fn({ input, pos, tokenize })
+      const r = fn({ input, pos, tokenize, verbose })
       if (!r) break
 
       ({ pos, value } = r)
@@ -519,6 +520,7 @@ export interface ParserOptions<T extends HeraGrammar> {
   filename?: string
   startRule?: keyof T
   tokenize?: boolean
+  verbose?: boolean
 }
 
 export function parserState<G extends HeraGrammar>(grammar: G) {
@@ -607,6 +609,7 @@ ${input.slice(result.pos)}
         input,
         pos: 0,
         tokenize: options.tokenize || false,
+        verbose: options.verbose || false,
       }), {
         filename: filename
       })
