@@ -87,7 +87,8 @@ HandlingExpressionLine
   Indent Indent [^\n\r]* EOS -> $3
 
 StructuralMapping
-  StringValue
+  StringValue ->
+    return JSON.parse(`"${$1}"`)
   NumberValue
   BooleanValue
   NullValue

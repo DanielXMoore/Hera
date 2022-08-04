@@ -89,10 +89,10 @@ function $S() {
         terms[_i] = arguments[_i];
     }
     return function (state) {
-        var input = state.input, pos = state.pos, tokenize = state.tokenize, i = 0, value;
+        var input = state.input, pos = state.pos, tokenize = state.tokenize, verbose = state.verbose, i = 0, value;
         var results = [], s = pos, l = terms.length;
         while (i < l) {
-            var r = terms[i++]({ input: input, pos: pos, tokenize: tokenize });
+            var r = terms[i++]({ input: input, pos: pos, tokenize: tokenize, verbose: verbose });
             if (r) {
                 (pos = r.pos, value = r.value);
                 results.push(value);
@@ -138,13 +138,13 @@ exports.$E = $E;
 // `!x+ == !x`.
 function $Q(fn) {
     return function (state) {
-        var input = state.input, pos = state.pos, tokenize = state.tokenize;
+        var input = state.input, pos = state.pos, tokenize = state.tokenize, verbose = state.verbose;
         var value;
         var s = pos;
         var results = [];
         while (true) {
             var prevPos = pos;
-            var r = fn({ input: input, pos: pos, tokenize: tokenize });
+            var r = fn({ input: input, pos: pos, tokenize: tokenize, verbose: verbose });
             if (r == undefined)
                 break;
             (pos = r.pos, value = r.value);
@@ -167,7 +167,7 @@ exports.$Q = $Q;
 // + one or more
 function $P(fn) {
     return function (state) {
-        var input = state.input, s = state.pos, tokenize = state.tokenize;
+        var input = state.input, s = state.pos, tokenize = state.tokenize, verbose = state.verbose;
         var value;
         var first = fn(state);
         if (!first)
@@ -176,7 +176,7 @@ function $P(fn) {
         var results = [first.value];
         while (true) {
             var prevPos = pos;
-            var r = fn({ input: input, pos: pos, tokenize: tokenize });
+            var r = fn({ input: input, pos: pos, tokenize: tokenize, verbose: verbose });
             if (!r)
                 break;
             (pos = r.pos, value = r.value);
@@ -432,7 +432,8 @@ function parserState(grammar) {
             return validate(input, parser({
                 input: input,
                 pos: 0,
-                tokenize: options.tokenize || false
+                tokenize: options.tokenize || false,
+                verbose: options.verbose || false
             }), {
                 filename: filename
             });
@@ -534,6 +535,7 @@ const $R22 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'))
 
 const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function($skip, $loc, $0, $1, $2) {return Object.fromEntries($2)});
 function Grammar(state) {
+  if (state.verbose) console.log("ENTER:", "Grammar");
   if (state.tokenize) {
     return $TOKEN("Grammar", state, Grammar$0(state));
   } else {
@@ -543,6 +545,7 @@ function Grammar(state) {
 
 const Rule$0 = $T($S(Name, EOS, RuleBody), function(value) {return [value[0], value[2]] });
 function Rule(state) {
+  if (state.verbose) console.log("ENTER:", "Rule");
   if (state.tokenize) {
     return $TOKEN("Rule", state, Rule$0(state));
   } else {
@@ -554,6 +557,7 @@ const RuleBody$0 = $TV($P($S(Indent, Choice)), function($skip, $loc, $0, $1) {va
 if (r.length === 1) return r[0];
 return ["/", r]});
 function RuleBody(state) {
+  if (state.verbose) console.log("ENTER:", "RuleBody");
   if (state.tokenize) {
     return $TOKEN("RuleBody", state, RuleBody$0(state));
   } else {
@@ -569,6 +573,7 @@ const Choice$0 = $TS($S(Sequence, Handling), function($skip, $loc, $0, $1, $2) {
 }
 return $1});
 function Choice(state) {
+  if (state.verbose) console.log("ENTER:", "Choice");
   if (state.tokenize) {
     return $TOKEN("Choice", state, Choice$0(state));
   } else {
@@ -591,6 +596,7 @@ function Sequence(state) {
 
 const SequenceExpression$0 = $T($S(Space, Expression), function(value) {return value[1] });
 function SequenceExpression(state) {
+  if (state.verbose) console.log("ENTER:", "SequenceExpression");
   if (state.tokenize) {
     return $TOKEN("SequenceExpression", state, SequenceExpression$0(state));
   } else {
@@ -600,6 +606,7 @@ function SequenceExpression(state) {
 
 const ChoiceExpression$0 = $T($S(Space, $EXPECT($L0, fail, "ChoiceExpression \"/\""), Space, Expression), function(value) {return value[3] });
 function ChoiceExpression(state) {
+  if (state.verbose) console.log("ENTER:", "ChoiceExpression");
   if (state.tokenize) {
     return $TOKEN("ChoiceExpression", state, ChoiceExpression$0(state));
   } else {
@@ -609,6 +616,7 @@ function ChoiceExpression(state) {
 
 const ParameterName$0 = $T($S($EXPECT($L1, fail, "ParameterName \":\""), Name), function(value) {return value[1] });
 function ParameterName(state) {
+  if (state.verbose) console.log("ENTER:", "ParameterName");
   if (state.tokenize) {
     return $TOKEN("ParameterName", state, ParameterName$0(state));
   } else {
@@ -623,6 +631,7 @@ if ($3)
   return [{name: $3}, result]
 return result});
 function Expression(state) {
+  if (state.verbose) console.log("ENTER:", "Expression");
   if (state.tokenize) {
     return $TOKEN("Expression", state, Expression$0(state));
   } else {
@@ -632,6 +641,7 @@ function Expression(state) {
 
 const PrefixOperator$0 = $R$0($EXPECT($R0, fail, "PrefixOperator /[$&!]/"));
 function PrefixOperator(state) {
+  if (state.verbose) console.log("ENTER:", "PrefixOperator");
   if (state.tokenize) {
     return $TOKEN("PrefixOperator", state, PrefixOperator$0(state));
   } else {
@@ -642,6 +652,7 @@ function PrefixOperator(state) {
 const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function($skip, $loc, $0, $1, $2) {if ($2) return [$2, $1]
 else return $1});
 function Suffix(state) {
+  if (state.verbose) console.log("ENTER:", "Suffix");
   if (state.tokenize) {
     return $TOKEN("Suffix", state, Suffix$0(state));
   } else {
@@ -651,6 +662,7 @@ function Suffix(state) {
 
 const SuffixOperator$0 = $R$0($EXPECT($R1, fail, "SuffixOperator /[+?*]/"));
 function SuffixOperator(state) {
+  if (state.verbose) console.log("ENTER:", "SuffixOperator");
   if (state.tokenize) {
     return $TOKEN("SuffixOperator", state, SuffixOperator$0(state));
   } else {
@@ -703,6 +715,7 @@ const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function($skip,
   f: $1.join("\n")
 }});
 function HandlingExpressionBody(state) {
+  if (state.verbose) console.log("ENTER:", "HandlingExpressionBody");
   if (state.tokenize) {
     return $TOKEN("HandlingExpressionBody", state, HandlingExpressionBody$0(state));
   } else {
@@ -712,6 +725,7 @@ function HandlingExpressionBody(state) {
 
 const HandlingExpressionLine$0 = $T($S(Indent, Indent, $EXPECT($R2, fail, "HandlingExpressionLine /[^\\n\\r]*/"), EOS), function(value) {return value[2] });
 function HandlingExpressionLine(state) {
+  if (state.verbose) console.log("ENTER:", "HandlingExpressionLine");
   if (state.tokenize) {
     return $TOKEN("HandlingExpressionLine", state, HandlingExpressionLine$0(state));
   } else {
@@ -719,7 +733,7 @@ function HandlingExpressionLine(state) {
   }
 }
 
-const StructuralMapping$0 = StringValue;
+const StructuralMapping$0 = $TS($S(StringValue), function($skip, $loc, $0, $1) {return JSON.parse(`"${$1}"`)});
 const StructuralMapping$1 = NumberValue;
 const StructuralMapping$2 = BooleanValue;
 const StructuralMapping$3 = NullValue;
@@ -736,6 +750,7 @@ function StructuralMapping(state) {
 
 const JSArray$0 = $T($S(OpenBracket, $Q(ArrayItem), CloseBracket), function(value) {return value[1] });
 function JSArray(state) {
+  if (state.verbose) console.log("ENTER:", "JSArray");
   if (state.tokenize) {
     return $TOKEN("JSArray", state, JSArray$0(state));
   } else {
@@ -745,6 +760,7 @@ function JSArray(state) {
 
 const ArrayItem$0 = $T($S(StructuralMapping, $EXPECT($R3, fail, "ArrayItem /,\\s*|\\s*(?=\\])/")), function(value) {return value[0] });
 function ArrayItem(state) {
+  if (state.verbose) console.log("ENTER:", "ArrayItem");
   if (state.tokenize) {
     return $TOKEN("ArrayItem", state, ArrayItem$0(state));
   } else {
@@ -756,6 +772,7 @@ const JSObject$0 = $TS($S(OpenBrace, $Q(ObjectField), CloseBrace), function($ski
   o: Object.fromEntries($2)
 }});
 function JSObject(state) {
+  if (state.verbose) console.log("ENTER:", "JSObject");
   if (state.tokenize) {
     return $TOKEN("JSObject", state, JSObject$0(state));
   } else {
@@ -815,6 +832,7 @@ function NumberValue(state) {
 
 const StringValue$0 = $T($S($EXPECT($L6, fail, "StringValue \"\\\\\\\"\""), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L6, fail, "StringValue \"\\\\\\\"\"")), function(value) {return value[1] });
 function StringValue(state) {
+  if (state.verbose) console.log("ENTER:", "StringValue");
   if (state.tokenize) {
     return $TOKEN("StringValue", state, StringValue$0(state));
   } else {
@@ -834,6 +852,7 @@ function DoubleStringCharacter(state) {
 
 const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R10, fail, "EscapeSequence /./")));
 function EscapeSequence(state) {
+  if (state.verbose) console.log("ENTER:", "EscapeSequence");
   if (state.tokenize) {
     return $TOKEN("EscapeSequence", state, EscapeSequence$0(state));
   } else {
@@ -843,6 +862,7 @@ function EscapeSequence(state) {
 
 const StringLiteral$0 = $T($S(StringValue), function(value) {return ["L", value[0]] });
 function StringLiteral(state) {
+  if (state.verbose) console.log("ENTER:", "StringLiteral");
   if (state.tokenize) {
     return $TOKEN("StringLiteral", state, StringLiteral$0(state));
   } else {
@@ -863,6 +883,7 @@ function RegExpLiteral(state) {
 
 const CharacterClassExpression$0 = $P(CharacterClass);
 function CharacterClassExpression(state) {
+  if (state.verbose) console.log("ENTER:", "CharacterClassExpression");
   if (state.tokenize) {
     return $TOKEN("CharacterClassExpression", state, CharacterClassExpression$0(state));
   } else {
@@ -882,6 +903,7 @@ function RegExpCharacter(state) {
 
 const CharacterClass$0 = $S($EXPECT($L8, fail, "CharacterClass \"[\""), $Q(CharacterClassCharacter), $EXPECT($L9, fail, "CharacterClass \"]\""), $E(Quantifier));
 function CharacterClass(state) {
+  if (state.verbose) console.log("ENTER:", "CharacterClass");
   if (state.tokenize) {
     return $TOKEN("CharacterClass", state, CharacterClass$0(state));
   } else {
@@ -901,6 +923,7 @@ function CharacterClassCharacter(state) {
 
 const Quantifier$0 = $R$0($EXPECT($R13, fail, "Quantifier /[?+*]|\\{\\d+(,\\d+)?\\}/"));
 function Quantifier(state) {
+  if (state.verbose) console.log("ENTER:", "Quantifier");
   if (state.tokenize) {
     return $TOKEN("Quantifier", state, Quantifier$0(state));
   } else {
@@ -910,6 +933,7 @@ function Quantifier(state) {
 
 const Name$0 = $R$0($EXPECT($R14, fail, "Name /[_a-zA-Z][_a-zA-Z0-9]*/"));
 function Name(state) {
+  if (state.verbose) console.log("ENTER:", "Name");
   if (state.tokenize) {
     return $TOKEN("Name", state, Name$0(state));
   } else {
@@ -919,6 +943,7 @@ function Name(state) {
 
 const Arrow$0 = $S($EXPECT($L10, fail, "Arrow \"->\""), $Q(Space));
 function Arrow(state) {
+  if (state.verbose) console.log("ENTER:", "Arrow");
   if (state.tokenize) {
     return $TOKEN("Arrow", state, Arrow$0(state));
   } else {
@@ -928,6 +953,7 @@ function Arrow(state) {
 
 const Backslash$0 = $EXPECT($L11, fail, "Backslash \"\\\\\\\\\"");
 function Backslash(state) {
+  if (state.verbose) console.log("ENTER:", "Backslash");
   if (state.tokenize) {
     return $TOKEN("Backslash", state, Backslash$0(state));
   } else {
@@ -937,6 +963,7 @@ function Backslash(state) {
 
 const OpenBrace$0 = $R$0($EXPECT($R15, fail, "OpenBrace /\\{\\s*/"));
 function OpenBrace(state) {
+  if (state.verbose) console.log("ENTER:", "OpenBrace");
   if (state.tokenize) {
     return $TOKEN("OpenBrace", state, OpenBrace$0(state));
   } else {
@@ -946,6 +973,7 @@ function OpenBrace(state) {
 
 const CloseBrace$0 = $R$0($EXPECT($R16, fail, "CloseBrace /\\}[ \\t]*/"));
 function CloseBrace(state) {
+  if (state.verbose) console.log("ENTER:", "CloseBrace");
   if (state.tokenize) {
     return $TOKEN("CloseBrace", state, CloseBrace$0(state));
   } else {
@@ -955,6 +983,7 @@ function CloseBrace(state) {
 
 const OpenBracket$0 = $R$0($EXPECT($R17, fail, "OpenBracket /\\[\\s*/"));
 function OpenBracket(state) {
+  if (state.verbose) console.log("ENTER:", "OpenBracket");
   if (state.tokenize) {
     return $TOKEN("OpenBracket", state, OpenBracket$0(state));
   } else {
@@ -964,6 +993,7 @@ function OpenBracket(state) {
 
 const CloseBracket$0 = $R$0($EXPECT($R18, fail, "CloseBracket /\\][ \\t]*/"));
 function CloseBracket(state) {
+  if (state.verbose) console.log("ENTER:", "CloseBracket");
   if (state.tokenize) {
     return $TOKEN("CloseBracket", state, CloseBracket$0(state));
   } else {
@@ -973,6 +1003,7 @@ function CloseBracket(state) {
 
 const OpenParenthesis$0 = $R$0($EXPECT($R19, fail, "OpenParenthesis /\\([ \\t]*/"));
 function OpenParenthesis(state) {
+  if (state.verbose) console.log("ENTER:", "OpenParenthesis");
   if (state.tokenize) {
     return $TOKEN("OpenParenthesis", state, OpenParenthesis$0(state));
   } else {
@@ -982,6 +1013,7 @@ function OpenParenthesis(state) {
 
 const CloseParenthesis$0 = $R$0($EXPECT($R20, fail, "CloseParenthesis /[ \\t]*\\)/"));
 function CloseParenthesis(state) {
+  if (state.verbose) console.log("ENTER:", "CloseParenthesis");
   if (state.tokenize) {
     return $TOKEN("CloseParenthesis", state, CloseParenthesis$0(state));
   } else {
@@ -991,6 +1023,7 @@ function CloseParenthesis(state) {
 
 const Indent$0 = $EXPECT($L12, fail, "Indent \"  \"");
 function Indent(state) {
+  if (state.verbose) console.log("ENTER:", "Indent");
   if (state.tokenize) {
     return $TOKEN("Indent", state, Indent$0(state));
   } else {
@@ -1000,6 +1033,7 @@ function Indent(state) {
 
 const Space$0 = $R$0($EXPECT($R21, fail, "Space /[ \\t]+/"));
 function Space(state) {
+  if (state.verbose) console.log("ENTER:", "Space");
   if (state.tokenize) {
     return $TOKEN("Space", state, Space$0(state));
   } else {
@@ -1009,6 +1043,7 @@ function Space(state) {
 
 const EOS$0 = $R$0($EXPECT($R22, fail, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"));
 function EOS(state) {
+  if (state.verbose) console.log("ENTER:", "EOS");
   if (state.tokenize) {
     return $TOKEN("EOS", state, EOS$0(state));
   } else {

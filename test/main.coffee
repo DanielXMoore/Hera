@@ -1,6 +1,8 @@
 assert = require "assert"
 
-{generate} = hera = require "../source/main"
+hera = require "../source/main"
+{generate} = hera
+
 test = it
 
 describe "Build rules", ->
@@ -250,6 +252,14 @@ describe "Hera", ->
       """
 
       assert.deepEqual parse(""), [7, -3.1, 2.7, null, false, true]
+
+    it "should properly encode string literals in object values", ->
+      {parse} = generate """
+        Rule
+          "" -> "\\n"
+      """
+
+      assert.deepEqual parse(""), "\n"
 
     it "should allow for bare undefined", ->
       {parse} = generate """

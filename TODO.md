@@ -1,7 +1,7 @@
 TODO
 ====
 
-- [ ] BUG: String values are extra escaped in mapping
+- [x] BUG: String values are extra escaped in mapping
 ```hera
 InsertNewlineLiteral
   # Gets inserted as "\\n"

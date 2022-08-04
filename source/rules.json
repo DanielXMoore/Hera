@@ -265,7 +265,15 @@
   "StructuralMapping": [
     "/",
     [
-      "StringValue",
+      [
+        "S",
+        [
+          "StringValue"
+        ],
+        {
+          "f": "return JSON.parse(`\"${$1}\"`)"
+        }
+      ],
       "NumberValue",
       "BooleanValue",
       "NullValue",
