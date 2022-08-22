@@ -1,6 +1,7 @@
 TODO
 ====
 
+- [x] BUG: $0 is undefined in structural mapping
 - [x] BUG: String values are extra escaped in mapping
 ```hera
 InsertNewlineLiteral
@@ -26,9 +27,10 @@ Rule
   ~A B ~C
 ```
 - [ ] Registering CoffeeCoverage is slow in the current config
-- [ ] Explore consuming a variable length of input
 - [ ] Explore getting byte arrays, length then bytes (MIDI, etc.)
 - [ ] Define literal code to be included in parser.
+- [ ] Automatic parse tree generator. Generate nodes with type, location, and value.
+- [ ] Automatic syntax highlighter generation for VSCode.
 - [x] Restore `tokenize` parser option to return token tree with location data
 - [ ] Prevent identifiers from using JS reserved words
 - [x] Structural mapping

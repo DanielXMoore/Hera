@@ -163,7 +163,11 @@ compileStructuralHandler = (mapping, source, single=false, offset) ->
           source
         else
           if typeof mapping.v is 'number'
-            "#{source}[#{mapping.v+offset}]"
+            n = mapping.v+offset
+            if n is -1 # Handle $0
+              source
+            else # Handle $1, $2, etc.
+              "#{source}[#{n}]"
           else
             mapping.v
       else if "o" of mapping

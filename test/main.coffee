@@ -285,6 +285,14 @@ describe "Hera", ->
 
       assert.deepEqual ["B", "C", "A"], parse "ABC"
 
+    it "should map array of sequence as $0", ->
+      {parse} = generate """
+        Rule
+          "A" "B" "C" -> $0
+      """
+
+      assert.deepEqual ["A", "B", "C"], parse "ABC"
+
     it "should map the entire result as $1", ->
       {parse} = generate """
         Rule
