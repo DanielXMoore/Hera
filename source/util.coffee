@@ -1,15 +1,17 @@
-hera = require "./main"
+import { parse } from "./main.mjs"
 
-module.exports =
-  ###*
-  Convert HeraRules to a Hera source text
-  @param rules {import("./machine").HeraRules}
-  ###
-  decompile: (rules) ->
-    Object.keys(rules).map (name) ->
-      value = toS rules[name]
-      "#{name}\n  #{value}\n"
-    .join("\n")
+
+###*
+Convert HeraRules to a Hera source text
+@param rules {import("./machine").HeraRules}
+###
+decompile = (rules) ->
+  Object.keys(rules).map (name) ->
+    value = toS rules[name]
+    "#{name}\n  #{value}\n"
+  .join("\n")
+
+export {decompile}
 
 #
 ###*
@@ -78,7 +80,7 @@ toS = (rule, depth=0) ->
           return v + hToS(h)
 
         try
-          hera.parse v,
+          parse v,
             startRule: "CharacterClassExpression"
           v + hToS(h)
         catch

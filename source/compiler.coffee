@@ -335,53 +335,58 @@ getNamedVariable = (op) ->
 defaultOptions =
   types: false
 
-module.exports =
-  #
-  ###*
-  @param rules {{[k: string]: HeraAST}}
-  ###
-  compile: (rules, options=defaultOptions) ->
-    # NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
-    # TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
-    tsMachine = require('fs').readFileSync(__dirname + "/machine.ts", "utf8")
-    jsMachine = require('fs').readFileSync(__dirname + "/machine.js", "utf8")
 
-    { types } = options
-    ruleNames = Object.keys(rules)
+import { readFileSync } from "fs"
 
-    body = ruleNames.map (name) ->
-      compileRule(options, name, rules[name])
-    .join("\n\n")
+#
+###*
+@param rules {{[k: string]: HeraAST}}
+###
+compile = (rules, options=defaultOptions) ->
+  # NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
+  # TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
+  tsMachine = readFileSync("source/machine.mts", "utf8")
+  jsMachine = readFileSync("source/machine.js", "utf8")
 
-    if types
-      header = tsMachine
-    else
-      header = jsMachine
+  { types } = options
+  ruleNames = Object.keys(rules)
 
+  body = ruleNames.map (name) ->
+    compileRule(options, name, rules[name])
+  .join("\n\n")
+
+  if types
+    header = tsMachine
+  else
+    header = jsMachine
+
+  """
+  #{header}
+
+  const { parse } = parserState(#{compileRulesObject(ruleNames)})
+
+  #{ strDefs.map (str, i) ->
     """
-    #{header}
-
-    const { parse } = parserState(#{compileRulesObject(ruleNames)})
-
-    #{ strDefs.map (str, i) ->
-      """
-        const $L#{i} = $L("#{str}");
-      """
-    .join "\n" }
-
-    #{ reDefs.map (r, i) ->
-      """
-        const $R#{i} = $R(new RegExp(#{JSON.stringify(r)}, 'suy'));
-      """
-
-    .join "\n" }
-
-    #{body}
-
-    module.exports = {
-      parse: parse
-    }
+      const $L#{i} = $L("#{str}");
     """
+  .join "\n" }
+
+  #{ reDefs.map (r, i) ->
+    """
+      const $R#{i} = $R(new RegExp(#{JSON.stringify(r)}, 'suy'));
+    """
+
+  .join "\n" }
+
+  #{body}
+
+  module.exports = {
+    parse: parse
+  }
+  """
+
+export {compile}
+export default compile
 
 isSimple = /^[^.*+?{}()\[\]^\\]*$/
 isSimpleCharacterClass = /^\[[^-^\\]*\]$/

@@ -1,15 +1,14 @@
-import {
+import type {
   HeraAST,
   HeraGrammar,
   HeraRules,
   ParserOptions,
   Loc,
   Token,
-} from "./machine"
+} from "./machine.mjs"
 
-import parser from "./parser"
-//@ts-ignore
-import compiler from "./compiler.coffee"
+import parser from "./parser.js"
+import {compile as heraCompile} from "./compiler.coffee"
 
 const execMod = (src: string) => {
   const m = { exports: {} }
@@ -29,7 +28,7 @@ const compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
   } else {
     rules = rulesOrString
   }
-  return compiler.compile(rules, options)
+  return heraCompile(rules, options)
 }
 const parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules = parser.parse
 
@@ -45,3 +44,11 @@ export {
   Loc,
   Token
 }
+
+const hera = {
+  parse,
+  compile,
+  generate,
+}
+
+export default hera

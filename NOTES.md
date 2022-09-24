@@ -135,3 +135,16 @@ This override the CoffeeScript hook to Error.prepareStackTrace.
 
 Not sure how to get these to play nice yet so just going with the Coffee stack
 traces for now.
+
+Timesheet
+---
+
+2022-09-22 | 1.50 | Exploring rewriting in Civet
+2022-09-23 | 1.25 | manually converting compiler.civet
+
+
+8:08am
+
+TODO:
+
+build/test with .civet and .coffee files

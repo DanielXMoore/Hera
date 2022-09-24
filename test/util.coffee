@@ -1,14 +1,14 @@
-assert = require "assert"
-{decompile} = require "../source/util"
-hera = require "../source/main"
-rules = require "../source/rules"
+import assert from "assert"
+import { decompile } from "../source/util.coffee"
+import {parse} from "../source/main.mjs"
+`import rules from "../source/rules.json" assert { type: "json" }`
 
 describe "util", ->
   it "should parse decompiled rules", ->
     grammar = decompile(rules)
 
     # console.log grammar
-    parsedRules = hera.parse grammar
+    parsedRules = parse grammar
     # console.log parsedRules, rules
 
     Object.keys(parsedRules).forEach (key) ->
@@ -19,7 +19,7 @@ describe "util", ->
     assert.equal grammar, readFile("samples/hera.hera")
 
   it "should decompile nested choices", ->
-    rules = hera.parse """
+    rules = parse """
       Rule
         ("A" / "C") ("B" / "D")
         "Z" -> "z"
@@ -27,7 +27,7 @@ describe "util", ->
     """
 
     decompiled = decompile rules
-    assert.deepEqual hera.parse(decompiled), rules
+    assert.deepEqual parse(decompiled), rules
 
   it "should decompile literal undefined", ->
     grammar = """
@@ -35,7 +35,7 @@ describe "util", ->
         "X" -> undefined
 
     """
-    rules = hera.parse grammar
+    rules = parse grammar
     assert.equal decompile(rules), grammar
 
   it "decompiles to an object format", ->
@@ -44,12 +44,12 @@ describe "util", ->
         "X" -> {a: 1, b: null}
 
     """
-    rules = hera.parse grammar
+    rules = parse grammar
 
     assert.equal decompile(rules), grammar
 
   it "should throw an error when decompiling an unknown format", ->
-    rules = hera.parse """
+    rules = parse """
       Rule
         "X" -> 0
     """
