@@ -8,7 +8,7 @@ import type {
 } from "./machine.mjs"
 
 import parser from "./parser.js"
-import {compile as heraCompile} from "./compiler.coffee"
+import {compile as heraCompile} from "./compiler.civet"
 
 const execMod = (src: string) => {
   const m = { exports: {} }

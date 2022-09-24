@@ -76,7 +76,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       case "/"
         {
           src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler, types)
+            return compileOp(arg, name, defaultHandler, types)
           .join(", ")
 
           return `$C(${src})`
@@ -84,7 +84,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       case "S"
         {
           src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler, types)
+            return compileOp(arg, name, defaultHandler, types)
           .join(", ")
           return `$S(${src})`
         }
@@ -125,7 +125,7 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
       return JSON.stringify(mapping)
     case "object"
       if Array.isArray mapping
-        return `[${mapping.map((m) -> compileStructuralHandler(m, source, single, offset)).join(', ')}]`
+        return `[${mapping.map((m) => compileStructuralHandler(m, source, single, offset)).join(', ')}]`
       else if mapping is null
         return "null"
       else if "l" in mapping
@@ -145,7 +145,7 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
       else if "o" in mapping
         o := mapping.o
         return "{" + Object.keys(o).map (key) ->
-          `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
+          return `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
@@ -166,7 +166,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         // Only handle top level names for now
         // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
         namedParameters := arg[1].map (node, i) ->
-          getParameterDeclaration(node, i+1)
+          return getParameterDeclaration(node, i+1)
         .join("")
 
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
@@ -187,9 +187,9 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         namedParameters := arg[1].map (node, i) ->
           varName := getNamedVariable(node[0])
           if varName
-            `var ${varName} = value[${i}];`
+            return `var ${varName} = value[${i}];`
           else
-            ""
+            return ""
         .join("")
         return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} })`
       else if arg[0] is "R"
@@ -219,10 +219,10 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      `const ${name}$${i} = ${compileHandler options, arg, name};`
+      return `const ${name}$${i} = ${compileHandler options, arg, name};`
 
     choices := args.map (_, i) ->
-      `${name}$${i}(state)`
+      return `${name}$${i}(state)`
     .join(" || ")
 
     return `
@@ -238,11 +238,10 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
-    `${name}: ${name}`
+    return `${name}: ${name}`
   .join(",\n")
 
-
-  `{
+  return `{
     ${meat}
   }`
 
@@ -278,7 +277,7 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   ruleNames := Object.keys(rules)
 
   body := ruleNames.map (name) ->
-    compileRule(options, name, rules[name])
+    return compileRule(options, name, rules[name])
   .join("\n\n")
 
   header := types ? tsMachine : jsMachine
@@ -297,9 +296,7 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
 
   ${body}
 
-  module.exports = {
-    parse: parse
-  }
+  exports.parse = parse
   `
 
 isSimple := /^[^.*+?{}()\[\]^\\]*$/
@@ -311,13 +308,13 @@ limited productions. Returns an empty string if `types` is `false`.
 */
 reType := (types: boolean, str: string) ->
   if types
-    let specifics
+    let specifics: string[] | undefined
     if str.match(isSimple)
       specifics = str.split("|").map (s) ->
-        JSON.stringify(s)
+        return JSON.stringify(s)
     else if str.match(isSimpleCharacterClass)
       specifics = str.substring(1, str.length-1).split("").map (s) ->
-        JSON.stringify(s)
+        return JSON.stringify(s)
 
     if specifics
       return ` as Parser<${specifics.join("|")}>`
