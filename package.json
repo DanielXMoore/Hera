@@ -13,6 +13,7 @@
     "@types/node": "^17.0.21",
     "babel-plugin-istanbul": "^6.1.1",
     "benchmark": "^2.1.4",
+    "c8": "^7.12.0",
     "coffeescript": "^2",
     "esbuild-coffeescript": "^2.0.0",
     "microtime": "^3.0.0",
@@ -77,7 +78,7 @@
   "scripts": {
     "benchmark": "coffee perf/benchmark.coffee",
     "build": "bash build/compile",
-    "test": "nyc mocha"
+    "test": "c8 mocha"
   },
   "bin": {
     "hera": "dist/hera"
