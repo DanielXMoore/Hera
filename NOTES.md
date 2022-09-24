@@ -136,6 +136,24 @@ This override the CoffeeScript hook to Error.prepareStackTrace.
 Not sure how to get these to play nice yet so just going with the Coffee stack
 traces for now.
 
+How to build types with .civet files when using esbuild?
+---
+
+esbuild resolves and transpiles .civet with `@danielx/civet/esbuild-plugin` but can't build types.
+
+ts-node resolves and transpiles .civet with `@danielx/civet/esm` loader and works fine for tests with `--transpileOnly`
+
+VSCode resolves and has editor integration when Civet Language Server is installed.
+
+tsc can't resolve .civet https://github.com/Microsoft/TypeScript/issues/16607
+
+To work around tsc limitations create a an additional folder `types` and add it to `rootDirs` in `build/tconfig.json`
+
+Create .d.ts files for modules that tsc needs to resolve. Name ones for `.civet` files `.civet.d.ts`
+Now tsc will be able to use that additional root to resolve. Also works for `parser.js`.
+
+These can be updated manually or transpiled one at a time as needed using tsc.
+
 Timesheet
 ---
 
