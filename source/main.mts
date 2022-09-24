@@ -5,7 +5,7 @@ import type {
   ParserOptions,
   Loc,
   Token,
-} from "./machine.mjs"
+} from "./machine.js"
 
 import parser from "./parser.js"
 import {compile as heraCompile} from "./compiler.civet"

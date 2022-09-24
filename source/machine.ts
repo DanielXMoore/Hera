@@ -500,6 +500,7 @@ const failExpected = Array(16)
 let failIndex = 0
 let maxFailPos = 0
 
+//@ts-ignore
 function fail(pos: number, expected: any) {
   if (pos < maxFailPos) return
 

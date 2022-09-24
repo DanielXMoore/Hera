@@ -76,7 +76,7 @@
   },
   "scripts": {
     "benchmark": "coffee perf/benchmark.coffee",
-    "build": "bash script/compile",
+    "build": "bash build/compile",
     "test": "nyc mocha"
   },
   "bin": {

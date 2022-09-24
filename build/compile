@@ -1,14 +1,14 @@
 #!/bin/bash
-set -euo pipefail
+set -euox pipefail
 
 rm -rf dist
 mkdir dist
 tsc source/machine.ts
 cp source/machine.* dist/
-coffee esbuild.coffee
+coffee build/esbuild.coffee
 
 # Build types
-tsc source/main.ts --declaration --emitDeclarationOnly --outfile dist/main.d.ts
+tsc --project build/tsconfig.json
 
 # build hera esbuild-plugin
 coffee --compile --bare --no-header --output ./ source/esbuild-plugin.coffee

@@ -1,12 +1,13 @@
 esbuild = require 'esbuild'
 coffeeScriptPlugin = require 'esbuild-coffeescript'
+civetPlugin = require '@danielx/civet/esbuild-plugin'
 
 watch = process.argv.includes '--watch'
 minify = !watch || process.argv.includes '--minify'
 sourcemap = true
 
 esbuild.build({
-  entryPoints: ['source/main.ts']
+  entryPoints: ['source/main.mts']
   tsconfig: "./tsconfig.json"
   bundle: true
   external: ["fs"]
@@ -17,6 +18,7 @@ esbuild.build({
   platform: 'browser'
   outfile: 'dist/main.js'
   plugins: [
+    civetPlugin
     coffeeScriptPlugin
       bare: true
       inlineMap: sourcemap

@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, StructuralHandling } from ./machine.ts
+import type { HeraAST, StructuralHandling } from ./machine.js
 import { readFileSync } from "fs"
 
 interface CompileOptions {
@@ -270,7 +270,7 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   // NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
   // TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
   __dirname := "./source"
-  tsMachine := readFileSync(__dirname + "/machine.mts", "utf8")
+  tsMachine := readFileSync(__dirname + "/machine.ts", "utf8")
   jsMachine := readFileSync(__dirname + "/machine.js", "utf8")
 
   { types } := options
