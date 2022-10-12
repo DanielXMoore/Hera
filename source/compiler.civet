@@ -76,7 +76,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       case "/"
         {
           src := tuple[1].map (arg) ->
-            return compileOp(arg, name, defaultHandler, types)
+            compileOp(arg, name, defaultHandler, types)
           .join(", ")
 
           return `$C(${src})`
@@ -84,7 +84,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       case "S"
         {
           src := tuple[1].map (arg) ->
-            return compileOp(arg, name, defaultHandler, types)
+            compileOp(arg, name, defaultHandler, types)
           .join(", ")
           return `$S(${src})`
         }
@@ -145,7 +145,7 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
       else if "o" in mapping
         o := mapping.o
         return "{" + Object.keys(o).map (key) ->
-          return `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
+          `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
@@ -166,7 +166,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         // Only handle top level names for now
         // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
         namedParameters := arg[1].map (node, i) ->
-          return getParameterDeclaration(node, i+1)
+          getParameterDeclaration(node, i+1)
         .join("")
 
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
@@ -187,9 +187,9 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         namedParameters := arg[1].map (node, i) ->
           varName := getNamedVariable(node[0])
           if varName
-            return `var ${varName} = value[${i}];`
+            `var ${varName} = value[${i}];`
           else
-            return ""
+            ""
         .join("")
         return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} })`
       else if arg[0] is "R"
@@ -205,7 +205,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
-    return `
+    `
       const ${name}$0 = ${compileHandler(options, rule, name)};
       function ${name}(state${stateType}) {
         if (state.verbose) console.log("ENTER:", ${JSON.stringify(name)});
@@ -219,13 +219,13 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      return `const ${name}$${i} = ${compileHandler options, arg, name};`
+      `const ${name}$${i} = ${compileHandler options, arg, name};`
 
     choices := args.map (_, i) ->
-      return `${name}$${i}(state)`
+      `${name}$${i}(state)`
     .join(" || ")
 
-    return `
+    `
       ${fns.join("\n")}
       function ${name}(state${stateType}) {
         if (state.tokenize) {
@@ -238,7 +238,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
-    return `${name}: ${name}`
+    `${name}: ${name}`
   .join(",\n")
 
   return `{
@@ -251,9 +251,10 @@ Get a JS declaration string for nodes that have named parameters.
 getParameterDeclaration := (node: HeraAST, i: number) ->
   name := getNamedVariable node[0]
 
-  return name
-    ? `var ${name} = $${i};`
-    : ""
+  if name
+    `var ${name} = $${i};`
+  else
+    ""
 
 /**
 Get a JS declaration string for nodes that have named parameters.
@@ -277,7 +278,7 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   ruleNames := Object.keys(rules)
 
   body := ruleNames.map (name) ->
-    return compileRule(options, name, rules[name])
+    compileRule(options, name, rules[name])
   .join("\n\n")
 
   header := types ? tsMachine : jsMachine
@@ -287,11 +288,11 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   const { parse } = parserState(${compileRulesObject(ruleNames)})
 
   ${ strDefs.map (str, i) ->
-    return `const $L${i} = $L("${str}");`
+    `const $L${i} = $L("${str}");`
   .join "\n" }
 
   ${ reDefs.map (r, i) ->
-    return `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));`
+    `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));`
   .join "\n" }
 
   ${body}
@@ -311,14 +312,14 @@ reType := (types: boolean, str: string) ->
     let specifics: string[] | undefined
     if str.match(isSimple)
       specifics = str.split("|").map (s) ->
-        return JSON.stringify(s)
+        JSON.stringify(s)
     else if str.match(isSimpleCharacterClass)
       specifics = str.substring(1, str.length-1).split("").map (s) ->
-        return JSON.stringify(s)
+        JSON.stringify(s)
 
     if specifics
-      return ` as Parser<${specifics.join("|")}>`
+      ` as Parser<${specifics.join("|")}>`
     else
-      return ""
+      ""
   else
-    return ""
+    ""

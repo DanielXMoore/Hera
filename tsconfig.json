@@ -105,7 +105,8 @@
     "transpileOnly": true,
     "compilerOptions": {
       "module": "esnext",
-      "moduleResolution": "node"
+      "moduleResolution": "node",
+      "inlineSourceMap": true
     }
   }
 }
