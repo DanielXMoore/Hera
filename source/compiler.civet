@@ -59,55 +59,55 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
   // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
   if Array.isArray(tuple)
     switch tuple[0]
-      case "L"
+      when "L"
         {
           args := tuple[1]
-          return `$EXPECT(${defineTerminal(args)}, fail, ${JSON.stringify(prettyPrint(name, args))})`
+          `$EXPECT(${defineTerminal(args)}, fail, ${JSON.stringify(prettyPrint(name, args))})`
         }
-      case "R"
+      when "R"
         {
           args := tuple[1]
           let f = `$EXPECT(${defineRe(args)}, fail, ${JSON.stringify(prettyPrint(name, args, true))})`
           if defaultHandler
             f =`$R$0(${f})${reType(types, args)}`
 
-          return f
+          f
         }
-      case "/"
+      when "/"
         {
           src := tuple[1].map (arg) ->
             compileOp(arg, name, defaultHandler, types)
           .join(", ")
 
-          return `$C(${src})`
+          `$C(${src})`
         }
-      case "S"
+      when "S"
         {
           src := tuple[1].map (arg) ->
             compileOp(arg, name, defaultHandler, types)
           .join(", ")
-          return `$S(${src})`
+          `$S(${src})`
         }
-      case "*"
-        return `$Q(${compileOp(tuple[1], name, defaultHandler, types)})`
-      case "+"
-        return `$P(${compileOp(tuple[1], name, defaultHandler, types)})`
-      case "?"
-        return `$E(${compileOp(tuple[1], name, defaultHandler, types)})`
-      case "$"
+      when "*"
+        `$Q(${compileOp(tuple[1], name, defaultHandler, types)})`
+      when "+"
+        `$P(${compileOp(tuple[1], name, defaultHandler, types)})`
+      when "?"
+        `$E(${compileOp(tuple[1], name, defaultHandler, types)})`
+      when "$"
         // Inside text can ignore all handlers since they are disregarded anyway
-        return `$TEXT(${compileOp(tuple[1], name, false, types)})`
-      case "&"
-        return `$Y(${compileOp(tuple[1], name, defaultHandler, types)})`
-      case "!"
-        return `$N(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$TEXT(${compileOp(tuple[1], name, false, types)})`
+      when "&"
+        `$Y(${compileOp(tuple[1], name, defaultHandler, types)})`
+      when "!"
+        `$N(${compileOp(tuple[1], name, defaultHandler, types)})`
       default
         if tuple[0].name
-          return compileOp(tuple[1], name, defaultHandler, types)
+          compileOp(tuple[1], name, defaultHandler, types)
         else
           throw new Error `Unknown op: ${tuple[0]} ${JSON.stringify(tuple[1])}`
   else // rule reference
-    return tuple
+    tuple
 
 // Only rules have handlers, either one per choice line,
 // or one for the whole deal
@@ -121,36 +121,36 @@ regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 // TODO: remove offset and unify handlings
 compileStructuralHandler := (mapping: StructuralHandling, source: any, single=false, offset=-1): string ->
   switch typeof mapping
-    case "string"
-      return JSON.stringify(mapping)
-    case "object"
+    when "string"
+      JSON.stringify(mapping)
+    when "object"
       if Array.isArray mapping
-        return `[${mapping.map((m) => compileStructuralHandler(m, source, single, offset)).join(', ')}]`
+        `[${mapping.map((m) => compileStructuralHandler(m, source, single, offset)).join(', ')}]`
       else if mapping is null
-        return "null"
+        "null"
       else if "l" in mapping
-        return String(mapping.l)
+        String(mapping.l)
       else if "v" in mapping
         if single
-          return source
+          source
         else
           if typeof mapping.v is 'number'
             n := mapping.v+offset
             if n is -1 // Handle $0
-              return source
+              source
             else // Handle $1, $2, etc.
-              return `${source}[${n}]`
+              `${source}[${n}]`
           else
-            return mapping.v
+            mapping.v
       else if "o" in mapping
         o := mapping.o
-        return "{" + Object.keys(o).map (key) ->
+        "{" + Object.keys(o).map (key) ->
           `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
     default // number, boolean, undefined
-      return String(mapping)
+      String(mapping)
 
 compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
   if typeof arg is "string"
