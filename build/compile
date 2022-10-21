@@ -3,7 +3,7 @@ set -euox pipefail
 
 rm -rf dist
 mkdir dist
-tsc source/machine.ts
+tsc --target es2015 --module commonjs source/machine.ts
 cp source/machine.* dist/
 coffee build/esbuild.coffee
 

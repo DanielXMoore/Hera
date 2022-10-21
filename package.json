@@ -38,7 +38,7 @@
       "ts-node/esm",
       "./build/coffee-esm.mjs",
       "./build/hera-esm.mjs",
-      "./build/civet-esm.mjs"
+      "@danielx/civet/esm"
     ],
     "reporter": "spec",
     "recursive": true,
@@ -57,8 +57,9 @@
       "text"
     ],
     "extension": [
+      ".civet",
       ".coffee",
-      ".js",
+      ".mts",
       ".ts"
     ],
     "exclude": [

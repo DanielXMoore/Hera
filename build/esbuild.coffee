@@ -3,8 +3,8 @@ coffeeScriptPlugin = require 'esbuild-coffeescript'
 civetPlugin = require '@danielx/civet/esbuild-plugin'
 
 watch = process.argv.includes '--watch'
-minify = !watch || process.argv.includes '--minify'
-sourcemap = true
+minify = process.argv.includes '--minify'
+sourcemap = false
 
 esbuild.build({
   entryPoints: ['source/main.mts']
