@@ -21,11 +21,11 @@ NestedItems(X)
 NestedItem(X)
   $Nested X &EOS
 ```
-- [ ] Explore `drop` prefix (`?:` maybe). Items match as normal but are dropped from the sequence's handler.
-```
-Rule
-  ~A B ~C
-```
+- [ ] Explore `drop` prefix (`?:` maybe, or `:`, `-`). Items match as normal but are dropped from the sequence's handler.
+  ```
+  Rule
+    -A B -C
+  ```
 - [x] Registering CoffeeCoverage is slow in the current config (was a VSCode / WSL misconfiguration)
 - [ ] Explore getting byte arrays, length then bytes (MIDI, etc.)
 - [ ] Define literal code to be included in parser.

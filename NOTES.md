@@ -160,6 +160,7 @@ Timesheet
 2022-09-22 | 1.50 | Exploring rewriting in Civet
 2022-09-23 | 1.25 | manually converting compiler.civet
 2022-09-24 | 3.00 | tests working with compiler.civet
+2022-10-21 | 1.50 | figuring out .civet code coverage
 
 TODO:
 
