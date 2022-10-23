@@ -29,12 +29,16 @@ export async function load(url, context, next) {
   if (context.format === "coffee") {
     const path = fileURLToPath(url)
     const source = await readFile(path, "utf8")
-    const jsSource = compile(source)
+    const jsSource = compile(source, {
+      filename: url,
+      inlineMap: true,
+    })
 
-    return next(url.replace(extensionsRegex, ".mjs"), {
+    return {
       format: "module",
-      source: jsSource
-    });
+      source: jsSource,
+      shortCircuit: true,
+    };
   }
 
   // Let Node.js handle all other URLs.

@@ -63,8 +63,9 @@
       ".ts"
     ],
     "exclude": [
-      "test/",
-      "source/parser.js"
+      "build/",
+      "dist/",
+      "test/"
     ]
   },
   "scripts": {
