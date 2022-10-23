@@ -161,6 +161,7 @@ Timesheet
 2022-09-23 | 1.25 | manually converting compiler.civet
 2022-09-24 | 3.00 | tests working with compiler.civet
 2022-10-21 | 1.50 | figuring out .civet code coverage
+2022-10-22 | 1.00 | util.coffee -> .civet
 
 TODO:
 

@@ -1,5 +1,5 @@
 import assert from "assert"
-import { decompile } from "../source/util.coffee"
+import { decompile } from "../source/util.civet"
 import {parse} from "../source/main.mjs"
 `import rules from "../source/rules.json" assert { type: "json" }`
 
@@ -57,6 +57,30 @@ describe "util", ->
     rules.Rule[2] = {
       yo: "wat"
     }
+
+    assert.throws ->
+      decompile rules
+    , /Unknown/
+
+  it "should throw an error when decompiling an unknown object", ->
+    rules = parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[2] = ->
+
+    assert.throws ->
+      decompile rules
+    , /Unknown/
+
+  it "should throw an error when decompiling an unknown rule type", ->
+    rules = parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[0] = "XXX"
 
     assert.throws ->
       decompile rules
