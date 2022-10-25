@@ -1,10 +1,7 @@
 import type {
-  HeraAST,
   HeraGrammar,
   HeraRules,
   ParserOptions,
-  Loc,
-  Token,
 } from "./machine.js"
 
 import parser from "./parser.js"
@@ -40,9 +37,6 @@ export {
   parse,
   compile,
   generate,
-  HeraAST,
-  Loc,
-  Token
 }
 
 const hera = {

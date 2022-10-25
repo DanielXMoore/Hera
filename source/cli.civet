@@ -1,9 +1,11 @@
-{compile, parse} = require './main'
-encoding = "utf8"
-fs = require "fs"
+#!/usr/bin/env node
 
-input = fs.readFileSync process.stdin.fd, encoding
-ast = parse input
+{compile, parse} := require './main'
+encoding := "utf8"
+fs := require "fs"
+
+input := fs.readFileSync process.stdin.fd, encoding
+ast := parse input
 
 if process.argv.includes '--ast'
   process.stdout.write JSON.stringify(ast, null, 2)
@@ -12,7 +14,7 @@ if process.argv.includes '--ast'
 process.stdout.write compile ast,
   types: process.argv.includes '--types'
 
-# Write out cli io
+// Write out cli io
 if process.argv.includes '--cli'
   process.stdout.write """
 

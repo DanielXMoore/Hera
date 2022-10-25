@@ -7,7 +7,7 @@ minify = process.argv.includes '--minify'
 sourcemap = false
 
 esbuild.build({
-  entryPoints: ['source/main.mts']
+  entryPoints: ['source/main.civet']
   tsconfig: "./tsconfig.json"
   bundle: true
   external: ["fs"]

@@ -11,11 +11,9 @@ coffee build/esbuild.coffee
 tsc --project build/tsconfig.json
 
 # build hera esbuild-plugin
-coffee --compile --bare --no-header --output ./ source/esbuild-plugin.coffee
+civet < source/esbuild-plugin.civet > esbuild-plugin.js
 
 # Build 'hera' cli
-coffee --compile --bare --no-header --output dist/ source/cli.coffee
 BIN="dist/hera"
-echo "#!/usr/bin/env node" | cat - dist/cli.js > "$BIN"
+civet < source/cli.civet > "$BIN"
 chmod +x "$BIN"
-rm dist/cli.js

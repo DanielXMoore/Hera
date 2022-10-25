@@ -1,5 +1,5 @@
 import assert from "assert"
-import hera, { compile, generate } from "../source/main.mjs"
+import hera, { compile, generate } from "../source/main.civet"
 
 test = it
 

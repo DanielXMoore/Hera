@@ -1,6 +1,6 @@
 import assert from "assert"
 import { decompile } from "../source/util.civet"
-import {parse} from "../source/main.mjs"
+import {parse} from "../source/main.civet"
 `import rules from "../source/rules.json" assert { type: "json" }`
 
 describe "util", ->
