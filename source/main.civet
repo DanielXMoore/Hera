@@ -2,47 +2,47 @@ import type {
   HeraGrammar,
   HeraRules,
   ParserOptions,
-} from "./machine.js"
+} from ./machine.js
 
-import parser from "./parser.js"
-import {compile as heraCompile} from "./compiler.civet"
+parser from ./parser.js
+{compile as heraCompile} from ./compiler.civet
 
-const execMod = (src: string) => {
-  const m = { exports: {} }
+execMod := (src: string) => {
+  m := { exports: {} }
   Function("module", "exports", src)(m, m.exports)
 
-  return m.exports;
+  return m.exports
 }
 
 type CompilerOptions = {
   types: boolean
 }
 
-const compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string = (rulesOrString, options) => {
-  var rules: HeraRules
-  if (typeof rulesOrString === "string") {
+compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string := (rulesOrString, options) =>
+  let rules: HeraRules
+  if typeof rulesOrString is "string"
     rules = parse(rulesOrString)
-  } else {
+  else
     rules = rulesOrString
-  }
-  return heraCompile(rules, options)
-}
-const parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules = parser.parse
 
-const generate = <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as {
+  return heraCompile rules, options
+
+parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules := parser.parse
+
+generate := <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as {
   parse: (input: string, options?: ParserOptions<T>) => unknown
 }
 
 export {
-  parse,
-  compile,
-  generate,
+  parse
+  compile
+  generate
 }
 
-const hera = {
-  parse,
-  compile,
-  generate,
+hera := {
+  parse
+  compile
+  generate
 }
 
 export default hera
