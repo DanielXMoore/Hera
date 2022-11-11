@@ -208,11 +208,15 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       const ${name}$0 = ${compileHandler(options, rule, name)};
       function ${name}(state${stateType}) {
-        if (state.verbose) console.log("ENTER:", ${JSON.stringify(name)});
+        if (state.events) state.events.enter?.(${JSON.stringify(name)});
         if (state.tokenize) {
-          return $TOKEN(${JSON.stringify(name)}, state, ${name}$0(state));
+          const result = $TOKEN(${JSON.stringify(name)}, state, ${name}$0(state));
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          return result;
         } else {
-          return ${name}$0(state);
+          const result = ${name}$0(state);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          return result;
         }
       }
     `
@@ -228,10 +232,15 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       ${fns.join("\n")}
       function ${name}(state${stateType}) {
+        if (state.events) state.events.enter?.(${JSON.stringify(name)});
         if (state.tokenize) {
-          return $TOKEN(${JSON.stringify(name)}, state, ${choices});
+          const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          return result;
         } else {
-          return ${choices}
+          const result = ${choices};
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          return result;
         }
       }
     `
