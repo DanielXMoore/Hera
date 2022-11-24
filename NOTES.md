@@ -154,6 +154,16 @@ Now tsc will be able to use that additional root to resolve. Also works for `par
 
 These can be updated manually or transpiled one at a time as needed using tsc.
 
+References
+---
+
+Packrat Parsing
+
+- https://bford.info/pub/lang/packrat-icfp02.pdf
+- https://bford.info/pub/lang/thesis.pdf
+
+- https://blog.jcoglan.com/2017/07/30/packrat-parsing-a-top-down-performance-improvement/
+
 Timesheet
 ---
 
@@ -162,6 +172,12 @@ Timesheet
 2022-09-24 | 3.00 | tests working with compiler.civet
 2022-10-21 | 1.50 | figuring out .civet code coverage
 2022-10-22 | 1.00 | util.coffee -> .civet
+
+2022-11-11 | 3.00 | rebuilding parser; events
+2022-11-22 | 1.00 | cacheable events; __dirname
+2022-11-24 | 1.00 | publish v0.8.0 with events
+
+enter/exit events
 
 TODO:
 
