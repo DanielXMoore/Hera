@@ -15,7 +15,7 @@ esbuild.build({
   sourcemap
   minify
   watch
-  platform: 'browser'
+  platform: 'node'
   outfile: 'dist/main.js'
   plugins: [
     civetPlugin
