@@ -1,7 +1,9 @@
 // Compile a rules json to typescript
 
 import type { HeraAST, StructuralHandling } from ./machine.js
-import { readFileSync } from "fs"
+{ readFileSync } from fs
+{ dirname } from path
+{ fileURLToPath } from url
 
 interface CompileOptions {
   types: boolean
@@ -208,14 +210,17 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       const ${name}$0 = ${compileHandler(options, rule, name)};
       function ${name}(state${stateType}) {
-        if (state.events) state.events.enter?.(${JSON.stringify(name)});
+        if (state.events) {
+          const result = state.events.enter?.(${JSON.stringify(name)}, state);
+          if (result) return result.cache;
+        }
         if (state.tokenize) {
           const result = $TOKEN(${JSON.stringify(name)}, state, ${name}$0(state));
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
           return result;
         } else {
           const result = ${name}$0(state);
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
           return result;
         }
       }
@@ -232,14 +237,17 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       ${fns.join("\n")}
       function ${name}(state${stateType}) {
-        if (state.events) state.events.enter?.(${JSON.stringify(name)});
+        if (state.events) {
+          const result = state.events.enter?.(${JSON.stringify(name)}, state);
+          if (result) return result.cache;
+        }
         if (state.tokenize) {
           const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
           return result;
         } else {
           const result = ${choices};
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
           return result;
         }
       }
@@ -279,9 +287,11 @@ defaultOptions :=
 export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   // NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
   // TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
-  __dirname := "./source"
-  tsMachine := readFileSync(__dirname + "/machine.ts", "utf8")
-  jsMachine := readFileSync(__dirname + "/machine.js", "utf8")
+  /* c8 ignore next */
+  const dir = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
+
+  tsMachine := readFileSync(dir + "/machine.ts", "utf8")
+  jsMachine := readFileSync(dir + "/machine.js", "utf8")
 
   { types } := options
   ruleNames := Object.keys(rules)
@@ -307,6 +317,7 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   ${body}
 
   exports.parse = parse
+  exports.default = { parse }
   `
 
 isSimple := /^[^.*+?{}()\[\]^\\]*$/
