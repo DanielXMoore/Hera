@@ -7,6 +7,17 @@ tsc --target es2015 --module commonjs source/machine.ts
 cp source/machine.* dist/
 coffee build/esbuild.coffee
 
+# Compressed size check
+size=$(gzip - < dist/main.js | wc -c)
+MAX_SIZE=10000
+
+if [ "${size}" -gt $MAX_SIZE ]; then
+  echo "Size check failed: ${size} > $MAX_SIZE bytes"
+  exit 1
+else
+  echo "Size check passed: ${size} < $MAX_SIZE bytes"
+fi
+
 # Build types
 tsc --project build/tsconfig.json
 
