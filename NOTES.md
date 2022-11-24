@@ -135,3 +135,50 @@ This override the CoffeeScript hook to Error.prepareStackTrace.
 
 Not sure how to get these to play nice yet so just going with the Coffee stack
 traces for now.
+
+How to build types with .civet files when using esbuild?
+---
+
+esbuild resolves and transpiles .civet with `@danielx/civet/esbuild-plugin` but can't build types.
+
+ts-node resolves and transpiles .civet with `@danielx/civet/esm` loader and works fine for tests with `--transpileOnly`
+
+VSCode resolves and has editor integration when Civet Language Server is installed.
+
+tsc can't resolve .civet https://github.com/Microsoft/TypeScript/issues/16607
+
+To work around tsc limitations create a an additional folder `types` and add it to `rootDirs` in `build/tconfig.json`
+
+Create .d.ts files for modules that tsc needs to resolve. Name ones for `.civet` files `.civet.d.ts`
+Now tsc will be able to use that additional root to resolve. Also works for `parser.js`.
+
+These can be updated manually or transpiled one at a time as needed using tsc.
+
+References
+---
+
+Packrat Parsing
+
+- https://bford.info/pub/lang/packrat-icfp02.pdf
+- https://bford.info/pub/lang/thesis.pdf
+
+- https://blog.jcoglan.com/2017/07/30/packrat-parsing-a-top-down-performance-improvement/
+
+Timesheet
+---
+
+2022-09-22 | 1.50 | Exploring rewriting in Civet
+2022-09-23 | 1.25 | manually converting compiler.civet
+2022-09-24 | 3.00 | tests working with compiler.civet
+2022-10-21 | 1.50 | figuring out .civet code coverage
+2022-10-22 | 1.00 | util.coffee -> .civet
+
+2022-11-11 | 3.00 | rebuilding parser; events
+2022-11-22 | 1.00 | cacheable events; __dirname
+2022-11-24 | 1.00 | publish v0.8.0 with events
+
+enter/exit events
+
+TODO:
+
+build/test with .civet and .coffee files

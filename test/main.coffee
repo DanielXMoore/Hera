@@ -1,7 +1,5 @@
-assert = require "assert"
-
-hera = require "../source/main"
-{generate} = hera
+import assert from "assert"
+import hera, { compile, generate } from "../source/main.civet"
 
 test = it
 
@@ -86,9 +84,10 @@ describe "Hera", ->
 
   it "should recursively generate itself", ->
     heraSrc = readFile('samples/hera.hera')
+    debugger
     {parse} = generate heraSrc
 
-    assert.deepEqual hera.parse(heraSrc), parse(heraSrc)
+    assert.deepEqual parse(heraSrc), parse(heraSrc)
 
     grammar = """
       Grammar
@@ -98,11 +97,11 @@ describe "Hera", ->
         Name StringLiteral? EOS (Indent Choice)+
 
     """
-    assert.deepEqual(hera.parse(grammar), parse(grammar))
+    assert.deepEqual(parse(grammar), parse(grammar))
 
   it "should compile to ts", ->
     heraSrc = readFile('samples/hera.hera')
-    tsSrc = hera.compile heraSrc, types: true
+    tsSrc = compile heraSrc, types: true
 
     assert tsSrc
 
@@ -111,7 +110,7 @@ describe "Hera", ->
       Rule
         /abc/
     """
-    tsSrc = hera.compile hera.parse(heraSrc), types: true
+    tsSrc = compile hera.parse(heraSrc), types: true
 
     assert tsSrc.includes('Parser<"abc">')
 
@@ -203,7 +202,7 @@ describe "Hera", ->
 
   it "should return error messages", ->
     assert.throws ->
-      hera.parse """
+      parse """
         Rule
 
       """,
@@ -568,7 +567,7 @@ describe "Hera", ->
       }
     }
 
-    assert hera.compile rules
+    assert compile rules
 
   it "should throw an error when mapping to an unknown mapping object", ->
     rules = hera.parse """
@@ -580,7 +579,7 @@ describe "Hera", ->
     rules.Rule[2] = {}
 
     assert.throws ->
-      hera.compile(rules)
+      compile(rules)
     , /unknown object mapping/
 
   it "throw an error when encountering an unknown operator", ->
@@ -593,7 +592,7 @@ describe "Hera", ->
     rules.Rule[0] = "QQ"
 
     assert.throws ->
-      hera.compile(rules)
+      compile(rules)
     , /QQ/
 
   it "should error when referencing an unknown rule", ->

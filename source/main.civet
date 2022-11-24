@@ -1,0 +1,48 @@
+import type {
+  HeraGrammar,
+  HeraRules,
+  ParserOptions,
+} from ./machine.js
+
+parser from ./parser.js
+{compile as heraCompile} from ./compiler.civet
+
+execMod := (src: string) => {
+  m := { exports: {} }
+  Function("module", "exports", src)(m, m.exports)
+
+  return m.exports
+}
+
+type CompilerOptions = {
+  types: boolean
+}
+
+compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string := (rulesOrString, options) =>
+  let rules: HeraRules
+  if typeof rulesOrString is "string"
+    rules = parse(rulesOrString)
+  else
+    rules = rulesOrString
+
+  return heraCompile rules, options
+
+parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules := parser.parse
+
+generate := <T extends HeraGrammar>(src: string) => execMod(compile(parse(src))) as {
+  parse: (input: string, options?: ParserOptions<T>) => unknown
+}
+
+export {
+  parse
+  compile
+  generate
+}
+
+hera := {
+  parse
+  compile
+  generate
+}
+
+export default hera
