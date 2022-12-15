@@ -18,7 +18,7 @@ Quickstart
 ---
 
 ```bash
-npm install STRd6/hera
+npm install @danielx/hera
 ```
 
 ```javascript
@@ -48,11 +48,20 @@ Overview
 Hera uses Parsing Expression grammars to create parsers for programatic
 languages.
 
-Hera grammars are indentation based. Rules are left most and indented beneath
-them are choices that satisfy the rule. Parsing makes heavy use of the built
-in regular expression capabilities of JavaScript. Terminals are either literal
-strings or regular expressions. Rules are composed of choices or sequences of
-other rules and terminals.
+Hera grammars are indentation based, with each rule consisting of a name,
+indented choices that the name could expand to, and
+an optional further-indented code block (handler) for each choice:
+
+```
+RuleName
+  Choice1
+  Choice2 ->
+    ...code...
+```
+
+Parsing makes heavy use of the built-in regular expression capabilities of
+JavaScript. Terminals are either literal strings or regular expressions.
+Rules are composed of choices or sequences of other rules and terminals.
 
 The first rule listed in the grammar is the starting point. Each choice for the
 rule is checked in order, returning on the first match.
@@ -60,28 +69,54 @@ rule is checked in order, returning on the first match.
 Definitions
 ---
 
-Rule - A named production. Rules are an ordered choice of rules, sequences,
-choices, and terminals.
+**Rule**: A named production. The name is written on one unindented line by itself, and the choices (possible expansions) are written on separate lines with common indentation.  For example:
 
-Choice - One thing or another. Choice components are separated by `/`. Rules
-can have choices each on a separate indented line.
+```
+RuleName
+  Choice1
+  Choice2
+```
 
-Sequence - One thing after another. Sequence components are separated by spaces.
+Choices are attempted in order, and the first one to succeed wins.
+Note that this property is recursive, so may involve backtracking.
+Each choice can be any expression, as defined below, together with an
+optional handler.
 
-Terminal - A string literal or regular expression. In either case the entire
-terminal must be matched at the exact position.
+**Expression**: An expression can be a sequence, choice expression, or repetition of terminals, rule names, or expressions (recursive sequences, choice expressions, or repetitions).  When mixing sequences, choice expressions, and repetitions, use parentheses to separate them.  For example, `Part ( "," Part )*` is a sequence of a rule name and a repetition of a terminal and a rule name, representing one or more `Part`s separated by commas.
 
-Repetition - `+` and `*` for one or more and zero or more repetitions of an
-element. Repetitions return an array when they match.
+**Choice expression** (`/`): A short inline way to specify a choice between two or more subchoices. For example, `This / That / Other` matches `This` or `That` or `Other`, whichever succeeds first. This is equivalent to `AnonymousRule` where
 
-Predicate - Assert the existince of non-existence of a match without advancing
-the position or consuming any input.
+```
+AnonymousRule
+  This
+  That
+  Other
+```
 
-Handler - A mapping from the matched choice to a language primitive. Handlers
-are attached to rule choices by adding `->` after the choice. The most general
-handler is JavaScript code indented four spaces beneath the choice. There is
-also shorthand notation for mapping to the `n`th matching regex group or item in
-a sequence.
+**Sequence** (` `): One thing after another, separated by spaces. For example, `"(" Expr ")"` matches the character `"("` followed by a match of `Expr` followed by the character `")"`. Sequences with more than one part return an array of the parts.
+
+**Terminal** (`"..."`, `/.../`): A string literal surrounded by double quotes, or a regular expression surrounded by forward slashes. In either case, the entire terminal must be matched at the exact position. (For regular expressions, this is as if the expressions started with `^` and it was applied to the rest of the string.) Terminals return a string when they match, and if the entire choice of a rule is a regular expression, then the groups of the regular expression are available as `$1`, `$2`, ...
+
+**Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
+
+**Lookahead predicates** (`&`, `!`): `&...` and `!...` assert the existence or non-existence, respectively, of a match of `...`, without advancing the position or consuming any input. For example, `&/\s/` is like the look-ahead regular expression `/(?=\s)/`.
+
+**Stringify** (`*`): `*...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
+
+**Handler**: A mapping from the matched choice to a language primitive.
+Handlers are attached to rule choices by adding `->` after the choice.
+The most general handler is JavaScript code indented four spaces beneath the choice.
+This code can also refer to the default value via `$0`, or
+to the `n`th matching item in the topmost sequence via `$n`.
+Each item in the topmost sequence can also be named via a `:name` suffix
+(for example, `Block:name`), and then the code can also refer to it as `name`.
+If the expansion is a single regular expression,
+`$n` instead refers to the `n`th group in the regex.
+The `$n` notation can also be put on the same line as the `->` as a shorthand
+for `return $n` on a separate line; this also works for simple expressions
+like JavaScript literals.
+
+* **Comment** (`#...`): Lines starting with `#` (after possible indentation) are treated as comments.
 
 Demos
 ---
