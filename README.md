@@ -95,7 +95,7 @@ AnonymousRule
 
 **Sequence** (` `): One thing after another, separated by spaces. For example, `"(" Expr ")"` matches the character `"("` followed by a match of `Expr` followed by the character `")"`. Sequences with more than one part return an array of the parts.
 
-**Terminal** (`"..."`, `/.../`): A string literal surrounded by double quotes, or a regular expression surrounded by forward slashes. In either case, the entire terminal must be matched at the exact position. (For regular expressions, this is as if the expressions started with `^` and it was applied to the rest of the string.) Terminals return a string when they match, and if the entire choice of a rule is a regular expression, then the groups of the regular expression are available as `$1`, `$2`, ...
+**Terminal** (`"..."`, `/.../`): A string literal surrounded by double quotes, or a regular expression surrounded by forward slashes. In either case, the entire terminal must be matched at the exact position. (For regular expressions, this is as if the expressions started with `^` and it was applied to the rest of the string.) Terminals return a string when they match. If the entire choice of a rule is a regular expression, then the groups of the regular expression are available as `$1`, `$2`, ... and the matching string is available as `$0`.
 
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
@@ -106,8 +106,9 @@ AnonymousRule
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.
 The most general handler is JavaScript code indented four spaces beneath the choice.
-This code can also refer to the default value via `$0`, or
-to the `n`th matching item in the topmost sequence via `$n`.
+This code can also refer to the default value (strings for terminals,
+arrays for sequences or repetitions) via `$0`,
+or to the `n`th matching item in the topmost sequence via `$n`.
 Each item in the topmost sequence can also be named via a `:name` suffix
 (for example, `Block:name`), and then the code can also refer to it as `name`.
 If the expansion is a single regular expression,
@@ -115,8 +116,9 @@ If the expansion is a single regular expression,
 The `$n` notation can also be put on the same line as the `->` as a shorthand
 for `return $n` on a separate line; this also works for simple expressions
 like JavaScript literals.
+JavaScript code can return the special value `$skip` to indicate a failed match.
 
-* **Comment** (`#...`): Lines starting with `#` (after possible indentation) are treated as comments.
+* **Comment** (`#...`): Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments. Inside handlers, use JavaScript `//` or `/*...*/` comments.
 
 Demos
 ---
