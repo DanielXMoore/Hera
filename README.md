@@ -95,7 +95,18 @@ AnonymousRule
 
 **Sequence** (` `): One thing after another, separated by spaces. For example, `"(" Expr ")"` matches the character `"("` followed by a match of `Expr` followed by the character `")"`. Sequences with more than one part return an array of the parts.
 
-**Terminal** (`"..."`, `/.../`): A string literal surrounded by double quotes, or a regular expression surrounded by forward slashes. In either case, the entire terminal must be matched at the exact position. (For regular expressions, this is as if the expressions started with `^` and it was applied to the rest of the string.) Terminals return a string when they match. If the entire choice of a rule is a regular expression, then the groups of the regular expression are available as `$1`, `$2`, ... and the matching string is available as `$0`.
+**Terminal** (`"..."`, `/.../`):
+A string literal (surrounded by double quotes)
+or a regular expression (normally surrounded by forward slashes).
+Simple regular expressions consisting of just `.` or character classes
+like `[A-Z][a-z]*` do not need surrounding slashes.
+In any case, the entire terminal must be matched at the exact position.
+(For regular expressions, this is as if the expressions started with `^`
+and it was applied to the rest of the string.)
+Terminals return a string when they match.
+If the entire choice of a rule is a regular expression, then
+the groups of the regular expression are available as `$1`, `$2`, ...
+and the matching string is available as `$0`.
 
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
