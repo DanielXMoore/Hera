@@ -709,3 +709,41 @@ describe "Hera", ->
       """
 
       assert.deepEqual parse("abb"), ["bb", "a"]
+
+  describe "events", ->
+    it "should pass data from enter to exit events", ->
+      {parse} = generate """
+        Rule
+          "a"
+      """
+
+      events =
+        enter: (rule, state) ->
+          eventLog.push [rule, state]
+          return {data: "the data"}
+        exit: (rule, state, result, data) ->
+          eventLog.push [rule, state, result, data]
+
+      eventLog = []
+      parse "a", { events }
+
+      assert.deepEqual eventLog, [
+        ["Rule", {
+          events,
+          input: "a",
+          pos: 0,
+          tokenize: false
+        }]
+        ["Rule", {
+          events,
+          input: "a",
+          pos: 0,
+          tokenize: false
+        }, {
+          loc:
+            length: 1
+            pos: 0
+          pos: 1
+          value: "a"
+        }, "the data"]
+      ]

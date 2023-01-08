@@ -210,17 +210,21 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       const ${name}$0 = ${compileHandler(options, rule, name)};
       function ${name}(state${stateType}) {
+        let eventData;
         if (state.events) {
           const result = state.events.enter?.(${JSON.stringify(name)}, state);
-          if (result) return result.cache;
+          if (result) {
+            if (result.cache) return result.cache;
+            eventData = result.data;
+          }
         }
         if (state.tokenize) {
           const result = $TOKEN(${JSON.stringify(name)}, state, ${name}$0(state));
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
           return result;
         } else {
           const result = ${name}$0(state);
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
           return result;
         }
       }
@@ -237,17 +241,21 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     `
       ${fns.join("\n")}
       function ${name}(state${stateType}) {
+        let eventData;
         if (state.events) {
           const result = state.events.enter?.(${JSON.stringify(name)}, state);
-          if (result) return result.cache;
+          if (result) {
+            if (result.cache) return result.cache;
+            eventData = result.data;
+          }
         }
         if (state.tokenize) {
           const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
           return result;
         } else {
           const result = ${choices};
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result);
+          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
           return result;
         }
       }
