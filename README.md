@@ -199,10 +199,11 @@ Changelog
 - 0.7.3
   - Using compiled parser instead of VM for performance boost.
   - Publishing TypeScript types with package.
-  - cjs loader ```javascript
+  - cjs loader
+    ```javascript
     require("@danielx/hera/register")
     const {parse} = require("./parser.hera")
-  ```
+    ```
   - esbuild plugin `require("@danielx/hera/esbuild-plugin")`
   - `hera` CLI tool with experimental TypeScript output support `hera --types < cool-app.hera > parser.ts`
   - Added support for number literals in structural handlers.
