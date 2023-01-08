@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -73,6 +73,7 @@
     "prepublishOnly": "yarn build && yarn test",
     "benchmark": "coffee perf/benchmark.coffee",
     "build": "bash build/compile",
+    "build:parser": "./dist/hera < samples/hera.hera > source/parser.js",
     "test": "c8 mocha"
   },
   "bin": {
