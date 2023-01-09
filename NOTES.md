@@ -170,6 +170,7 @@ Timesheet
 2022-09-22 | 1.50 | Exploring rewriting in Civet
 2022-09-23 | 1.25 | manually converting compiler.civet
 2022-09-24 | 3.00 | tests working with compiler.civet
+
 2022-10-21 | 1.50 | figuring out .civet code coverage
 2022-10-22 | 1.00 | util.coffee -> .civet
 
@@ -177,8 +178,6 @@ Timesheet
 2022-11-22 | 1.00 | cacheable events; __dirname
 2022-11-24 | 1.00 | publish v0.8.0 with events
 
-enter/exit events
+2023-01-08 | 2.00 | update civet; pass data between enter/exit events; annotated errors
 
 TODO:
-
-build/test with .civet and .coffee files
