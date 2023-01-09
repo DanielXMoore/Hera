@@ -1,6 +1,7 @@
 TODO
 ====
 
+- [ ] Source maps for generated parsers.
 - [x] BUG: $0 is undefined in structural mapping
 - [x] BUG: String values are extra escaped in mapping
 ```hera
