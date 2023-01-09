@@ -624,7 +624,39 @@ describe "Hera", ->
         aaaa
         aaa
       """
-    , /3:6/
+    , /4:1/
+
+  it "should annotate errors with meta data", ->
+    {parse} = generate """
+      Rule
+        Line+
+      Line
+        "aaaa" EOL
+      EOL
+        /\r\n|\n/
+    """
+
+    assert.throws ->
+      parse """
+        aaaa
+        aaaa
+        aaaa
+        aaa
+      """
+    , (thrown) ->
+      debugger
+      assert.equal thrown.line, 4
+      assert.equal thrown.column, 1
+      assert.equal thrown.offset, 15
+      assert.equal thrown.message, """
+        <anonymous>:4:1 Failed to parse
+        Expected:
+        \tLine "aaaa"
+        Found: "aaa"
+
+      """
+
+      return true
 
   it "should skip rules programmatically", ->
     {parse} = generate """

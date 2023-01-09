@@ -353,12 +353,23 @@ function fail(pos, expected) {
     failExpected[failIndex++] = expected;
     return;
 }
+class ParseError extends Error {
+    constructor(message, name, filename, line, column, offset) {
+        super(message);
+        this.message = message;
+        this.name = name;
+        this.filename = filename;
+        this.line = line;
+        this.column = column;
+        this.offset = offset;
+    }
+}
 function parserState(grammar) {
-    /** Utility function to convert position in a string input to line:colum */
+    /** Utility function to convert position in a string input to 1 based line:colum */
     function location(input, pos) {
         const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
             const l = line.length + 1;
-            if (pos > l) {
+            if (pos >= l) {
                 pos -= l;
                 return [row + 1, 1];
             }
@@ -371,21 +382,20 @@ function parserState(grammar) {
                 return [row, col];
             }
         }, [1, 1]);
-        return `${line}:${column}`;
+        return [line, column];
     }
     function validate(input, result, { filename }) {
         if (result && result.pos === input.length)
             return result.value;
         const expectations = Array.from(new Set(failExpected.slice(0, failIndex)));
-        let l = location(input, maxFailPos);
+        let l = location(input, maxFailPos), [line, column] = l;
         // The parse completed with a result but there is still input
         if (result && result.pos > maxFailPos) {
             l = location(input, result.pos);
-            throw new Error(`
-${filename}:${l} Unconsumed input at #{l}
+            throw new Error(`${filename}:${line}:${column} Unconsumed input at #{l}
 
 ${input.slice(result.pos)}
-    `);
+`);
         }
         if (expectations.length) {
             failHintRegex.lastIndex = maxFailPos;
@@ -394,12 +404,12 @@ ${input.slice(result.pos)}
                 hint = JSON.stringify(hint);
             else
                 hint = "EOF";
-            throw new Error(`
-${filename}:${l} Failed to parse
+            const error = new ParseError(`${filename}:${line}:${column} Failed to parse
 Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
-`);
+`, "ParseError", filename, line, column, maxFailPos);
+            throw error;
         }
         if (result) {
             throw new Error(`

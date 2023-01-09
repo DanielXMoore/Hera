@@ -527,13 +527,26 @@ export interface ParserOptions<T extends HeraGrammar> {
   events?: ParseState["events"]
 }
 
+class ParseError extends Error {
+  constructor(
+    public message: string,
+    public name: string,
+    public filename: string,
+    public line: number,
+    public column: number,
+    public offset: number,
+  ) {
+    super(message)
+  }
+}
+
 export function parserState<G extends HeraGrammar>(grammar: G) {
 
-  /** Utility function to convert position in a string input to line:colum */
-  function location(input: string, pos: number) {
+  /** Utility function to convert position in a string input to 1 based line:colum */
+  function location(input: string, pos: number): [number, number] {
     const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
       const l = line.length + 1
-      if (pos > l) {
+      if (pos >= l) {
         pos -= l
         return [row + 1, 1]
       } else if (pos >= 0) {
@@ -545,7 +558,7 @@ export function parserState<G extends HeraGrammar>(grammar: G) {
       }
     }, [1, 1])
 
-    return `${line}:${column}`
+    return [line, column]
   }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
@@ -553,16 +566,16 @@ export function parserState<G extends HeraGrammar>(grammar: G) {
       return result.value
 
     const expectations = Array.from(new Set(failExpected.slice(0, failIndex)))
-    let l = location(input, maxFailPos)
+    let l = location(input, maxFailPos),
+      [line, column] = l
 
     // The parse completed with a result but there is still input
     if (result && result.pos > maxFailPos) {
       l = location(input, result.pos)
-      throw new Error(`
-${filename}:${l} Unconsumed input at #{l}
+      throw new Error(`${filename}:${line}:${column} Unconsumed input at #{l}
 
 ${input.slice(result.pos)}
-    `)
+`)
     }
 
     if (expectations.length) {
@@ -574,12 +587,13 @@ ${input.slice(result.pos)}
       else
         hint = "EOF"
 
-      throw new Error(`
-${filename}:${l} Failed to parse
+      const error = new ParseError(`${filename}:${line}:${column} Failed to parse
 Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
-`)
+`, "ParseError", filename, line, column, maxFailPos)
+
+      throw error
     }
 
     if (result) {
