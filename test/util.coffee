@@ -1,5 +1,5 @@
 import assert from "assert"
-import { decompile } from "../source/util.civet"
+import { decompile, grammarToEBNF } from "../source/util.civet"
 import {parse} from "../source/main.civet"
 `import rules from "../source/rules.json" assert { type: "json" }`
 
@@ -17,6 +17,9 @@ describe "util", ->
     # strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
     assert.equal grammar, readFile("samples/hera.hera")
+
+  it "should convert to ebnf", ->
+    grammarToEBNF(rules)
 
   it "should decompile nested choices", ->
     rules = parse """

@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 
-{compile, parse} := require './main'
+{ compile, parse, grammarToEBNF } from ./main.civet
 encoding := "utf8"
-fs := require "fs"
+fs from fs
 
 input := fs.readFileSync process.stdin.fd, encoding
 ast := parse input
 
 if process.argv.includes '--ast'
   process.stdout.write JSON.stringify(ast, null, 2)
+  process.exit 0
+
+if process.argv.includes '--ebnf'
+  process.stdout.write grammarToEBNF(ast)
   process.exit 0
 
 process.stdout.write compile ast,

@@ -179,5 +179,6 @@ Timesheet
 2022-11-24 | 1.00 | publish v0.8.0 with events
 
 2023-01-08 | 2.00 | update civet; pass data between enter/exit events; annotated errors
+2023-01-15 | 2.50 | EBNF  -> railroad diagram
 
 TODO:

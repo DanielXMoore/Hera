@@ -6,6 +6,7 @@ import type {
 
 parser from ./parser.js
 {compile as heraCompile} from ./compiler.civet
+{ grammarToEBNF } from ./util.civet
 
 execMod := (src: string) => {
   m := { exports: {} }
@@ -37,6 +38,7 @@ export {
   parse
   compile
   generate
+  grammarToEBNF
 }
 
 hera := {

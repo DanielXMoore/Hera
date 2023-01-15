@@ -16,8 +16,6 @@ decompile := (rules: HeraRules) ->
     `${name}\n  ${value}\n`
   .join("\n")
 
-export {decompile}
-
 structuralToSource := (mapping: StructuralHandling): string ->
   switch typeof mapping
     when "number"
@@ -109,3 +107,63 @@ toS := (rule: HeraAST, depth=0): string ->
         throw new Error "Unknown rule type"
   else // String name of the rule
     rule
+
+grammarToEBNF := (rules: HeraRules): string ->
+  Object.keys(rules).map (name) ->
+    value := ruleToEBNF rules[name]
+    `${name} ::= ${value}`
+  .join("\n") + "\n"
+
+quote := (s: string) ->
+  if s.match(/"/)
+    "'" + s + "'"
+  else
+    '"' + s + '"'
+
+/**
+Convert rule to EBNF-ish format
+*/
+ruleToEBNF := (rule: HeraAST, depth=0): string ->
+  if Array.isArray(rule)
+    switch rule[0]
+      when "*", "+", "?"
+        ruleToEBNF(rule[1], depth+1) + rule[0]
+      when "$", "&", "!"
+        pre := rule[0] is "$" ? "" : '"' + rule[0] + '" '
+        pre + ruleToEBNF(rule[1], depth+1)
+      when "L"
+        quote rule[1]
+      when "R"
+        v := rule[1]
+        if v is "."
+          v
+        else
+          try
+            parse v,
+              startRule: "CharacterClassExpression"
+            if v.match /]/
+              quote v
+            else
+              v
+          catch
+            quote('/' + v + '/')
+
+      when "S"
+        terms := rule[1].map (rule) ->
+          ruleToEBNF rule
+
+        "( " + terms.join(" ") + " )"
+
+      when "/"
+        terms := rule[1].map (rule) ->
+          ruleToEBNF rule
+
+        "( " + terms.join(" | ") + " )"
+      else
+        if "name" in rule[0]
+          return ruleToEBNF rule[1], depth+1
+        throw new Error `Unknown rule type: ${JSON.stringify(rule[0])}`
+  else // String name of the rule
+    rule
+
+export { decompile, grammarToEBNF }

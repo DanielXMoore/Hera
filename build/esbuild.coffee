@@ -24,3 +24,18 @@ esbuild.build({
       inlineMap: sourcemap
   ]
 }).catch -> process.exit 1
+
+esbuild.build({
+  entryPoints: ['source/cli.civet']
+  tsconfig: "./tsconfig.json"
+  bundle: false
+  format: "cjs"
+  sourcemap
+  minify
+  watch
+  platform: 'node'
+  outfile: 'dist/hera'
+  plugins: [
+    civetPlugin
+  ]
+}).catch -> process.exit 1
