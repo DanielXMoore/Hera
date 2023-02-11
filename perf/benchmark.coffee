@@ -2,7 +2,6 @@ Benchmark = require("benchmark")
 
 fs = require "fs"
 path = require "path"
-sampleDir = path.join(__dirname, "../samples")
 
 bench = (alternatives) ->
   suite = new Benchmark.Suite
@@ -26,7 +25,7 @@ console.log "running benchmark"
 oldHera = require "../source/old_main"
 compiledHera = require "../source/parser"
 
-grammar = fs.readFileSync(sampleDir + "/hera.hera", "utf8")
+grammar = fs.readFileSync("source/hera.hera", "utf8")
 oldHera.parse grammar
 compiledHera.parse grammar
 
