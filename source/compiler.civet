@@ -173,15 +173,29 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
 
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
-        return `$TS(${parser}, function(${parameters.join(", ")}) {${namedParameters}${h.f}})`
+        return ```
+          $TS(${parser}, function(${parameters.join(", ")}) {
+          ${namedParameters}
+          ${h.f}
+          })
+        ```
 
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
-        return `$TR(${parser}, function(${regExpHandlerParams.join(", ")}) {${h.f}})`
+        return ```
+          $TR(${parser}, function(${regExpHandlerParams.join(", ")}) {
+          ${h.f}
+          })
+        ```
       else
         namedParameters := getParameterDeclaration(arg, 0)
 
-        return `$TV(${parser}, function(${regularHandlerParams.join(", ")}) {${namedParameters}${h.f}})`
+        return ```
+          $TV(${parser}, function(${regularHandlerParams.join(", ")}) {
+          ${namedParameters}
+          ${h.f}
+          })
+        ```
 
     else // structural mapping
       parser := compileOp(arg, name, false, options.types)

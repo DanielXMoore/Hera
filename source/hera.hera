@@ -80,7 +80,8 @@ HandlingExpression
 HandlingExpressionBody
   HandlingExpressionLine+ ->
     return {
-      f: $1.join("\n")
+      f: $1.join("\n"),
+      $loc,
     }
 
 HandlingExpressionLine

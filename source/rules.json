@@ -12,7 +12,11 @@
       ]
     ],
     {
-      "f": "return Object.fromEntries($2)"
+      "f": "return Object.fromEntries($2)",
+      "$loc": {
+        "pos": 24,
+        "length": 35
+      }
     }
   ],
   "Rule": [
@@ -41,7 +45,11 @@
       ]
     ],
     {
-      "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]"
+      "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
+      "$loc": {
+        "pos": 130,
+        "length": 90
+      }
     }
   ],
   "Choice": [
@@ -51,7 +59,11 @@
       "Handling"
     ],
     {
-      "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1"
+      "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
+      "$loc": {
+        "pos": 250,
+        "length": 129
+      }
     }
   ],
   "Sequence": [
@@ -67,7 +79,11 @@
           ]
         ],
         {
-          "f": "$2.unshift($1)\nreturn [\"S\", $2]"
+          "f": "$2.unshift($1)\nreturn [\"S\", $2]",
+          "$loc": {
+            "pos": 424,
+            "length": 40
+          }
         }
       ],
       [
@@ -80,7 +96,11 @@
           ]
         ],
         {
-          "f": "$2.unshift($1)\nreturn [\"/\", $2]"
+          "f": "$2.unshift($1)\nreturn [\"/\", $2]",
+          "$loc": {
+            "pos": 498,
+            "length": 40
+          }
         }
       ],
       "Expression"
@@ -138,7 +158,11 @@
       ]
     ],
     {
-      "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result]\nreturn result"
+      "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result]\nreturn result",
+      "$loc": {
+        "pos": 736,
+        "length": 138
+      }
     }
   ],
   "PrefixOperator": [
@@ -155,7 +179,11 @@
       ]
     ],
     {
-      "f": "if ($2) return [$2, $1]\nelse return $1"
+      "f": "if ($2) return [$2, $1]\nelse return $1",
+      "$loc": {
+        "pos": 934,
+        "length": 48
+      }
     }
   ],
   "SuffixOperator": [
@@ -196,7 +224,11 @@
           "EOS"
         ],
         {
-          "f": "return undefined"
+          "f": "return undefined",
+          "$loc": {
+            "pos": 1141,
+            "length": 21
+          }
         }
       ],
       [
@@ -244,7 +276,11 @@
     "+",
     "HandlingExpressionLine",
     {
-      "f": "return {\n  f: $1.join(\"\\n\")\n}"
+      "f": "return {\n  f: $1.join(\"\\n\"),\n  $loc,\n}",
+      "$loc": {
+        "pos": 1340,
+        "length": 56
+      }
     }
   ],
   "HandlingExpressionLine": [
@@ -271,7 +307,11 @@
           "StringValue"
         ],
         {
-          "f": "return JSON.parse(`\"${$1}\"`)"
+          "f": "return JSON.parse(`\"${$1}\"`)",
+          "$loc": {
+            "pos": 1490,
+            "length": 33
+          }
         }
       ],
       "NumberValue",
@@ -332,7 +372,11 @@
       "CloseBrace"
     ],
     {
-      "f": "return {\n  o: Object.fromEntries($2)\n}"
+      "f": "return {\n  o: Object.fromEntries($2)\n}",
+      "$loc": {
+        "pos": 1763,
+        "length": 52
+      }
     }
   ],
   "ObjectField": [
@@ -398,7 +442,11 @@
         "R",
         "\\$(\\d)",
         {
-          "f": "return parseInt($1, 10)"
+          "f": "return parseInt($1, 10)",
+          "$loc": {
+            "pos": 1974,
+            "length": 28
+          }
         }
       ],
       "Name"
@@ -426,14 +474,22 @@
         "L",
         "null",
         {
-          "f": "return null"
+          "f": "return null",
+          "$loc": {
+            "pos": 2082,
+            "length": 16
+          }
         }
       ],
       [
         "L",
         "undefined",
         {
-          "f": "return {l: undefined}"
+          "f": "return {l: undefined}",
+          "$loc": {
+            "pos": 2115,
+            "length": 27
+          }
         }
       ]
     ]
@@ -445,14 +501,22 @@
         "R",
         "0x[\\da-fA-F]+",
         {
-          "f": "return parseInt($0, 16)"
+          "f": "return parseInt($0, 16)",
+          "$loc": {
+            "pos": 2175,
+            "length": 28
+          }
         }
       ],
       [
         "R",
         "[-+]?\\d+(\\.\\d+)?",
         {
-          "f": "return parseFloat($0)"
+          "f": "return parseFloat($0)",
+          "$loc": {
+            "pos": 2227,
+            "length": 27
+          }
         }
       ]
     ]

@@ -5,7 +5,7 @@ test = it
 
 describe "Build rules", ->
   it.skip "should update rules file", ->
-    newRules = hera.parse readFile("samples/hera.hera")
+    newRules = hera.parse readFile("source/hera.hera")
     require('fs').writeFileSync("source/rules.json", JSON.stringify(newRules, null, 2))
 
 describe "Hera", ->
@@ -83,7 +83,7 @@ describe "Hera", ->
     assert parser.parse(".")
 
   it "should recursively generate itself", ->
-    heraSrc = readFile('samples/hera.hera')
+    heraSrc = readFile('source/hera.hera')
     debugger
     {parse} = generate heraSrc
 
@@ -100,7 +100,7 @@ describe "Hera", ->
     assert.deepEqual(parse(grammar), parse(grammar))
 
   it "should compile to ts", ->
-    heraSrc = readFile('samples/hera.hera')
+    heraSrc = readFile('source/hera.hera')
     tsSrc = compile heraSrc, types: true
 
     assert tsSrc
@@ -175,7 +175,7 @@ describe "Hera", ->
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
   it "should parse bare character classes as regexes", ->
-    newHera = generate readFile("samples/hera.hera")
+    newHera = generate readFile("source/hera.hera")
 
     rules = newHera.parse """
       Rule

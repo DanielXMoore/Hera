@@ -16,7 +16,7 @@ describe "util", ->
 
     # strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
-    assert.equal grammar, readFile("samples/hera.hera")
+    assert.equal grammar, readFile("source/hera.hera")
 
   it "should convert to ebnf", ->
     grammarToEBNF(rules)

@@ -538,7 +538,10 @@ const $R21 = $R(new RegExp("[ \\t]+", 'suy'));
 const $R22 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
 
   
-      const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function($skip, $loc, $0, $1, $2) {return Object.fromEntries($2)});
+      const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function($skip, $loc, $0, $1, $2) {
+
+return Object.fromEntries($2)
+});
       function Grammar(state) {
         let eventData;
         if (state.events) {
@@ -584,9 +587,12 @@ const $R22 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'))
     
 
 
-      const RuleBody$0 = $TV($P($S(Indent, Choice)), function($skip, $loc, $0, $1) {var r = $1.map((a) => a[1])
+      const RuleBody$0 = $TV($P($S(Indent, Choice)), function($skip, $loc, $0, $1) {
+
+var r = $1.map((a) => a[1])
 if (r.length === 1) return r[0];
-return ["/", r]});
+return ["/", r]
+});
       function RuleBody(state) {
         let eventData;
         if (state.events) {
@@ -609,13 +615,16 @@ return ["/", r]});
     
 
 
-      const Choice$0 = $TS($S(Sequence, Handling), function($skip, $loc, $0, $1, $2) {if ($2 !== undefined) {
+      const Choice$0 = $TS($S(Sequence, Handling), function($skip, $loc, $0, $1, $2) {
+
+if ($2 !== undefined) {
   if (!$1.push)
     $1 = ["S", [$1], $2]
   else
     $1.push($2)
 }
-return $1});
+return $1
+});
       function Choice(state) {
         let eventData;
         if (state.events) {
@@ -638,10 +647,16 @@ return $1});
     
 
 
-      const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function($skip, $loc, $0, $1, $2) {$2.unshift($1)
-return ["S", $2]});
-const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function($skip, $loc, $0, $1, $2) {$2.unshift($1)
-return ["/", $2]});
+      const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function($skip, $loc, $0, $1, $2) {
+
+$2.unshift($1)
+return ["S", $2]
+});
+const Sequence$1 = $TS($S(Expression, $P(ChoiceExpression)), function($skip, $loc, $0, $1, $2) {
+
+$2.unshift($1)
+return ["/", $2]
+});
 const Sequence$2 = Expression;
       function Sequence(state) {
         let eventData;
@@ -734,12 +749,15 @@ const Sequence$2 = Expression;
     
 
 
-      const Expression$0 = $TS($S($E(PrefixOperator), Suffix, $E(ParameterName)), function($skip, $loc, $0, $1, $2, $3) {var result = null
+      const Expression$0 = $TS($S($E(PrefixOperator), Suffix, $E(ParameterName)), function($skip, $loc, $0, $1, $2, $3) {
+
+var result = null
 if ($1) result = [$1, $2]
 else result = $2
 if ($3)
   return [{name: $3}, result]
-return result});
+return result
+});
       function Expression(state) {
         let eventData;
         if (state.events) {
@@ -785,8 +803,11 @@ return result});
     
 
 
-      const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function($skip, $loc, $0, $1, $2) {if ($2) return [$2, $1]
-else return $1});
+      const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function($skip, $loc, $0, $1, $2) {
+
+if ($2) return [$2, $1]
+else return $1
+});
       function Suffix(state) {
         let eventData;
         if (state.events) {
@@ -881,7 +902,10 @@ const Literal$1 = RegExpLiteral;
     
 
 
-      const Handling$0 = $TS($S(EOS), function($skip, $loc, $0, $1) {return undefined});
+      const Handling$0 = $TS($S(EOS), function($skip, $loc, $0, $1) {
+
+return undefined
+});
 const Handling$1 = $T($S($Q(Space), Arrow, HandlingExpression), function(value) {return value[2] });
       function Handling(state) {
         let eventData;
@@ -929,9 +953,13 @@ const HandlingExpression$1 = $T($S(StructuralMapping, EOS), function(value) {ret
     
 
 
-      const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function($skip, $loc, $0, $1) {return {
-  f: $1.join("\n")
-}});
+      const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function($skip, $loc, $0, $1) {
+
+return {
+  f: $1.join("\n"),
+  $loc,
+}
+});
       function HandlingExpressionBody(state) {
         let eventData;
         if (state.events) {
@@ -977,7 +1005,10 @@ const HandlingExpression$1 = $T($S(StructuralMapping, EOS), function(value) {ret
     
 
 
-      const StructuralMapping$0 = $TS($S(StringValue), function($skip, $loc, $0, $1) {return JSON.parse(`"${$1}"`)});
+      const StructuralMapping$0 = $TS($S(StringValue), function($skip, $loc, $0, $1) {
+
+return JSON.parse(`"${$1}"`)
+});
 const StructuralMapping$1 = NumberValue;
 const StructuralMapping$2 = BooleanValue;
 const StructuralMapping$3 = NullValue;
@@ -1052,9 +1083,12 @@ const StructuralMapping$6 = JSObject;
     
 
 
-      const JSObject$0 = $TS($S(OpenBrace, $Q(ObjectField), CloseBrace), function($skip, $loc, $0, $1, $2, $3) {return {
+      const JSObject$0 = $TS($S(OpenBrace, $Q(ObjectField), CloseBrace), function($skip, $loc, $0, $1, $2, $3) {
+
+return {
   o: Object.fromEntries($2)
-}});
+}
+});
       function JSObject(state) {
         let eventData;
         if (state.events) {
@@ -1101,7 +1135,9 @@ const ObjectField$1 = $T($S(Name, $EXPECT($R5, fail, "ObjectField /,\\s*|\\s*(?=
     
 
 
-      const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($1, 10)});
+      const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+return parseInt($1, 10)
+});
 const Variable$1 = Name;
       function Variable(state) {
         let eventData;
@@ -1149,8 +1185,14 @@ const BooleanValue$1 = $T($EXPECT($L3, fail, "BooleanValue \"false\""), function
     
 
 
-      const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function($skip, $loc, $0, $1) {return null});
-const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {return {l: undefined}});
+      const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function($skip, $loc, $0, $1) {
+
+return null
+});
+const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {
+
+return {l: undefined}
+});
       function NullValue(state) {
         let eventData;
         if (state.events) {
@@ -1173,8 +1215,12 @@ const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function(
     
 
 
-      const NumberValue$0 = $TR($EXPECT($R7, fail, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseInt($0, 16)});
-const NumberValue$1 = $TR($EXPECT($R8, fail, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {return parseFloat($0)});
+      const NumberValue$0 = $TR($EXPECT($R7, fail, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+return parseInt($0, 16)
+});
+const NumberValue$1 = $TR($EXPECT($R8, fail, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+return parseFloat($0)
+});
       function NumberValue(state) {
         let eventData;
         if (state.events) {

@@ -49,14 +49,10 @@ handler to source
 hToS := (h: Handler | undefined): string ->
   return "" unless h?
 
-  let f = " -> "
-
   if typeof h is "object" and "f" in h // functional handler
-    f += `\n${h.f.replace(/^|\n/g, "$&    ")}`
+    ` ->\n${h.f.replace(/^|\n/g, "$&    ")}`
   else // structural handler
-    f += structuralToSource(h)
-
-  return f
+    " -> " + structuralToSource(h)
 
 /**
 Generate a source document from the rules AST
