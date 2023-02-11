@@ -1,8 +1,10 @@
 if (require.extensions) {
   const fs = require("fs");
-  const { generate } = require("./");
+  const { compile } = require("./");
 
   require.extensions[".hera"] = function (module, filename) {
-    return module.exports = generate(fs.readFileSync(filename, 'utf8'));
+    const js = compile(fs.readFileSync(filename, 'utf8'));
+
+    return module._compile(js, filename);
   };
 }
