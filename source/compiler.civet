@@ -335,8 +335,6 @@ export function compile(rules: {[k: string]: HeraAST}, options)
   { types } := options
   ruleNames := Object.keys(rules)
 
-  debugger
-
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
 

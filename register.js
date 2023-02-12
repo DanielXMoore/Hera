@@ -1,4 +1,5 @@
 if (require.extensions) {
+  try {require("@cspotcode/source-map-support/register-hook-require")} catch (e) {}
   const fs = require("fs");
   const { compile } = require("./");
 
