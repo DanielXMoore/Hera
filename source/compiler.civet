@@ -163,6 +163,11 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
     if h and typeof h is "object" and "f" in h // function mapping
       parser := compileOp(arg, name, false, options.types)
 
+      handler := h.$loc ? {
+        $loc: h.$loc
+        token: h.f
+      } : h.f
+
       if arg[0] is "S"
         // Gather names from each element in arg[1]
         // Only handle top level names for now
@@ -173,29 +178,31 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
 
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
-        return ```
-          $TS(${parser}, function(${parameters.join(", ")}) {
-          ${namedParameters}
-          ${h.f}
-          })
-        ```
+        return [
+          `$TS(${parser}, function(${parameters.join(", ")}) {\n`
+          namedParameters
+          "\n"
+          handler
+          "\n});"
+        ]
 
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
-        return ```
-          $TR(${parser}, function(${regExpHandlerParams.join(", ")}) {
-          ${h.f}
-          })
-        ```
+        return [
+          `$TR(${parser}, function(${regExpHandlerParams.join(", ")}) {\n`
+          handler
+          `\n});`
+        ]
       else
         namedParameters := getParameterDeclaration(arg, 0)
 
-        return ```
-          $TV(${parser}, function(${regularHandlerParams.join(", ")}) {
-          ${namedParameters}
-          ${h.f}
-          })
-        ```
+        return [
+          `$TV(${parser}, function(${regularHandlerParams.join(", ")}) {\n`
+          namedParameters
+          "\n"
+          handler
+          "\n});"
+        ]
 
     else // structural mapping
       parser := compileOp(arg, name, false, options.types)
@@ -207,12 +214,12 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
           else
             ""
         .join("")
-        return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} })`
+        return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
       else if arg[0] is "R"
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} })`
+        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} })`
+        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
 
   return compileOp(arg, name, true, options.types)
 
@@ -221,8 +228,9 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
-    `
-      const ${name}$0 = ${compileHandler(options, rule, name)};
+    [
+      `const ${name}$0 = `, compileHandler(options, rule, name), "\n",
+      ```
       function ${name}(state${stateType}) {
         let eventData;
         if (state.events) {
@@ -242,38 +250,41 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
           return result;
         }
       }
-    `
+      ```
+    ]
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      `const ${name}$${i} = ${compileHandler options, arg, name};`
+      [`const ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
       `${name}$${i}(state)`
     .join(" || ")
 
-    `
-      ${fns.join("\n")}
-      function ${name}(state${stateType}) {
-        let eventData;
-        if (state.events) {
-          const result = state.events.enter?.(${JSON.stringify(name)}, state);
-          if (result) {
-            if (result.cache) return result.cache;
-            eventData = result.data;
+    [
+      ...fns
+      ```
+        function ${name}(state${stateType}) {
+          let eventData;
+          if (state.events) {
+            const result = state.events.enter?.(${JSON.stringify(name)}, state);
+            if (result) {
+              if (result.cache) return result.cache;
+              eventData = result.data;
+            }
+          }
+          if (state.tokenize) {
+            const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
+            if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
+            return result;
+          } else {
+            const result = ${choices};
+            if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
+            return result;
           }
         }
-        if (state.tokenize) {
-          const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-          return result;
-        } else {
-          const result = ${choices};
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-          return result;
-        }
-      }
-    `
+      ```
+    ]
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
@@ -305,8 +316,15 @@ getNamedVariable := (op: HeraAST[0]): string | undefined ->
 
 defaultOptions :=
   types: false
+  inlineMap: false
+  source: ""
+  filename: "anonymous"
 
-export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
+{ SourceMap, base64Encode } from ./sourcemap.civet
+
+export function compile(rules: {[k: string]: HeraAST}, options)
+  options = {...defaultOptions, ...options}
+
   // NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
   // TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
   /* c8 ignore next */
@@ -318,29 +336,53 @@ export function compile(rules: {[k: string]: HeraAST}, options=defaultOptions)
   { types } := options
   ruleNames := Object.keys(rules)
 
-  body := ruleNames.map (name) ->
-    compileRule(options, name, rules[name])
-  .join("\n\n")
+  debugger
+
+  body := ruleNames.flatMap (name) ->
+    [ compileRule(options, name, rules[name]), "\n\n"]
 
   header := types ? tsMachine : jsMachine
 
-  return `${header}
+  strDefSource := strDefs.map (str, i) ->
+    `const $L${i} = $L("${str}");\n`
 
-  const { parse } = parserState(${compileRulesObject(ruleNames)})
+  reDefSource := reDefs.map (r, i) ->
+    `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
 
-  ${ strDefs.map (str, i) ->
-    `const $L${i} = $L("${str}");`
-  .join "\n" }
+  genOpts := {
+    errors: []
+    updateSourceMap: (outputStr: string, inputPos: number) ->
+  }
 
-  ${ reDefs.map (r, i) ->
-    `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));`
-  .join "\n" }
+  let sm: ReturnType<typeof SourceMap> | undefined
+  if options.inlineMap
+    sm = SourceMap(options.source)
+    genOpts.updateSourceMap = sm.updateSourceMap
 
-  ${body}
+  code := generate [
+    header
+    `\n\nconst { parse } = parserState(${compileRulesObject(ruleNames)});\n`
+    strDefSource
+    "\n\n"
+    reDefSource
+    "\n\n"
+    body
+    "\n\n"
+    ```
+      exports.parse = parse
+      exports.default = { parse }
+    ```
+  ], genOpts
 
-  exports.parse = parse
-  exports.default = { parse }
-  `
+  if genOpts.errors.length
+    throw new Error("Error generating parser: " + genOpts.errors.join("\n"))
+
+  if options.inlineMap
+    srcMapJSON := sm!.json(options.filename, "")
+    // NOTE: separate comment to prevent this string getting picked up as actual sourceMappingURL in tools
+    return `${code}\n${"//#"} sourceMappingURL=data:application/json;base64,${base64Encode JSON.stringify(srcMapJSON)}\n`
+
+  return code
 
 isSimple := /^[^.*+?{}()\[\]^\\]*$/
 isSimpleCharacterClass := /^\[[^-^\\]*\]$/
@@ -365,3 +407,27 @@ reType := (types: boolean, str: string) ->
       ""
   else
     ""
+
+generate := (node, options): string ->
+  if typeof node is "string"
+    // increment output line/column
+    options.updateSourceMap? node
+
+    return node
+
+  if Array.isArray(node)
+    return node.map (child) ->
+      generate child, options
+    .join('')
+
+  if typeof node is "object"
+    if node.type is "Error"
+      options.errors.push node
+      return ""
+
+    if node.$loc?
+      {token, $loc} := node
+      options.updateSourceMap?(token, $loc.pos)
+      return token
+
+    return generate node.children, options
