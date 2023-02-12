@@ -306,9 +306,9 @@
     "@jridgewell/trace-mapping" "0.3.9"
 
 "@danielx/civet@^0.5.10":
-  version "0.5.69"
-  resolved "https://registry.yarnpkg.com/@danielx/civet/-/civet-0.5.69.tgz#17fa6011e9e915d1a2e16c6276a800d750c350eb"
-  integrity sha512-yaWlGsoS4ksqDi+jZIb0IWr47AkYg3ic2t3MVfsy2btzeiuBVaWEX0/88we8uzKvwmKRrU3iNriM1gyeB8rE+Q==
+  version "0.5.70"
+  resolved "https://registry.yarnpkg.com/@danielx/civet/-/civet-0.5.70.tgz#2878328bd7ac1c1b57c55bdae48fe24c98982f17"
+  integrity sha512-Oq6VpfMVRCg2MNrcUmMevbl2FlcEwNsAm5dvWlI0I98HBFes+jzUTz923ALc8weOMb8371fbmjwZIiuUzh688A==
 
 "@danielx/coffeecoverage@4.0.0-pre.1":
   version "4.0.0-pre.1"

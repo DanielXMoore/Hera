@@ -163,10 +163,9 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
     if h and typeof h is "object" and "f" in h // function mapping
       parser := compileOp(arg, name, false, options.types)
 
-      handler := h.$loc ? {
+      handler :=
         $loc: h.$loc
         token: h.f
-      } : h.f
 
       if arg[0] is "S"
         // Gather names from each element in arg[1]
@@ -349,10 +348,8 @@ export function compile(rules: {[k: string]: HeraAST}, options)
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
 
-  genOpts := {
-    errors: []
+  genOpts :=
     updateSourceMap: (outputStr: string, inputPos: number) ->
-  }
 
   let sm: ReturnType<typeof SourceMap> | undefined
   if options.inlineMap
@@ -373,9 +370,6 @@ export function compile(rules: {[k: string]: HeraAST}, options)
       exports.default = { parse }
     ```
   ], genOpts
-
-  if genOpts.errors.length
-    throw new Error("Error generating parser: " + genOpts.errors.join("\n"))
 
   if options.inlineMap
     srcMapJSON := sm!.json(options.filename, "")
@@ -421,10 +415,6 @@ generate := (node, options): string ->
     .join('')
 
   if typeof node is "object"
-    if node.type is "Error"
-      options.errors.push node
-      return ""
-
     if node.$loc?
       {token, $loc} := node
       options.updateSourceMap?(token, $loc.pos)

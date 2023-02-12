@@ -43,8 +43,6 @@ export SourceMap = (sourceString: string) ->
 
   return
     data: sm
-    source: ->
-      sourceString
     renderMappings: ->
       lastSourceLine .= 0
       lastSourceColumn .= 0
@@ -104,6 +102,7 @@ smRegexp := /\n\/\/# sourceMappingURL=data:application\/json;charset=utf-8;base6
 Remap a string with compiled code and a source map to use a new source map
 referencing upstream source files.
 */
+/* c8 ignore start */
 remap := (codeWithSourceMap: string, upstreamMap: {data: {lines: SourceMapEntries}, json: any}, sourcePath: string, targetPath: string) ->
   sourceMapText := codeWithSourceMap.match(smRegexp)
   let parsed
@@ -172,7 +171,6 @@ parseWithLines := (base64encodedJSONstr: string) ->
 
   return json
 
-
 Object.assign SourceMap, { remap, parseWithLines, composeLines }
 
 // write a formatted error message to the console displaying the source code with line numbers
@@ -198,6 +196,7 @@ prettySourceExcerpt := (source: string, location: {line: number, column: number}
       console.log `${lineNumStr}: ${line}`
 
   return
+/* c8 ignore stop */
 
 VLQ_SHIFT            := 5
 VLQ_CONTINUATION_BIT := 1 << VLQ_SHIFT             // 0010 0000
@@ -247,6 +246,7 @@ vlqChars := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
     i++
 )();
 
+/* c8 ignore start */
 decodeError := (message: string) ->
   throw new Error(message)
 
@@ -291,7 +291,6 @@ decodeVLQ := (mapping: string) ->
 
   return result
 
-
 ###*
 * Take a position in generated code and map it into a position in source code.
 * Reverse mapping.
@@ -334,3 +333,4 @@ remapPosition := (position: [number, number], sourcemapLines: SourceMapEntries) 
   else
     // console.error("no mapping for ", position)
     return undefined
+/* c8 ignore stop */
