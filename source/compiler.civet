@@ -366,6 +366,7 @@ export function compile(rules: {[k: string]: HeraAST}, options)
     ```
       exports.parse = parse
       exports.default = { parse }
+
     ```
   ], genOpts
 
