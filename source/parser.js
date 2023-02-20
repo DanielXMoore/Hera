@@ -496,6 +496,7 @@ OpenParenthesis: OpenParenthesis,
 CloseParenthesis: CloseParenthesis,
 Indent: Indent,
 Space: Space,
+NonCommentEOS: NonCommentEOS,
 EOS: EOS
   });
 const $L0 = $L("/");
@@ -535,7 +536,8 @@ const $R18 = $R(new RegExp("\\][ \\t]*", 'suy'));
 const $R19 = $R(new RegExp("\\([ \\t]*", 'suy'));
 const $R20 = $R(new RegExp("[ \\t]*\\)", 'suy'));
 const $R21 = $R(new RegExp("[ \\t]+", 'suy'));
-const $R22 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
+const $R22 = $R(new RegExp("([ \\t]*(\\n|\\r\\n|\\r|$))+", 'suy'));
+const $R23 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
 
 
 const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function($skip, $loc, $0, $1, $2) {
@@ -899,7 +901,7 @@ function Handling(state) {
   }
 }
 
-const HandlingExpression$0 = $T($S(EOS, HandlingExpressionBody), function(value) {return value[1] });
+const HandlingExpression$0 = $T($S(EOS, HandlingExpressionBody, $E(EOS)), function(value) {return value[1] });
 const HandlingExpression$1 = $T($S(StructuralMapping, EOS), function(value) {return value[0] });
 function HandlingExpression(state) {
   let eventData;
@@ -924,7 +926,7 @@ function HandlingExpression(state) {
 const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function($skip, $loc, $0, $1) {
 
 return {
-  f: $1.join("\n"),
+  f: $1.join("").trimEnd(),
   $loc,
 }
 });
@@ -948,7 +950,7 @@ function HandlingExpressionBody(state) {
   }
 }
 
-const HandlingExpressionLine$0 = $T($S(Indent, Indent, $EXPECT($R2, fail, "HandlingExpressionLine /[^\\n\\r]*/"), EOS), function(value) {return value[2] });
+const HandlingExpressionLine$0 = $T($S(Indent, Indent, $TEXT($S($EXPECT($R2, fail, "HandlingExpressionLine /[^\\n\\r]*/"), NonCommentEOS))), function(value) {return value[2] });
 function HandlingExpressionLine(state) {
   let eventData;
   if (state.events) {
@@ -1635,7 +1637,28 @@ function Space(state) {
   }
 }
 
-const EOS$0 = $R$0($EXPECT($R22, fail, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
+const NonCommentEOS$0 = $R$0($EXPECT($R22, fail, "NonCommentEOS /([ \\t]*(\\n|\\r\\n|\\r|$))+/"))
+function NonCommentEOS(state) {
+  let eventData;
+  if (state.events) {
+    const result = state.events.enter?.("NonCommentEOS", state);
+    if (result) {
+      if (result.cache) return result.cache;
+      eventData = result.data;
+    }
+  }
+  if (state.tokenize) {
+    const result = $TOKEN("NonCommentEOS", state, NonCommentEOS$0(state));
+    if (state.events) state.events.exit?.("NonCommentEOS", state, result, eventData);
+    return result;
+  } else {
+    const result = NonCommentEOS$0(state);
+    if (state.events) state.events.exit?.("NonCommentEOS", state, result, eventData);
+    return result;
+  }
+}
+
+const EOS$0 = $R$0($EXPECT($R23, fail, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
 function EOS(state) {
   let eventData;
   if (state.events) {

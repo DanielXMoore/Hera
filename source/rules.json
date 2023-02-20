@@ -254,7 +254,11 @@
         "S",
         [
           "EOS",
-          "HandlingExpressionBody"
+          "HandlingExpressionBody",
+          [
+            "?",
+            "EOS"
+          ]
         ],
         {
           "v": 2
@@ -276,10 +280,10 @@
     "+",
     "HandlingExpressionLine",
     {
-      "f": "return {\n  f: $1.join(\"\\n\"),\n  $loc,\n}",
+      "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
       "$loc": {
-        "pos": 1340,
-        "length": 56
+        "pos": 1345,
+        "length": 64
       }
     }
   ],
@@ -289,10 +293,18 @@
       "Indent",
       "Indent",
       [
-        "R",
-        "[^\\n\\r]*"
-      ],
-      "EOS"
+        "$",
+        [
+          "S",
+          [
+            [
+              "R",
+              "[^\\n\\r]*"
+            ],
+            "NonCommentEOS"
+          ]
+        ]
+      ]
     ],
     {
       "v": 3
@@ -309,7 +321,7 @@
         {
           "f": "return JSON.parse(`\"${$1}\"`)",
           "$loc": {
-            "pos": 1490,
+            "pos": 1518,
             "length": 33
           }
         }
@@ -374,7 +386,7 @@
     {
       "f": "return {\n  o: Object.fromEntries($2)\n}",
       "$loc": {
-        "pos": 1763,
+        "pos": 1791,
         "length": 52
       }
     }
@@ -444,7 +456,7 @@
         {
           "f": "return parseInt($1, 10)",
           "$loc": {
-            "pos": 1974,
+            "pos": 2002,
             "length": 28
           }
         }
@@ -476,7 +488,7 @@
         {
           "f": "return null",
           "$loc": {
-            "pos": 2082,
+            "pos": 2110,
             "length": 16
           }
         }
@@ -487,7 +499,7 @@
         {
           "f": "return {l: undefined}",
           "$loc": {
-            "pos": 2115,
+            "pos": 2143,
             "length": 27
           }
         }
@@ -503,7 +515,7 @@
         {
           "f": "return parseInt($0, 16)",
           "$loc": {
-            "pos": 2175,
+            "pos": 2203,
             "length": 28
           }
         }
@@ -514,7 +526,7 @@
         {
           "f": "return parseFloat($0)",
           "$loc": {
-            "pos": 2227,
+            "pos": 2255,
             "length": 27
           }
         }
@@ -735,6 +747,10 @@
   "Space": [
     "R",
     "[ \\t]+"
+  ],
+  "NonCommentEOS": [
+    "R",
+    "([ \\t]*(\\n|\\r\\n|\\r|$))+"
   ],
   "EOS": [
     "R",

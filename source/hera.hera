@@ -74,18 +74,18 @@ Handling
   Space* Arrow HandlingExpression -> $3
 
 HandlingExpression
-  EOS HandlingExpressionBody -> $2
+  EOS HandlingExpressionBody EOS? -> $2
   StructuralMapping EOS -> $1
 
 HandlingExpressionBody
   HandlingExpressionLine+ ->
     return {
-      f: $1.join("\n"),
+      f: $1.join("").trimEnd(),
       $loc,
     }
 
 HandlingExpressionLine
-  Indent Indent [^\n\r]* EOS -> $3
+  Indent Indent $( [^\n\r]* NonCommentEOS ) -> $3
 
 StructuralMapping
   StringValue ->
@@ -201,6 +201,9 @@ Indent
 
 Space
   [ \t]+
+
+NonCommentEOS
+  /([ \t]*(\n|\r\n|\r|$))+/
 
 EOS
   /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/
