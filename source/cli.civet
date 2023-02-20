@@ -15,8 +15,15 @@ if process.argv.includes '--ebnf'
   process.stdout.write grammarToEBNF(ast)
   process.exit 0
 
+filename .= "<stdin>"
+try
+  filename = fs.realpathSync '/dev/stdin'
+
 process.stdout.write compile ast,
-  types: process.argv.includes '--types'
+  types:     process.argv.includes '--types'
+  inlineMap: process.argv.includes '--inlineMap'
+  filename: filename
+  source: input
 
 // Write out cli io
 if process.argv.includes '--cli'

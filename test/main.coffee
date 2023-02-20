@@ -105,6 +105,12 @@ describe "Hera", ->
 
     assert tsSrc
 
+  it "should add inline source map", ->
+    heraSrc = readFile('source/hera.hera')
+    tsSrc = compile heraSrc, types: true, inlineMap: true
+
+    assert tsSrc.includes('//# sourceMappingURL=data:application/json;base64')
+
   it "should annotate simple regexp types when compiling", ->
     heraSrc = """
       Rule
