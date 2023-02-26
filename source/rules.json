@@ -1,22 +1,55 @@
 {
   "Grammar": [
-    "S",
-    [
-      [
-        "*",
-        "EOS"
-      ],
-      [
-        "+",
-        "Rule"
-      ]
-    ],
+    "*",
+    "Statement",
     {
-      "f": "return Object.fromEntries($2)",
+      "f": "const code = $1.filter(a => typeof a === \"string\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
       "$loc": {
         "pos": 24,
-        "length": 35
+        "length": 181
       }
+    }
+  ],
+  "Statement": [
+    "/",
+    [
+      [
+        "S",
+        [
+          [
+            "?",
+            "EOS"
+          ],
+          "CodeBlock"
+        ],
+        {
+          "v": 2
+        }
+      ],
+      [
+        "S",
+        [
+          [
+            "?",
+            "EOS"
+          ],
+          "Rule"
+        ],
+        {
+          "v": 2
+        }
+      ]
+    ]
+  ],
+  "CodeBlock": [
+    "S",
+    [
+      "TripleBacktick",
+      "CodeBody",
+      "TripleBacktick"
+    ],
+    {
+      "v": 2
     }
   ],
   "Rule": [
@@ -47,7 +80,7 @@
     {
       "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
       "$loc": {
-        "pos": 130,
+        "pos": 386,
         "length": 90
       }
     }
@@ -61,7 +94,7 @@
     {
       "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
       "$loc": {
-        "pos": 250,
+        "pos": 506,
         "length": 129
       }
     }
@@ -81,7 +114,7 @@
         {
           "f": "$2.unshift($1)\nreturn [\"S\", $2]",
           "$loc": {
-            "pos": 424,
+            "pos": 680,
             "length": 40
           }
         }
@@ -98,7 +131,7 @@
         {
           "f": "$2.unshift($1)\nreturn [\"/\", $2]",
           "$loc": {
-            "pos": 498,
+            "pos": 754,
             "length": 40
           }
         }
@@ -160,7 +193,7 @@
     {
       "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result]\nreturn result",
       "$loc": {
-        "pos": 736,
+        "pos": 992,
         "length": 138
       }
     }
@@ -181,7 +214,7 @@
     {
       "f": "if ($2) return [$2, $1]\nelse return $1",
       "$loc": {
-        "pos": 934,
+        "pos": 1190,
         "length": 48
       }
     }
@@ -226,7 +259,7 @@
         {
           "f": "return undefined",
           "$loc": {
-            "pos": 1141,
+            "pos": 1397,
             "length": 21
           }
         }
@@ -282,7 +315,7 @@
     {
       "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
       "$loc": {
-        "pos": 1345,
+        "pos": 1601,
         "length": 64
       }
     }
@@ -321,7 +354,7 @@
         {
           "f": "return JSON.parse(`\"${$1}\"`)",
           "$loc": {
-            "pos": 1518,
+            "pos": 1774,
             "length": 33
           }
         }
@@ -386,7 +419,7 @@
     {
       "f": "return {\n  o: Object.fromEntries($2)\n}",
       "$loc": {
-        "pos": 1791,
+        "pos": 2047,
         "length": 52
       }
     }
@@ -456,7 +489,7 @@
         {
           "f": "return parseInt($1, 10)",
           "$loc": {
-            "pos": 2002,
+            "pos": 2258,
             "length": 28
           }
         }
@@ -488,7 +521,7 @@
         {
           "f": "return null",
           "$loc": {
-            "pos": 2110,
+            "pos": 2366,
             "length": 16
           }
         }
@@ -499,7 +532,7 @@
         {
           "f": "return {l: undefined}",
           "$loc": {
-            "pos": 2143,
+            "pos": 2399,
             "length": 27
           }
         }
@@ -515,7 +548,7 @@
         {
           "f": "return parseInt($0, 16)",
           "$loc": {
-            "pos": 2203,
+            "pos": 2459,
             "length": 28
           }
         }
@@ -526,7 +559,7 @@
         {
           "f": "return parseFloat($0)",
           "$loc": {
-            "pos": 2255,
+            "pos": 2511,
             "length": 27
           }
         }
@@ -755,5 +788,16 @@
   "EOS": [
     "R",
     "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+"
+  ],
+  "TripleBacktick": [
+    "L",
+    "```"
+  ],
+  "CodeBody": [
+    "$",
+    [
+      "R",
+      "(?:(?:`(?!``))|[^`])*"
+    ]
   ]
 }

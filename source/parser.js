@@ -449,6 +449,8 @@ exports.parserState = parserState;
 
 const { parse } = parserState({
     Grammar: Grammar,
+Statement: Statement,
+CodeBlock: CodeBlock,
 Rule: Rule,
 RuleBody: RuleBody,
 Choice: Choice,
@@ -497,7 +499,9 @@ CloseParenthesis: CloseParenthesis,
 Indent: Indent,
 Space: Space,
 NonCommentEOS: NonCommentEOS,
-EOS: EOS
+EOS: EOS,
+TripleBacktick: TripleBacktick,
+CodeBody: CodeBody
   });
 const $L0 = $L("/");
 const $L1 = $L(":");
@@ -512,6 +516,7 @@ const $L9 = $L("]");
 const $L10 = $L("->");
 const $L11 = $L("\\");
 const $L12 = $L("  ");
+const $L13 = $L("```");
 
 
 const $R0 = $R(new RegExp("[$&!]", 'suy'));
@@ -538,11 +543,15 @@ const $R20 = $R(new RegExp("[ \\t]*\\)", 'suy'));
 const $R21 = $R(new RegExp("[ \\t]+", 'suy'));
 const $R22 = $R(new RegExp("([ \\t]*(\\n|\\r\\n|\\r|$))+", 'suy'));
 const $R23 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
+const $R24 = $R(new RegExp("(?:(?:`(?!``))|[^`])*", 'suy'));
 
 
-const Grammar$0 = $TS($S($Q(EOS), $P(Rule)), function($skip, $loc, $0, $1, $2) {
+const Grammar$0 = $TV($Q(Statement), function($skip, $loc, $0, $1) {
 
-return Object.fromEntries($2)
+const code = $1.filter(a => typeof a === "string")
+const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
+rules[Symbol.for("code")] = code
+return rules
 });
 function Grammar(state) {
   let eventData;
@@ -560,6 +569,49 @@ function Grammar(state) {
   } else {
     const result = Grammar$0(state);
     if (state.events) state.events.exit?.("Grammar", state, result, eventData);
+    return result;
+  }
+}
+
+const Statement$0 = $T($S($E(EOS), CodeBlock), function(value) {return value[1] });
+const Statement$1 = $T($S($E(EOS), Rule), function(value) {return value[1] });
+function Statement(state) {
+  let eventData;
+  if (state.events) {
+    const result = state.events.enter?.("Statement", state);
+    if (result) {
+      if (result.cache) return result.cache;
+      eventData = result.data;
+    }
+  }
+  if (state.tokenize) {
+    const result = $TOKEN("Statement", state, Statement$0(state) || Statement$1(state));
+    if (state.events) state.events.exit?.("Statement", state, result, eventData);
+    return result;
+  } else {
+    const result = Statement$0(state) || Statement$1(state);
+    if (state.events) state.events.exit?.("Statement", state, result, eventData);
+    return result;
+  }
+}
+
+const CodeBlock$0 = $T($S(TripleBacktick, CodeBody, TripleBacktick), function(value) {return value[1] });
+function CodeBlock(state) {
+  let eventData;
+  if (state.events) {
+    const result = state.events.enter?.("CodeBlock", state);
+    if (result) {
+      if (result.cache) return result.cache;
+      eventData = result.data;
+    }
+  }
+  if (state.tokenize) {
+    const result = $TOKEN("CodeBlock", state, CodeBlock$0(state));
+    if (state.events) state.events.exit?.("CodeBlock", state, result, eventData);
+    return result;
+  } else {
+    const result = CodeBlock$0(state);
+    if (state.events) state.events.exit?.("CodeBlock", state, result, eventData);
     return result;
   }
 }
@@ -1675,6 +1727,48 @@ function EOS(state) {
   } else {
     const result = EOS$0(state);
     if (state.events) state.events.exit?.("EOS", state, result, eventData);
+    return result;
+  }
+}
+
+const TripleBacktick$0 = $EXPECT($L13, fail, "TripleBacktick \"```\"")
+function TripleBacktick(state) {
+  let eventData;
+  if (state.events) {
+    const result = state.events.enter?.("TripleBacktick", state);
+    if (result) {
+      if (result.cache) return result.cache;
+      eventData = result.data;
+    }
+  }
+  if (state.tokenize) {
+    const result = $TOKEN("TripleBacktick", state, TripleBacktick$0(state));
+    if (state.events) state.events.exit?.("TripleBacktick", state, result, eventData);
+    return result;
+  } else {
+    const result = TripleBacktick$0(state);
+    if (state.events) state.events.exit?.("TripleBacktick", state, result, eventData);
+    return result;
+  }
+}
+
+const CodeBody$0 = $TEXT($EXPECT($R24, fail, "CodeBody /(?:(?:`(?!``))|[^`])*/"))
+function CodeBody(state) {
+  let eventData;
+  if (state.events) {
+    const result = state.events.enter?.("CodeBody", state);
+    if (result) {
+      if (result.cache) return result.cache;
+      eventData = result.data;
+    }
+  }
+  if (state.tokenize) {
+    const result = $TOKEN("CodeBody", state, CodeBody$0(state));
+    if (state.events) state.events.exit?.("CodeBody", state, result, eventData);
+    return result;
+  } else {
+    const result = CodeBody$0(state);
+    if (state.events) state.events.exit?.("CodeBody", state, result, eventData);
     return result;
   }
 }

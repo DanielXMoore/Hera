@@ -34,6 +34,12 @@ describe "Hera", ->
     assert.equal query, "query"
     assert.equal fragment, "fragment"
 
+  it "should parse code example", ->
+    grammar = readFile("samples/code.hera")
+    parser = generate(grammar)
+
+    parser.parse "a"
+
   it "should consume blank lines as part of EOS", ->
     grammar = """
       Grammar
