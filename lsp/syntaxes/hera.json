@@ -17,6 +17,7 @@
         { "include": "#regex" },
         { "include": "#characterClass"},
         { "include": "#operator" },
+        { "include": "#codeBlock"},
         { "include": "#comment" },
         { "include": "#choice"},
         { "include": "#dot"}
@@ -29,6 +30,24 @@
     "choice": {
       "match": "/",
       "name": "constant.numeric.hera"
+    },
+    "codeBlock": {
+      "begin": "```",
+      "beginCaptures": {
+        "0": {
+          "name": "storage.hera"
+        }
+      },
+      "contentName": "meta.embedded.block.javascript",
+      "end": "```",
+      "endCaptures": {
+        "0": {
+          "name": "storage.hera"
+        }
+      },
+      "patterns": [{
+        "include": "source.js"
+      }]
     },
     "comment": {
       "match": "#.*$",
