@@ -131,6 +131,24 @@ JavaScript code can return the special value `$skip` to indicate a failed match.
 
 * **Comment** (`#...`): Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments. Inside handlers, use JavaScript `//` or `/*...*/` comments.
 
+Code Blocks
+---
+
+You can use three backticks to create a code block that is inserted directly into the compiled file. These are useful for
+creating utility functions or adding exports.
+
+````
+```
+function toInt(n) {
+  parseInt(n)
+}
+```
+
+Number
+  [0-9]+ ->
+    return toInt($0)
+````
+
 Demos
 ---
 

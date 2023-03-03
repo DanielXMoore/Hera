@@ -368,6 +368,7 @@ export function compile(rules: {[k: string]: HeraAST}, options)
       exports.default = { parse }
 
     ```
+    rules[Symbol.for('code')]
   ], genOpts
 
   if options.inlineMap

@@ -37,17 +37,14 @@ function* traverse(node: Token): Iterable<Token> {
   }
 }
 
-export function declarations(rules: Token[]): Map<string, Loc> {
-  debugger
-  if (Array.isArray(rules)) {
-    return new Map(rules.flatMap<Token>(({ type, children }) => {
-      if (type === "Rule") {
-        return children[0] as Token;
-      }
-      return [];
-    }).map<DeclEntry>(({ token, loc }) => [token as string, loc]));
-  }
-  return new Map([]);
+export function declarations(statements: Token[]): Map<string, Loc> {
+  return new Map(statements.flatMap<Token>(({ children }) => {
+    if (children?.[1]?.type === "Rule") {
+      return children[1].children[0] as Token;
+    }
+    return [];
+  }).map<DeclEntry>(({ token, loc }) => [token as string, loc]));
+
 }
 
 function partitionMap<T, K, V>(iterable: Iterable<T>, keyFn: (item: T) => K, valueFn: (item: T) => V | undefined) {
@@ -199,7 +196,7 @@ export function parseDocument(textDocument: TextDocument) {
 
   console.log("name nodes", count);
 
-  declarationsCache.set(textDocument.uri, declarations(tokens.children[1]));
+  declarationsCache.set(textDocument.uri, declarations(tokens.children));
 
   console.log(Array.from(filterMap(traverse(tokens), (node) => {
     if (node.type === "StringValue") {

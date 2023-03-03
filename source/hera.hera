@@ -1,6 +1,16 @@
 Grammar
-  EOS* Rule+ ->
-    return Object.fromEntries($2)
+  Statement* ->
+    const code = $1.filter(a => typeof a === "string")
+    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
+    rules[Symbol.for("code")] = code
+    return rules
+
+Statement
+  EOS? CodeBlock -> $2
+  EOS? Rule -> $2
+
+CodeBlock
+  TripleBacktick CodeBody TripleBacktick -> $2
 
 Rule
   Name EOS RuleBody -> [$1, $3]
@@ -207,3 +217,9 @@ NonCommentEOS
 
 EOS
   /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/
+
+TripleBacktick
+  "```"
+
+CodeBody
+  $/(?:(?:`(?!``))|[^`])*/

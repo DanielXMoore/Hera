@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 
 import { parse, declarations, getDocumentSymbols, parseDocument } from "../src/util";
 
-const sampleText = readFileSync(__dirname + "/../../samples/hera.hera", "utf8")
+const sampleText = readFileSync(__dirname + "/../../source/hera.hera", "utf8")
 
 const sampleDocument = {
   uri: "test",
@@ -29,9 +29,10 @@ describe("utils", () => {
     parseDocument(sampleDocument)
   });
 
-  it.only("should gather declarations", () => {
-    const decs = declarations(sampleTokens.children[1])
+  it("should gather declarations", () => {
+    console.log(sampleTokens.children)
+    const decs = declarations(sampleTokens.children)
 
-    assert.equal(Array.from(decs.entries()).length, 49)
+    assert.equal(Array.from(decs.entries()).length, 54)
   })
 });
