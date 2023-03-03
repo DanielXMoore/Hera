@@ -3,7 +3,7 @@
   "displayName": "Hera",
   "description": "Hera Language Server",
   "icon": "images/hera.png",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "DanielX",
   "repository": {
     "type": "git",
@@ -94,7 +94,7 @@
     "watch": "node .esbuild.mjs --watch"
   },
   "devDependencies": {
-    "@danielx/hera": "^0.7.7",
+    "@danielx/hera": "^0.8.7",
     "@types/mocha": "^9.1.0",
     "@types/node": "^14.17.0",
     "@types/vscode": "^1.63.0",
