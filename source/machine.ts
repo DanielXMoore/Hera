@@ -206,28 +206,34 @@ export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: 
 
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
   return (state: ParseState): MaybeResult<T> => {
-    let { input, pos, tokenize, events } = state,
+    let { pos } = state,
       i = 0, value
-    const results = [] as unknown as T,
+    const
       s = pos,
-      l = terms.length
+      l = terms.length,
+      results = Array(l) as unknown as T
 
     while (i < l) {
-      const r = terms[i++]({ input, pos, tokenize, events })
+      const r = terms[i](state)
 
       if (r) {
-        ({ pos, value } = r)
-        results.push(value)
-      } else
-        return
+        ({ pos, value } = r);
+        state.pos = pos
+        results[i] = value
+        i++
+      } else break
     }
+
+    // Must resest position since we may have advanced it
+    state.pos = s
+    if (i < l) return
 
     return {
       loc: {
         pos: s,
         length: pos - s,
       },
-      pos: pos,
+      pos,
       value: results,
     }
   }
