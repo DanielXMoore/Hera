@@ -235,7 +235,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
         if (state.events) {
           const result = state.events.enter?.(${JSON.stringify(name)}, state);
           if (result) {
-            if (result.cache) return result.cache;
+            if ('cache' in result) return result.cache;
             eventData = result.data;
           }
         }
@@ -268,7 +268,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
           if (state.events) {
             const result = state.events.enter?.(${JSON.stringify(name)}, state);
             if (result) {
-              if (result.cache) return result.cache;
+              if ('cache' in result) return result.cache;
               eventData = result.data;
             }
           }
