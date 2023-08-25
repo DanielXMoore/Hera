@@ -3,12 +3,14 @@ set -euox pipefail
 
 rm -rf dist
 mkdir dist
-tsc --target es2015 --module commonjs source/machine.ts
+./node_modules/.bin/esbuild source/machine.ts --outfile=source/machine.js --bundle --platform=node
 cp source/machine.* dist/
 coffee build/esbuild.coffee
 
 # hack to rewrite require extension
 sed --in-place -e 's/main.civet/main.js/' dist/hera
+# hack to remove import_meta and just use existing require
+sed --in-place -e '/import_meta/d' -e '/import_module/d' -e 's/require2/require/' dist/main.js
 # Mark 'hera' cli as executable
 chmod +x dist/hera
 
