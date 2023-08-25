@@ -81,9 +81,9 @@ Literal
 Handling
   EOS ->
     return undefined
-  Space* TypeAnnotation?:t Arrow HandlingExpression:exp ->
-    if (t) exp.t = t
-    return exp
+  Space* TypeAnnotation? Arrow HandlingExpression ->
+    if ($2) exp.t = $2
+    return $4
 
 HandlingExpression
   EOS HandlingExpressionBody EOS? -> $2

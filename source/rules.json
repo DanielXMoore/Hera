@@ -272,27 +272,17 @@
             "Space"
           ],
           [
-            {
-              "name": "t"
-            },
-            [
-              "?",
-              "TypeAnnotation"
-            ]
+            "?",
+            "TypeAnnotation"
           ],
           "Arrow",
-          [
-            {
-              "name": "exp"
-            },
-            "HandlingExpression"
-          ]
+          "HandlingExpression"
         ],
         {
-          "f": "if (t) exp.t = t\nreturn exp",
+          "f": "if ($2) exp.t = $2\nreturn $4",
           "$loc": {
-            "pos": 1477,
-            "length": 37
+            "pos": 1471,
+            "length": 38
           }
         }
       ]
@@ -333,7 +323,7 @@
     {
       "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
       "$loc": {
-        "pos": 1656,
+        "pos": 1651,
         "length": 64
       }
     }
@@ -372,7 +362,7 @@
         {
           "f": "return JSON.parse(`\"${$1}\"`)",
           "$loc": {
-            "pos": 1829,
+            "pos": 1824,
             "length": 33
           }
         }
@@ -437,7 +427,7 @@
     {
       "f": "return {\n  o: Object.fromEntries($2)\n}",
       "$loc": {
-        "pos": 2102,
+        "pos": 2097,
         "length": 52
       }
     }
@@ -507,7 +497,7 @@
         {
           "f": "return parseInt($1, 10)",
           "$loc": {
-            "pos": 2313,
+            "pos": 2308,
             "length": 28
           }
         }
@@ -539,7 +529,7 @@
         {
           "f": "return null",
           "$loc": {
-            "pos": 2421,
+            "pos": 2416,
             "length": 16
           }
         }
@@ -550,7 +540,7 @@
         {
           "f": "return {l: undefined}",
           "$loc": {
-            "pos": 2454,
+            "pos": 2449,
             "length": 27
           }
         }
@@ -566,7 +556,7 @@
         {
           "f": "return parseInt($0, 16)",
           "$loc": {
-            "pos": 2514,
+            "pos": 2509,
             "length": 28
           }
         }
@@ -577,7 +567,7 @@
         {
           "f": "return parseFloat($0)",
           "$loc": {
-            "pos": 2566,
+            "pos": 2561,
             "length": 27
           }
         }
