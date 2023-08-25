@@ -48,6 +48,7 @@ export declare type StructuralTerminal = boolean | null | number | string | unde
 };
 export declare type StructuralHandling = StructuralTerminal | StructuralHandling[];
 export declare type Handler = {
+    $loc: Loc;
     f: string;
 } | StructuralHandling;
 export declare type TerminalOp = "L" | "R";

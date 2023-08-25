@@ -81,7 +81,9 @@ Literal
 Handling
   EOS ->
     return undefined
-  Space* Arrow HandlingExpression -> $3
+  Space* TypeAnnotation?:t Arrow HandlingExpression:exp ->
+    if (t) exp.t = t
+    return exp
 
 HandlingExpression
   EOS HandlingExpressionBody EOS? -> $2
@@ -220,6 +222,9 @@ EOS
 
 TripleBacktick
   "```"
+
+TypeAnnotation
+  "::" $/(?:(?!->).)*/ -> $2
 
 CodeBody
   $/(?:(?:`(?!``))|[^`])*/

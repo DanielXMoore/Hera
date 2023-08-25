@@ -271,11 +271,29 @@
             "*",
             "Space"
           ],
+          [
+            {
+              "name": "t"
+            },
+            [
+              "?",
+              "TypeAnnotation"
+            ]
+          ],
           "Arrow",
-          "HandlingExpression"
+          [
+            {
+              "name": "exp"
+            },
+            "HandlingExpression"
+          ]
         ],
         {
-          "v": 3
+          "f": "if (t) exp.t = t\nreturn exp",
+          "$loc": {
+            "pos": 1477,
+            "length": 37
+          }
         }
       ]
     ]
@@ -315,7 +333,7 @@
     {
       "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
       "$loc": {
-        "pos": 1601,
+        "pos": 1656,
         "length": 64
       }
     }
@@ -354,7 +372,7 @@
         {
           "f": "return JSON.parse(`\"${$1}\"`)",
           "$loc": {
-            "pos": 1774,
+            "pos": 1829,
             "length": 33
           }
         }
@@ -419,7 +437,7 @@
     {
       "f": "return {\n  o: Object.fromEntries($2)\n}",
       "$loc": {
-        "pos": 2047,
+        "pos": 2102,
         "length": 52
       }
     }
@@ -489,7 +507,7 @@
         {
           "f": "return parseInt($1, 10)",
           "$loc": {
-            "pos": 2258,
+            "pos": 2313,
             "length": 28
           }
         }
@@ -521,7 +539,7 @@
         {
           "f": "return null",
           "$loc": {
-            "pos": 2366,
+            "pos": 2421,
             "length": 16
           }
         }
@@ -532,7 +550,7 @@
         {
           "f": "return {l: undefined}",
           "$loc": {
-            "pos": 2399,
+            "pos": 2454,
             "length": 27
           }
         }
@@ -548,7 +566,7 @@
         {
           "f": "return parseInt($0, 16)",
           "$loc": {
-            "pos": 2459,
+            "pos": 2514,
             "length": 28
           }
         }
@@ -559,7 +577,7 @@
         {
           "f": "return parseFloat($0)",
           "$loc": {
-            "pos": 2511,
+            "pos": 2566,
             "length": 27
           }
         }
@@ -792,6 +810,25 @@
   "TripleBacktick": [
     "L",
     "```"
+  ],
+  "TypeAnnotation": [
+    "S",
+    [
+      [
+        "L",
+        "::"
+      ],
+      [
+        "$",
+        [
+          "R",
+          "(?:(?!->).)*"
+        ]
+      ]
+    ],
+    {
+      "v": 2
+    }
   ],
   "CodeBody": [
     "$",

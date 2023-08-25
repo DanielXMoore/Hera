@@ -26,6 +26,31 @@ Building
 ./dist/hera < source/hera.hera > source/parser.js
 ```
 
+Tokenize Mode
+-------------
+
+Currently there is an automatic tokenization in Hera passed in as a parser
+option. It doesn't allow for handlers to return $skip or other handler
+code to run.
+
+The transforms were previously skipped by checking the flag in the transform
+handler wrappers $T, $TR, $TV but instead I plan to have the parser
+generation handle it.
+
+We have to skip the handlers because we are returning token nodes instead of
+what the handler expects. In theory we may be able to build a parallel token
+tree at the same time to completely match the behavior of the non-tokenize
+parse.
+
+$EXPECT
+-------
+
+$EXPECT is used for tracking failures to match literals or regexes by giving
+a more friendly name and grouping and discarding by farthest matched position.
+
+We may be able to remove it and pass context down to the leaf handlers. This
+will be necessary to make rules importable across Hera grammars.
+
 TypeScript
 ----------
 

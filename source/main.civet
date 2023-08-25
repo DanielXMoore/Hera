@@ -4,13 +4,17 @@ import type {
   ParserOptions,
 } from ./machine.js
 
+import { createRequire } from "module"
+
 parser from ./parser.js
 {compile as heraCompile} from ./compiler.civet
 { grammarToEBNF } from ./util.civet
 
+require := createRequire(import.meta.url)
+
 execMod := (src: string) => {
   m := { exports: {} }
-  Function("module", "exports", src)(m, m.exports)
+  Function("require", "module", "exports", src)(require, m, m.exports)
 
   return m.exports
 }

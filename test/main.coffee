@@ -10,6 +10,7 @@ describe "Build rules", ->
 
 describe "Hera", ->
   it "should do math example", ->
+    debugger
     grammar = readFile("samples/math.hera")
     parser = generate(grammar)
 
@@ -92,7 +93,6 @@ describe "Hera", ->
 
   it "should recursively generate itself", ->
     heraSrc = readFile('source/hera.hera')
-    debugger
     {parse} = generate heraSrc
 
     assert.deepEqual parse(heraSrc), parse(heraSrc)
@@ -503,6 +503,8 @@ describe "Hera", ->
         "A"
     """
 
+    debugger
+
     result = parse("AAAAAA", tokenize: true)
     assert.equal result.children[1].length, 6
 
@@ -658,7 +660,6 @@ describe "Hera", ->
         aaa
       """
     , (thrown) ->
-      debugger
       assert.equal thrown.line, 4
       assert.equal thrown.column, 1
       assert.equal thrown.offset, 15
@@ -775,16 +776,12 @@ describe "Hera", ->
 
       assert.deepEqual eventLog, [
         ["Rule", {
-          events,
           input: "a",
           pos: 0,
-          tokenize: false
         }]
         ["Rule", {
-          events,
           input: "a",
           pos: 0,
-          tokenize: false
         }, {
           loc:
             length: 1
