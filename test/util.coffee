@@ -16,7 +16,9 @@ describe "util", ->
 
     # strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
-    assert.equal grammar, readFile("source/hera.hera")
+
+    src = readFile("source/hera.hera")
+    assert.equal grammar, src
 
   it "should convert to ebnf", ->
     grammarToEBNF(rules)
@@ -45,6 +47,39 @@ describe "util", ->
     grammar = """
       Rule
         "X" -> {a: 1, b: null}
+
+    """
+    rules = parse grammar
+
+    assert.equal decompile(rules), grammar
+
+  it "should decompile named rule", ->
+    grammar = """
+      Rule
+        N:x A:y ->
+          return x + 1
+
+    """
+    rules = parse grammar
+
+    assert.equal decompile(rules), grammar
+
+  it "should decompile named rule", ->
+    grammar = """
+      Rule
+        N:x ->
+          return x + 1
+
+    """
+    rules = parse grammar
+
+    assert.equal decompile(rules), grammar
+
+  it "should decompile type annotated rule", ->
+    grammar = """
+      Rule
+        N:x :: number ->
+          return parseInt(x, 0)
 
     """
     rules = parse grammar
