@@ -10,7 +10,6 @@ describe "Build rules", ->
 
 describe "Hera", ->
   it "should do math example", ->
-    debugger
     grammar = readFile("samples/math.hera")
     parser = generate(grammar)
 
@@ -502,8 +501,6 @@ describe "Hera", ->
       A
         "A"
     """
-
-    debugger
 
     result = parse("AAAAAA", tokenize: true)
     assert.equal result.children[1].length, 6
