@@ -192,7 +192,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
         return [
-          `$TR(ctx, ${parser}, function(${regExpHandlerParams.join(", ")}) {\n`
+          `$TR(ctx, ${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
           handler
           `\n});`
         ]
@@ -200,7 +200,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         namedParameters := getParameterDeclaration(arg, 0)
 
         return [
-          `$TV(ctx, ${parser}, function(${regularHandlerParams.join(", ")}) {\n`
+          `$TV(ctx, ${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
           handler
