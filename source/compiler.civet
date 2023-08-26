@@ -1,7 +1,7 @@
 // Compile a rules json to typescript
 
 import type { HeraAST, HeraRules, StructuralHandling } from ./machine.js
-import { CodeSymbol } from ./machine.js
+import { CodeSymbol } from ./machine.ts
 
 interface CompileOptions {
   filename: string
@@ -182,7 +182,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
         return [
-          `$TS(ctx, ${parser}, function(${parameters.join(", ")})${handlerType} {\n`
+          `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
           handler
@@ -192,7 +192,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
         return [
-          `$TR(ctx, ${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
+          `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
           handler
           `\n});`
         ]
@@ -200,7 +200,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         namedParameters := getParameterDeclaration(arg, 0)
 
         return [
-          `$TV(ctx, ${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
+          `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
           handler
@@ -217,12 +217,12 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
           else
             ""
         .join("")
-        return `$T(ctx, ${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
+        return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
       else if arg[0] is "R"
-        return `$T(ctx, ${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
+        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `$T(ctx, ${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
+        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
 
   return compileOp(arg, name, true, options.types)
 
@@ -232,14 +232,14 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
-    body := `$EVENT(ctx, ${JSON.stringify(name)}, ${name}$0, state)`
+    body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
 
     [
       `const ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
       compileHandler(options, rule, name), "\n",
       ```
-      function ${name}(state${stateType}) { return ${body} }
+      function ${name}(ctx, state${stateType}) { return ${body} }
       ```
     ]
   else
@@ -250,12 +250,14 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     choices := args.map (_, i) ->
       `${name}$${i}`
 
-    body := `$EVENT_C(ctx, ${JSON.stringify(name)}, [${choices.join(",")}], state)`
+    choicesDec := `const ${name}$$ = [${choices.join(",")}]\n`
+    body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
 
     [
       ...fns
+      choicesDec
       ```
-        function ${name}(state${stateType}) { return ${body} }
+        function ${name}(ctx, state${stateType}) { return ${body} }
       ```
     ]
 
@@ -443,7 +445,7 @@ jsTail := """
         reset()
         Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
 
-        return validate(input, parser({
+        return validate(input, parser(ctx, {
           input,
           pos: 0,
         }), {
@@ -507,7 +509,7 @@ tsTail := """
         reset()
         Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
 
-        return validate(input, parser({
+        return validate(input, parser(ctx, {
           input,
           pos: 0,
         }), {
