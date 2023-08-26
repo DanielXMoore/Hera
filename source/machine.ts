@@ -1,4 +1,8 @@
 /**
+ * This is the common parser machinery.
+ */
+
+/**
  * Location information within a string. A position and a length. Can be
  * converted into line numbers when reporting errors.
  */
@@ -55,40 +59,6 @@ export type MaybeResult<T> = ParseResult<T> | undefined
  * Utility to get the wrapped ParseResult type.
  */
 export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
-
-export type Terminal = string | RegExp
-
-export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-export type StructuralTerminal =
-  boolean |
-  null |
-  number |
-  string |
-  undefined |
-  { v: PositionalVariable } |
-  { o: { [key: string]: StructuralHandling } } |
-  { l: any }
-export type StructuralHandling = StructuralTerminal | StructuralHandling[]
-export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandling
-export type TerminalOp = "L" | "R"
-export type SequenceOp = "S" | "/"
-export type PrefixOp = "&" | "!" | "$"
-export type SuffixOp = "+" | "*" | "?"
-export type Literal = [TerminalOp, string]
-export type TerminalNode = [TerminalOp, string, Handler?]
-export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
-export type PrefixNode = [PrefixOp, HeraAST, Handler?]
-export type SuffixNode = [SuffixOp, HeraAST, Handler?]
-export type NameNode = [{ name: string }, HeraAST, Handler?]
-export type PrimaryNode = TerminalNode | SequenceNode | NameNode
-export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
-
-export const CodeSymbol = Symbol.for("code")
-
-export type HeraRules = {
-  [key: string]: HeraAST,
-  [CodeSymbol]?: string
-}
 
 export type Token = {
   type: string
@@ -688,16 +658,6 @@ ${input.slice(result.pos)}
     validate,
     reset,
   }
-}
-
-export type HeraGrammar = { [key: string]: Parser<any> }
-
-export interface ParserOptions<T extends HeraGrammar> {
-  /** The name of the file being parsed */
-  filename?: string
-  startRule?: keyof T
-  tokenize?: boolean
-  events?: ParserContext
 }
 
 class ParseError extends Error {

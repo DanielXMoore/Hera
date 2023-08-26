@@ -25,10 +25,6 @@ const {
   Validator
 } = require("./machine.js")
 
-const parser = (function() {
-  const { fail, validate, reset } = Validator()
-  let ctx = { expectation: "", fail }
-
 
 const grammar = {
     Grammar: Grammar,
@@ -413,31 +409,91 @@ function CodeBody(ctx, state) { return $EVENT(ctx, state, "CodeBody", CodeBody$0
 
 
 
-return {
-  parse: (input, options = {}) => {
-    if (typeof input !== "string") throw new Error("Input must be a string")
+const parser = (function() {
+  const { fail, validate, reset } = Validator()
+  let ctx = { expectation: "", fail }
 
-    const parser = (options.startRule != null)
-      ? grammar[options.startRule]
-      : Object.values(grammar)[0]
+  return {
+    parse: (input, options = {}) => {
+      if (typeof input !== "string") throw new Error("Input must be a string")
 
-    if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
+      const parser = (options.startRule != null)
+        ? grammar[options.startRule]
+        : Object.values(grammar)[0]
 
-    const filename = options.filename || "<anonymous>";
+      if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 
-    reset()
-    Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+      const filename = options.filename || "<anonymous>";
 
-    return validate(input, parser(ctx, {
-      input,
-      pos: 0,
-    }), {
-      filename: filename
-    })
+      reset()
+      Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+
+      return validate(input, parser(ctx, {
+        input,
+        pos: 0,
+      }), {
+        filename: filename
+      })
+    }
   }
-}
-  }())
+}())
 
-  exports.default = parser
-  exports.parse = parser.parse
+exports.default = parser
+exports.parse = parser.parse
+
+exports.Grammar = Grammar;
+exports.Statement = Statement;
+exports.CodeBlock = CodeBlock;
+exports.Rule = Rule;
+exports.RuleBody = RuleBody;
+exports.Choice = Choice;
+exports.Sequence = Sequence;
+exports.SequenceExpression = SequenceExpression;
+exports.ChoiceExpression = ChoiceExpression;
+exports.ParameterName = ParameterName;
+exports.Expression = Expression;
+exports.PrefixOperator = PrefixOperator;
+exports.Suffix = Suffix;
+exports.SuffixOperator = SuffixOperator;
+exports.Primary = Primary;
+exports.Literal = Literal;
+exports.Handling = Handling;
+exports.HandlingExpression = HandlingExpression;
+exports.HandlingExpressionBody = HandlingExpressionBody;
+exports.HandlingExpressionLine = HandlingExpressionLine;
+exports.StructuralMapping = StructuralMapping;
+exports.JSArray = JSArray;
+exports.ArrayItem = ArrayItem;
+exports.JSObject = JSObject;
+exports.ObjectField = ObjectField;
+exports.Variable = Variable;
+exports.BooleanValue = BooleanValue;
+exports.NullValue = NullValue;
+exports.NumberValue = NumberValue;
+exports.StringValue = StringValue;
+exports.DoubleStringCharacter = DoubleStringCharacter;
+exports.EscapeSequence = EscapeSequence;
+exports.StringLiteral = StringLiteral;
+exports.RegExpLiteral = RegExpLiteral;
+exports.CharacterClassExpression = CharacterClassExpression;
+exports.RegExpCharacter = RegExpCharacter;
+exports.CharacterClass = CharacterClass;
+exports.CharacterClassCharacter = CharacterClassCharacter;
+exports.Quantifier = Quantifier;
+exports.Name = Name;
+exports.Arrow = Arrow;
+exports.Backslash = Backslash;
+exports.OpenBrace = OpenBrace;
+exports.CloseBrace = CloseBrace;
+exports.OpenBracket = OpenBracket;
+exports.CloseBracket = CloseBracket;
+exports.OpenParenthesis = OpenParenthesis;
+exports.CloseParenthesis = CloseParenthesis;
+exports.Indent = Indent;
+exports.Space = Space;
+exports.NonCommentEOS = NonCommentEOS;
+exports.EOS = EOS;
+exports.TripleBacktick = TripleBacktick;
+exports.TypeAnnotation = TypeAnnotation;
+exports.CodeBody = CodeBody;
 

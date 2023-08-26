@@ -2,7 +2,7 @@ import type {
   HeraGrammar,
   HeraRules,
   ParserOptions,
-} from ./machine.js
+} from ./hera-types.js
 
 import { createRequire } from "module"
 
@@ -37,7 +37,7 @@ compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => strin
 
   return heraCompile rules, options
 
-parse: <T extends HeraGrammar>(input: string, options?: ParserOptions<T>) => HeraRules := parser.parse
+parse := parser.parse
 
 generate := <T extends HeraGrammar>(src: string) => {
   return execMod(compile(parse(src))) as {

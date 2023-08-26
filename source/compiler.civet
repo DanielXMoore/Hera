@@ -1,7 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, StructuralHandling } from ./machine.js
-import { CodeSymbol } from ./machine.ts
+import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 
 interface CompileOptions {
   filename: string
@@ -238,9 +237,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
       `const ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
       compileHandler(options, rule, name), "\n",
-      ```
-      function ${name}(ctx, state${stateType}) { return ${body} }
-      ```
+      `function ${name}(ctx, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
@@ -256,9 +253,7 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
     [
       ...fns
       choicesDec
-      ```
-        function ${name}(ctx, state${stateType}) { return ${body} }
-      ```
+      `function ${name}(ctx, state${stateType}) { return ${body} }`
     ]
 
 compileRulesObject := (ruleNames: string[]) ->
@@ -269,6 +264,18 @@ compileRulesObject := (ruleNames: string[]) ->
   return `{
     ${meat}
   }`
+
+compileExports := (options: CompileOptions, ruleNames: string[]) ->
+  if options.types
+    meat := ruleNames.map (name) ->
+      `  ${name}`
+    .join(",\n")
+
+    return `export {\n${meat}\n}`
+  else
+    ruleNames.map (name) ->
+      `exports.${name} = ${name};`
+    .join("\n")
 
 /**
 Get a JS declaration string for nodes that have named parameters.
@@ -333,7 +340,10 @@ export function compile(rules: HeraRules, options: CompileOptions)
     "\n\n"
     tail
     "\n\n"
-    rules[CodeSymbol]
+    compileExports(options, ruleNames)
+    "\n\n"
+    //@ts-ignore
+    rules[Symbol.for("code")]
   ], genOpts
 
   if options.inlineMap
@@ -423,13 +433,13 @@ jsHead := """
     Validator
   } = require("./machine.js")
 
+"""
+
+jsTail := """
   const parser = (function() {
     const { fail, validate, reset } = Validator()
     let ctx = { expectation: "", fail }
 
-"""
-
-jsTail := """
     return {
       parse: (input, options = {}) => {
         if (typeof input !== "string") throw new Error("Input must be a string")
@@ -487,13 +497,13 @@ tsHead := """
     Validator
   } from "./machine.ts"
 
+"""
+
+tsTail := """
   const parser = (function() {
     const { fail, validate, reset } = Validator()
     let ctx: ParserContext = { expectation: "", fail }
 
-"""
-
-tsTail := """
     return {
       parse: (input: string, options: ParserOptions<typeof grammar> = {}) => {
         if (typeof input !== "string") throw new Error("Input must be a string")
