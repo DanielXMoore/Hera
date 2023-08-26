@@ -26,8 +26,8 @@ const {
 } = require("./machine.js")
 
 const parser = (function() {
-  let ctx = {}
   const { fail, validate, reset } = Validator()
+  let ctx = { expectation: "", fail }
 
 
 const grammar = {
@@ -190,10 +190,10 @@ function Sequence(ctx, state) { return $EVENT_C(ctx, state, "Sequence", Sequence
 const SequenceExpression$0 = $T($S(Space, Expression), function(value) {return value[1] });
 function SequenceExpression(ctx, state) { return $EVENT(ctx, state, "SequenceExpression", SequenceExpression$0) }
 
-const ChoiceExpression$0 = $T($S(Space, $EXPECT($L0, fail, "ChoiceExpression \"/\""), Space, Expression), function(value) {return value[3] });
+const ChoiceExpression$0 = $T($S(Space, $EXPECT($L0, "ChoiceExpression \"/\""), Space, Expression), function(value) {return value[3] });
 function ChoiceExpression(ctx, state) { return $EVENT(ctx, state, "ChoiceExpression", ChoiceExpression$0) }
 
-const ParameterName$0 = $T($S($EXPECT($L1, fail, "ParameterName \":\""), Name), function(value) {return value[1] });
+const ParameterName$0 = $T($S($EXPECT($L1, "ParameterName \":\""), Name), function(value) {return value[1] });
 function ParameterName(ctx, state) { return $EVENT(ctx, state, "ParameterName", ParameterName$0) }
 
 const Expression$0 = $TS($S($E(PrefixOperator), Suffix, $E(ParameterName)), function($skip, $loc, $0, $1, $2, $3) {
@@ -207,7 +207,7 @@ return result
 });
 function Expression(ctx, state) { return $EVENT(ctx, state, "Expression", Expression$0) }
 
-const PrefixOperator$0 = $R$0($EXPECT($R0, fail, "PrefixOperator /[$&!]/"))
+const PrefixOperator$0 = $R$0($EXPECT($R0, "PrefixOperator /[$&!]/"))
 function PrefixOperator(ctx, state) { return $EVENT(ctx, state, "PrefixOperator", PrefixOperator$0) }
 
 const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function($skip, $loc, $0, $1, $2) {
@@ -217,7 +217,7 @@ else return $1
 });
 function Suffix(ctx, state) { return $EVENT(ctx, state, "Suffix", Suffix$0) }
 
-const SuffixOperator$0 = $R$0($EXPECT($R1, fail, "SuffixOperator /[+?*]/"))
+const SuffixOperator$0 = $R$0($EXPECT($R1, "SuffixOperator /[+?*]/"))
 function SuffixOperator(ctx, state) { return $EVENT(ctx, state, "SuffixOperator", SuffixOperator$0) }
 
 const Primary$0 = Name
@@ -237,7 +237,7 @@ return undefined
 });
 const Handling$1 = $TS($S($Q(Space), $E(TypeAnnotation), Arrow, HandlingExpression), function($skip, $loc, $0, $1, $2, $3, $4) {
 
-if ($2) exp.t = $2
+if ($2) $4.t = $2
 return $4
 });
 const Handling$$ = [Handling$0,Handling$1]
@@ -257,7 +257,7 @@ return {
 });
 function HandlingExpressionBody(ctx, state) { return $EVENT(ctx, state, "HandlingExpressionBody", HandlingExpressionBody$0) }
 
-const HandlingExpressionLine$0 = $T($S(Indent, Indent, $TEXT($S($EXPECT($R2, fail, "HandlingExpressionLine /[^\\n\\r]*/"), NonCommentEOS))), function(value) {return value[2] });
+const HandlingExpressionLine$0 = $T($S(Indent, Indent, $TEXT($S($EXPECT($R2, "HandlingExpressionLine /[^\\n\\r]*/"), NonCommentEOS))), function(value) {return value[2] });
 function HandlingExpressionLine(ctx, state) { return $EVENT(ctx, state, "HandlingExpressionLine", HandlingExpressionLine$0) }
 
 const StructuralMapping$0 = $TS($S(StringValue), function($skip, $loc, $0, $1) {
@@ -276,7 +276,7 @@ function StructuralMapping(ctx, state) { return $EVENT_C(ctx, state, "Structural
 const JSArray$0 = $T($S(OpenBracket, $Q(ArrayItem), CloseBracket), function(value) {return value[1] });
 function JSArray(ctx, state) { return $EVENT(ctx, state, "JSArray", JSArray$0) }
 
-const ArrayItem$0 = $T($S(StructuralMapping, $EXPECT($R3, fail, "ArrayItem /,\\s*|\\s*(?=\\])/")), function(value) {return value[0] });
+const ArrayItem$0 = $T($S(StructuralMapping, $EXPECT($R3, "ArrayItem /,\\s*|\\s*(?=\\])/")), function(value) {return value[0] });
 function ArrayItem(ctx, state) { return $EVENT(ctx, state, "ArrayItem", ArrayItem$0) }
 
 const JSObject$0 = $TS($S(OpenBrace, $Q(ObjectField), CloseBrace), function($skip, $loc, $0, $1, $2, $3) {
@@ -287,128 +287,128 @@ return {
 });
 function JSObject(ctx, state) { return $EVENT(ctx, state, "JSObject", JSObject$0) }
 
-const ObjectField$0 = $T($S($C(StringValue, Name), $EXPECT($R4, fail, "ObjectField /:[ \\t]*/"), StructuralMapping, $EXPECT($R5, fail, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], value[2]] });
-const ObjectField$1 = $T($S(Name, $EXPECT($R5, fail, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], {"v": value[0]}] });
+const ObjectField$0 = $T($S($C(StringValue, Name), $EXPECT($R4, "ObjectField /:[ \\t]*/"), StructuralMapping, $EXPECT($R5, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], value[2]] });
+const ObjectField$1 = $T($S(Name, $EXPECT($R5, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], {"v": value[0]}] });
 const ObjectField$$ = [ObjectField$0,ObjectField$1]
 function ObjectField(ctx, state) { return $EVENT_C(ctx, state, "ObjectField", ObjectField$$) }
 
-const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const Variable$0 = $TR($EXPECT($R6, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseInt($1, 10)
 });
 const Variable$1 = Name
 const Variable$$ = [Variable$0,Variable$1]
 function Variable(ctx, state) { return $EVENT_C(ctx, state, "Variable", Variable$$) }
 
-const BooleanValue$0 = $T($EXPECT($L2, fail, "BooleanValue \"true\""), function(value) { return true });
-const BooleanValue$1 = $T($EXPECT($L3, fail, "BooleanValue \"false\""), function(value) { return false });
+const BooleanValue$0 = $T($EXPECT($L2, "BooleanValue \"true\""), function(value) { return true });
+const BooleanValue$1 = $T($EXPECT($L3, "BooleanValue \"false\""), function(value) { return false });
 const BooleanValue$$ = [BooleanValue$0,BooleanValue$1]
 function BooleanValue(ctx, state) { return $EVENT_C(ctx, state, "BooleanValue", BooleanValue$$) }
 
-const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function($skip, $loc, $0, $1) {
+const NullValue$0 = $TV($EXPECT($L4, "NullValue \"null\""), function($skip, $loc, $0, $1) {
 
 return null
 });
-const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {
+const NullValue$1 = $TV($EXPECT($L5, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {
 
 return {l: undefined}
 });
 const NullValue$$ = [NullValue$0,NullValue$1]
 function NullValue(ctx, state) { return $EVENT_C(ctx, state, "NullValue", NullValue$$) }
 
-const NumberValue$0 = $TR($EXPECT($R7, fail, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const NumberValue$0 = $TR($EXPECT($R7, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseInt($0, 16)
 });
-const NumberValue$1 = $TR($EXPECT($R8, fail, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const NumberValue$1 = $TR($EXPECT($R8, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseFloat($0)
 });
 const NumberValue$$ = [NumberValue$0,NumberValue$1]
 function NumberValue(ctx, state) { return $EVENT_C(ctx, state, "NumberValue", NumberValue$$) }
 
-const StringValue$0 = $T($S($EXPECT($L6, fail, "StringValue \"\\\\\\\"\""), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L6, fail, "StringValue \"\\\\\\\"\"")), function(value) {return value[1] });
+const StringValue$0 = $T($S($EXPECT($L6, "StringValue \"\\\\\\\"\""), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L6, "StringValue \"\\\\\\\"\"")), function(value) {return value[1] });
 function StringValue(ctx, state) { return $EVENT(ctx, state, "StringValue", StringValue$0) }
 
-const DoubleStringCharacter$0 = $R$0($EXPECT($R9, fail, "DoubleStringCharacter /[^\"\\\\]+/"))
+const DoubleStringCharacter$0 = $R$0($EXPECT($R9, "DoubleStringCharacter /[^\"\\\\]+/"))
 const DoubleStringCharacter$1 = EscapeSequence
 const DoubleStringCharacter$$ = [DoubleStringCharacter$0,DoubleStringCharacter$1]
 function DoubleStringCharacter(ctx, state) { return $EVENT_C(ctx, state, "DoubleStringCharacter", DoubleStringCharacter$$) }
 
-const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R10, fail, "EscapeSequence /./")))
+const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R10, "EscapeSequence /./")))
 function EscapeSequence(ctx, state) { return $EVENT(ctx, state, "EscapeSequence", EscapeSequence$0) }
 
 const StringLiteral$0 = $T($S(StringValue), function(value) {return ["L", value[0]] });
 function StringLiteral(ctx, state) { return $EVENT(ctx, state, "StringLiteral", StringLiteral$0) }
 
-const RegExpLiteral$0 = $T($S($EXPECT($L0, fail, "RegExpLiteral \"/\""), $N(Space), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "RegExpLiteral \"/\"")), function(value) {return ["R", value[2]] });
+const RegExpLiteral$0 = $T($S($EXPECT($L0, "RegExpLiteral \"/\""), $N(Space), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, "RegExpLiteral \"/\"")), function(value) {return ["R", value[2]] });
 const RegExpLiteral$1 = $T($TEXT(CharacterClassExpression), function(value) { return ["R", value] });
-const RegExpLiteral$2 = $T($EXPECT($L7, fail, "RegExpLiteral \".\""), function(value) { return ["R", value] });
+const RegExpLiteral$2 = $T($EXPECT($L7, "RegExpLiteral \".\""), function(value) { return ["R", value] });
 const RegExpLiteral$$ = [RegExpLiteral$0,RegExpLiteral$1,RegExpLiteral$2]
 function RegExpLiteral(ctx, state) { return $EVENT_C(ctx, state, "RegExpLiteral", RegExpLiteral$$) }
 
 const CharacterClassExpression$0 = $P(CharacterClass)
 function CharacterClassExpression(ctx, state) { return $EVENT(ctx, state, "CharacterClassExpression", CharacterClassExpression$0) }
 
-const RegExpCharacter$0 = $R$0($EXPECT($R11, fail, "RegExpCharacter /[^\\/\\\\]+/"))
+const RegExpCharacter$0 = $R$0($EXPECT($R11, "RegExpCharacter /[^\\/\\\\]+/"))
 const RegExpCharacter$1 = EscapeSequence
 const RegExpCharacter$$ = [RegExpCharacter$0,RegExpCharacter$1]
 function RegExpCharacter(ctx, state) { return $EVENT_C(ctx, state, "RegExpCharacter", RegExpCharacter$$) }
 
-const CharacterClass$0 = $S($EXPECT($L8, fail, "CharacterClass \"[\""), $Q(CharacterClassCharacter), $EXPECT($L9, fail, "CharacterClass \"]\""), $E(Quantifier))
+const CharacterClass$0 = $S($EXPECT($L8, "CharacterClass \"[\""), $Q(CharacterClassCharacter), $EXPECT($L9, "CharacterClass \"]\""), $E(Quantifier))
 function CharacterClass(ctx, state) { return $EVENT(ctx, state, "CharacterClass", CharacterClass$0) }
 
-const CharacterClassCharacter$0 = $R$0($EXPECT($R12, fail, "CharacterClassCharacter /[^\\]\\\\]+/"))
+const CharacterClassCharacter$0 = $R$0($EXPECT($R12, "CharacterClassCharacter /[^\\]\\\\]+/"))
 const CharacterClassCharacter$1 = EscapeSequence
 const CharacterClassCharacter$$ = [CharacterClassCharacter$0,CharacterClassCharacter$1]
 function CharacterClassCharacter(ctx, state) { return $EVENT_C(ctx, state, "CharacterClassCharacter", CharacterClassCharacter$$) }
 
-const Quantifier$0 = $R$0($EXPECT($R13, fail, "Quantifier /[?+*]|\\{\\d+(,\\d+)?\\}/"))
+const Quantifier$0 = $R$0($EXPECT($R13, "Quantifier /[?+*]|\\{\\d+(,\\d+)?\\}/"))
 function Quantifier(ctx, state) { return $EVENT(ctx, state, "Quantifier", Quantifier$0) }
 
-const Name$0 = $R$0($EXPECT($R14, fail, "Name /[_a-zA-Z][_a-zA-Z0-9]*/"))
+const Name$0 = $R$0($EXPECT($R14, "Name /[_a-zA-Z][_a-zA-Z0-9]*/"))
 function Name(ctx, state) { return $EVENT(ctx, state, "Name", Name$0) }
 
-const Arrow$0 = $S($EXPECT($L10, fail, "Arrow \"->\""), $Q(Space))
+const Arrow$0 = $S($EXPECT($L10, "Arrow \"->\""), $Q(Space))
 function Arrow(ctx, state) { return $EVENT(ctx, state, "Arrow", Arrow$0) }
 
-const Backslash$0 = $EXPECT($L11, fail, "Backslash \"\\\\\\\\\"")
+const Backslash$0 = $EXPECT($L11, "Backslash \"\\\\\\\\\"")
 function Backslash(ctx, state) { return $EVENT(ctx, state, "Backslash", Backslash$0) }
 
-const OpenBrace$0 = $R$0($EXPECT($R15, fail, "OpenBrace /\\{\\s*/"))
+const OpenBrace$0 = $R$0($EXPECT($R15, "OpenBrace /\\{\\s*/"))
 function OpenBrace(ctx, state) { return $EVENT(ctx, state, "OpenBrace", OpenBrace$0) }
 
-const CloseBrace$0 = $R$0($EXPECT($R16, fail, "CloseBrace /\\}[ \\t]*/"))
+const CloseBrace$0 = $R$0($EXPECT($R16, "CloseBrace /\\}[ \\t]*/"))
 function CloseBrace(ctx, state) { return $EVENT(ctx, state, "CloseBrace", CloseBrace$0) }
 
-const OpenBracket$0 = $R$0($EXPECT($R17, fail, "OpenBracket /\\[\\s*/"))
+const OpenBracket$0 = $R$0($EXPECT($R17, "OpenBracket /\\[\\s*/"))
 function OpenBracket(ctx, state) { return $EVENT(ctx, state, "OpenBracket", OpenBracket$0) }
 
-const CloseBracket$0 = $R$0($EXPECT($R18, fail, "CloseBracket /\\][ \\t]*/"))
+const CloseBracket$0 = $R$0($EXPECT($R18, "CloseBracket /\\][ \\t]*/"))
 function CloseBracket(ctx, state) { return $EVENT(ctx, state, "CloseBracket", CloseBracket$0) }
 
-const OpenParenthesis$0 = $R$0($EXPECT($R19, fail, "OpenParenthesis /\\([ \\t]*/"))
+const OpenParenthesis$0 = $R$0($EXPECT($R19, "OpenParenthesis /\\([ \\t]*/"))
 function OpenParenthesis(ctx, state) { return $EVENT(ctx, state, "OpenParenthesis", OpenParenthesis$0) }
 
-const CloseParenthesis$0 = $R$0($EXPECT($R20, fail, "CloseParenthesis /[ \\t]*\\)/"))
+const CloseParenthesis$0 = $R$0($EXPECT($R20, "CloseParenthesis /[ \\t]*\\)/"))
 function CloseParenthesis(ctx, state) { return $EVENT(ctx, state, "CloseParenthesis", CloseParenthesis$0) }
 
-const Indent$0 = $EXPECT($L12, fail, "Indent \"  \"")
+const Indent$0 = $EXPECT($L12, "Indent \"  \"")
 function Indent(ctx, state) { return $EVENT(ctx, state, "Indent", Indent$0) }
 
-const Space$0 = $R$0($EXPECT($R21, fail, "Space /[ \\t]+/"))
+const Space$0 = $R$0($EXPECT($R21, "Space /[ \\t]+/"))
 function Space(ctx, state) { return $EVENT(ctx, state, "Space", Space$0) }
 
-const NonCommentEOS$0 = $R$0($EXPECT($R22, fail, "NonCommentEOS /([ \\t]*(\\n|\\r\\n|\\r|$))+/"))
+const NonCommentEOS$0 = $R$0($EXPECT($R22, "NonCommentEOS /([ \\t]*(\\n|\\r\\n|\\r|$))+/"))
 function NonCommentEOS(ctx, state) { return $EVENT(ctx, state, "NonCommentEOS", NonCommentEOS$0) }
 
-const EOS$0 = $R$0($EXPECT($R23, fail, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
+const EOS$0 = $R$0($EXPECT($R23, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
 function EOS(ctx, state) { return $EVENT(ctx, state, "EOS", EOS$0) }
 
-const TripleBacktick$0 = $EXPECT($L13, fail, "TripleBacktick \"```\"")
+const TripleBacktick$0 = $EXPECT($L13, "TripleBacktick \"```\"")
 function TripleBacktick(ctx, state) { return $EVENT(ctx, state, "TripleBacktick", TripleBacktick$0) }
 
-const TypeAnnotation$0 = $T($S($EXPECT($L14, fail, "TypeAnnotation \"::\""), $TEXT($EXPECT($R24, fail, "TypeAnnotation /(?:(?!->).)*/"))), function(value) {return value[1] });
+const TypeAnnotation$0 = $T($S($EXPECT($L14, "TypeAnnotation \"::\""), $TEXT($EXPECT($R24, "TypeAnnotation /(?:(?!->).)*/"))), function(value) {return value[1] });
 function TypeAnnotation(ctx, state) { return $EVENT(ctx, state, "TypeAnnotation", TypeAnnotation$0) }
 
-const CodeBody$0 = $TEXT($EXPECT($R25, fail, "CodeBody /(?:(?:`(?!``))|[^`])*/"))
+const CodeBody$0 = $TEXT($EXPECT($R25, "CodeBody /(?:(?:`(?!``))|[^`])*/"))
 function CodeBody(ctx, state) { return $EVENT(ctx, state, "CodeBody", CodeBody$0) }
 
 
@@ -440,3 +440,4 @@ return {
 
   exports.default = parser
   exports.parse = parser.parse
+

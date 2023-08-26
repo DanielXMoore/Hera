@@ -17,6 +17,8 @@ export interface ParseState {
 }
 
 export type ParserContext = {
+  expectation: string
+  fail: Fail
   tokenize?: boolean
   enter?(name: string, state: ParseState): {
     /**
@@ -103,7 +105,7 @@ type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
  * detailed error messages.
  */
 interface Fail {
-  (pos: number, expectation: any): void
+  (pos: number, expectation: string): void
 }
 
 /**
@@ -115,15 +117,14 @@ export interface Parser<T> {
 }
 
 /**
- * $EXPECT tracks failed parses at the given position.
+ * $EXPECT sets the friendlier `expectation` name.
  */
-export function $EXPECT<T>(parser: Parser<T>, fail: Fail, expectation: string): Parser<T> {
+export function $EXPECT<T>(parser: Parser<T>, expectation: string): Parser<T> {
   return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (result) return result;
-    const { pos } = state;
-    fail(pos, expectation)
-    return
+    // NOTE: we don't need to use a stack because we're only tracking failures on
+    // string and regex leaf nodes right now.
+    ctx.expectation = expectation
+    return parser(ctx, state);
   }
 }
 
@@ -131,7 +132,6 @@ export function $EXPECT<T>(parser: Parser<T>, fail: Fail, expectation: string): 
  * Match a string literal.
  */
 export function $L<T extends string>(str: T): Parser<T> {
-  //@ts-ignore
   return function (ctx, state) {
     const { input, pos } = state,
       { length } = str,
@@ -147,6 +147,8 @@ export function $L<T extends string>(str: T): Parser<T> {
         value: str
       }
     }
+
+    ctx.fail(pos, ctx.expectation)
     return
   }
 }
@@ -155,7 +157,6 @@ export function $L<T extends string>(str: T): Parser<T> {
  * Match a regular expression (must be sticky).
  */
 export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
-  //@ts-ignore
   return function (ctx, state) {
     const { input, pos } = state
     regExp.lastIndex = state.pos
@@ -175,6 +176,8 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
         value: m,
       }
     }
+
+    ctx.fail(pos, ctx.expectation)
     return
   }
 }

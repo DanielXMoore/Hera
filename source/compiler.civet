@@ -65,12 +65,12 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       when "L"
         {
           args := tuple[1]
-          `$EXPECT(${defineTerminal(args)}, fail, ${JSON.stringify(prettyPrint(name, args))})`
+          `$EXPECT(${defineTerminal(args)}, ${JSON.stringify(prettyPrint(name, args))})`
         }
       when "R"
         {
           args := tuple[1]
-          let f = `$EXPECT(${defineRe(args)}, fail, ${JSON.stringify(prettyPrint(name, args, true))})`
+          let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
           if defaultHandler
             f =`$R$0(${f})${reType(types, args)}`
 
@@ -424,8 +424,8 @@ jsHead := """
   } = require("./machine.js")
 
   const parser = (function() {
-    let ctx = {}
     const { fail, validate, reset } = Validator()
+    let ctx = { expectation: "", fail }
 
 """
 
@@ -488,8 +488,8 @@ tsHead := """
   } from "./machine.ts"
 
   const parser = (function() {
-    let ctx: ParserContext = {}
     const { fail, validate, reset } = Validator()
+    let ctx: ParserContext = { expectation: "", fail }
 
 """
 

@@ -82,7 +82,7 @@ Handling
   EOS ->
     return undefined
   Space* TypeAnnotation? Arrow HandlingExpression ->
-    if ($2) exp.t = $2
+    if ($2) $4.t = $2
     return $4
 
 HandlingExpression
