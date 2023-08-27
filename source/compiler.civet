@@ -2,11 +2,12 @@
 
 import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 
-interface CompileOptions {
+export type CompilerOptions = {
   filename: string
   inlineMap: boolean
   source: string
   types: boolean
+  libPath?: string | undefined
 }
 
 strDefs: string[] := []
@@ -154,7 +155,7 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
     default // number, boolean, undefined
       String(mapping)
 
-compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
+compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
   if typeof arg is "string"
     return arg // reference to other named parser function
 
@@ -225,7 +226,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
 
   return compileOp(arg, name, true, options.types)
 
-compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
+compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
   stateType := types ? ": ParseState" : ""
 
@@ -265,7 +266,7 @@ compileRulesObject := (ruleNames: string[]) ->
     ${meat}
   }`
 
-compileExports := (options: CompileOptions, ruleNames: string[]) ->
+compileExports := (options: CompilerOptions, ruleNames: string[]) ->
   if options.types
     meat := ruleNames.map (name) ->
       `  ${name}`
@@ -296,18 +297,20 @@ getNamedVariable := (op: HeraAST[0]): string | undefined ->
     return op.name
   return undefined
 
-defaultOptions: CompileOptions :=
+defaultOptions: CompilerOptions :=
   filename: "anonymous"
   inlineMap: false
   source: ""
   types: false
+  libPath: "@danielx/hera/lib"
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: HeraRules, options: CompileOptions)
-  options = {...defaultOptions, ...options}
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
+  options := { ...defaultOptions, ...maybeOptions }
 
   { types } := options
+  libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
 
   body := ruleNames.flatMap (name) ->
@@ -326,8 +329,8 @@ export function compile(rules: HeraRules, options: CompileOptions)
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
-  head := types ? tsHead : jsHead
-  tail := types ? tsTail : jsTail
+  head := (types ? tsHead : jsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  tail := (types ? tsTail : jsTail).replace("\"./machine.js\"", JSON.stringify(libPath))
 
   code := generate [
     head

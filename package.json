@@ -85,5 +85,13 @@
     "register.js"
   ],
   "main": "dist/main.js",
-  "types": "dist/main.d.ts"
+  "exports": {
+    ".": "./dist/main.js",
+    "./lib": "./dist/machine.js",
+    "./esbuild-plugin": "./dist/esbuild-plugin.js",
+    "./register": "./register.js",
+    "./*": "./*",
+    "./dist/*": "./dist/*"
+  },
+  "types": "dist/types.d.ts"
 }

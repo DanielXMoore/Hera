@@ -19,11 +19,17 @@ filename .= "<stdin>"
 try
   filename = fs.realpathSync '/dev/stdin'
 
+getOptValue := (opt: string) ->
+  index := process.argv.indexOf opt
+  if index > -1
+    process.argv[index + 1]
+
 process.stdout.write compile ast,
   types:     process.argv.includes '--types'
   inlineMap: process.argv.includes '--inlineMap'
   filename: filename
   source: input
+  libPath: getOptValue('--libPath')
 
 // Write out cli io
 if process.argv.includes '--cli'

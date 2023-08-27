@@ -7,7 +7,7 @@ import type {
 import { createRequire } from "module"
 
 parser from ./parser.js
-{compile as heraCompile} from ./compiler.civet
+{ compile as heraCompile, type CompilerOptions } from ./compiler.civet
 { grammarToEBNF } from ./util.civet
 
 require := createRequire(import.meta.url)
@@ -17,13 +17,6 @@ execMod := (src: string) => {
   Function("require", "module", "exports", src)(require, m, m.exports)
 
   return m.exports
-}
-
-type CompilerOptions = {
-  types?: boolean
-  inlineMap?: boolean
-  source?: string
-  filename?: string
 }
 
 compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string := (rulesOrString, options) =>
