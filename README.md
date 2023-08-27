@@ -116,7 +116,9 @@ and the matching string is available as `$0`.
 
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.
-The most general handler is JavaScript code indented four spaces beneath the choice.
+Optionally, `->` can be preceded by a return type annotation of the form `::type`.
+The most general handler is JavaScript/TypeScript code indented
+beneath the choice, which `return`s the desired value for the matched choice.
 This code can also refer to the default value (strings for terminals,
 arrays for sequences or repetitions) via `$0`,
 or to the `n`th matching item in the topmost sequence via `$n`.
@@ -129,7 +131,7 @@ for `return $n` on a separate line; this also works for simple expressions
 like JavaScript literals.
 JavaScript code can return the special value `$skip` to indicate a failed match.
 
-* **Comment** (`#...`): Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments. Inside handlers, use JavaScript `//` or `/*...*/` comments.
+**Comment** (`#...`): Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments. Inside handlers, use JavaScript `//` or `/*...*/` comments.
 
 Code Blocks
 ---
