@@ -310,6 +310,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   options := { ...defaultOptions, ...maybeOptions }
 
   { types } := options
+  /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
 

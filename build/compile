@@ -25,8 +25,5 @@ else
   echo "Size check passed: ${size} < $MAX_SIZE bytes"
 fi
 
-# Build types
-tsc --project build/tsconfig.json
-
 # build hera esbuild-plugin
 civet < source/esbuild-plugin.civet > esbuild-plugin.js
