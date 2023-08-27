@@ -69,7 +69,7 @@ export SourceMap = (sourceString: string) ->
       names: []
       sourcesContent: [sourceString]
 
-    updateSourceMap: (outputStr: string, inputPos: number) ->
+    updateSourceMap: (outputStr: string, inputPos?: number) ->
       outLines := outputStr.split(EOL)
 
       let srcLine: number,

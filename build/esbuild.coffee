@@ -18,7 +18,7 @@ esbuild.build({
   platform: 'node'
   outfile: 'dist/main.js'
   plugins: [
-    civetPlugin
+    civetPlugin()
     coffeeScriptPlugin
       bare: true
       inlineMap: sourcemap
@@ -36,6 +36,6 @@ esbuild.build({
   platform: 'node'
   outfile: 'dist/hera'
   plugins: [
-    civetPlugin
+    civetPlugin()
   ]
 }).catch -> process.exit 1

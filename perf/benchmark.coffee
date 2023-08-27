@@ -25,7 +25,7 @@ console.log "running benchmark"
 oldHera = require "../source/old_main"
 compiledHera = require "../source/parser"
 
-grammar = fs.readFileSync("source/hera.hera", "utf8")
+grammar = fs.readFileSync("samples/hera_v0_8.hera", "utf8")
 oldHera.parse grammar
 compiledHera.parse grammar
 

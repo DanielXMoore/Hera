@@ -1,12 +1,13 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, StructuralHandling } from ./machine.js
-{ readFileSync } from fs
-{ dirname } from path
-{ fileURLToPath } from url
+import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 
-interface CompileOptions {
+export type CompilerOptions = {
+  filename: string
+  inlineMap: boolean
+  source: string
   types: boolean
+  libPath?: string | undefined
 }
 
 strDefs: string[] := []
@@ -55,7 +56,7 @@ prettyPrint := (name: string, terminal: string, re?: boolean) ->
   return `${name} ${pv}`
 
 /**
-Compile an operator to a JS or TS string.
+* Compile an operator to a JS or TS string.
 */
 compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: boolean): string ->
   // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
@@ -64,12 +65,12 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: bool
       when "L"
         {
           args := tuple[1]
-          `$EXPECT(${defineTerminal(args)}, fail, ${JSON.stringify(prettyPrint(name, args))})`
+          `$EXPECT(${defineTerminal(args)}, ${JSON.stringify(prettyPrint(name, args))})`
         }
       when "R"
         {
           args := tuple[1]
-          let f = `$EXPECT(${defineRe(args)}, fail, ${JSON.stringify(prettyPrint(name, args, true))})`
+          let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
           if defaultHandler
             f =`$R$0(${f})${reType(types, args)}`
 
@@ -154,7 +155,7 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
     default // number, boolean, undefined
       String(mapping)
 
-compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
+compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
   if typeof arg is "string"
     return arg // reference to other named parser function
 
@@ -167,6 +168,9 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         $loc: h.$loc
         token: h.f
 
+      /* c8 ignore next */
+      handlerType := options.types && h.t ? `: ${h.t}` : ""
+
       if arg[0] is "S"
         // Gather names from each element in arg[1]
         // Only handle top level names for now
@@ -178,7 +182,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
         return [
-          `$TS(${parser}, function(${parameters.join(", ")}) {\n`
+          `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
           handler
@@ -188,7 +192,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
         return [
-          `$TR(${parser}, function(${regExpHandlerParams.join(", ")}) {\n`
+          `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
           handler
           `\n});`
         ]
@@ -196,7 +200,7 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
         namedParameters := getParameterDeclaration(arg, 0)
 
         return [
-          `$TV(${parser}, function(${regularHandlerParams.join(", ")}) {\n`
+          `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
           handler
@@ -222,34 +226,19 @@ compileHandler := (options: CompileOptions, arg: HeraAST, name: string) ->
 
   return compileOp(arg, name, true, options.types)
 
-compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
-  stateType := options.types ? ": ParseState" : ""
+compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
+  { types } := options
+  stateType := types ? ": ParseState" : ""
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
+    body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
+
     [
-      `const ${name}$0 = `, compileHandler(options, rule, name), "\n",
-      ```
-      function ${name}(state${stateType}) {
-        let eventData;
-        if (state.events) {
-          const result = state.events.enter?.(${JSON.stringify(name)}, state);
-          if (result) {
-            if ('cache' in result) return result.cache;
-            eventData = result.data;
-          }
-        }
-        if (state.tokenize) {
-          const result = $TOKEN(${JSON.stringify(name)}, state, ${name}$0(state));
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-          return result;
-        } else {
-          const result = ${name}$0(state);
-          if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-          return result;
-        }
-      }
-      ```
+      `const ${name}$0 = `,
+      // NOTE: This can return an array so we can't just jam it into the template string
+      compileHandler(options, rule, name), "\n",
+      `function ${name}(ctx, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
@@ -257,32 +246,15 @@ compileRule := (options: CompileOptions, name: string, rule: HeraAST) ->
       [`const ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
-      `${name}$${i}(state)`
-    .join(" || ")
+      `${name}$${i}`
+
+    choicesDec := `const ${name}$$ = [${choices.join(",")}]\n`
+    body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
 
     [
       ...fns
-      ```
-        function ${name}(state${stateType}) {
-          let eventData;
-          if (state.events) {
-            const result = state.events.enter?.(${JSON.stringify(name)}, state);
-            if (result) {
-              if ('cache' in result) return result.cache;
-              eventData = result.data;
-            }
-          }
-          if (state.tokenize) {
-            const result = $TOKEN(${JSON.stringify(name)}, state, ${choices});
-            if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-            return result;
-          } else {
-            const result = ${choices};
-            if (state.events) state.events.exit?.(${JSON.stringify(name)}, state, result, eventData);
-            return result;
-          }
-        }
-      ```
+      choicesDec
+      `function ${name}(ctx, state${stateType}) { return ${body} }`
     ]
 
 compileRulesObject := (ruleNames: string[]) ->
@@ -293,6 +265,18 @@ compileRulesObject := (ruleNames: string[]) ->
   return `{
     ${meat}
   }`
+
+compileExports := (options: CompilerOptions, ruleNames: string[]) ->
+  if options.types
+    meat := ruleNames.map (name) ->
+      `  ${name}`
+    .join(",\n")
+
+    return `export {\n${meat}\n}`
+  else
+    ruleNames.map (name) ->
+      `exports.${name} = ${name};`
+    .join("\n")
 
 /**
 Get a JS declaration string for nodes that have named parameters.
@@ -313,32 +297,25 @@ getNamedVariable := (op: HeraAST[0]): string | undefined ->
     return op.name
   return undefined
 
-defaultOptions :=
-  types: false
+defaultOptions: CompilerOptions :=
+  filename: "anonymous"
   inlineMap: false
   source: ""
-  filename: "anonymous"
+  types: false
+  libPath: "@danielx/hera/lib"
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: {[k: string]: HeraAST}, options)
-  options = {...defaultOptions, ...options}
-
-  // NOTE: This is only for building the Hera parser. `compile` won't magically work for other language parsers built.
-  // TODO: Esbuild doesn't handle this correctly so the machine.* files need to be copied when bundling
-  /* c8 ignore next */
-  const dir = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
-
-  tsMachine := readFileSync(dir + "/machine.ts", "utf8")
-  jsMachine := readFileSync(dir + "/machine.js", "utf8")
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
+  options := { ...defaultOptions, ...maybeOptions }
 
   { types } := options
+  /* c8 ignore next */
+  libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
 
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
-
-  header := types ? tsMachine : jsMachine
 
   strDefSource := strDefs.map (str, i) ->
     `const $L${i} = $L("${str}");\n`
@@ -346,29 +323,31 @@ export function compile(rules: {[k: string]: HeraAST}, options)
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
 
-  genOpts :=
-    updateSourceMap: (outputStr: string, inputPos: number) ->
+  genOpts: GenerateOptions := {}
 
   let sm: ReturnType<typeof SourceMap> | undefined
   if options.inlineMap
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
+  head := (types ? tsHead : jsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  tail := (types ? tsTail : jsTail).replace("\"./machine.js\"", JSON.stringify(libPath))
+
   code := generate [
-    header
-    `\n\nconst { parse } = parserState(${compileRulesObject(ruleNames)});\n`
+    head
+    `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
     strDefSource
     "\n\n"
     reDefSource
     "\n\n"
     body
     "\n\n"
-    ```
-      exports.parse = parse
-      exports.default = { parse }
-
-    ```
-    rules[Symbol.for('code')]
+    tail
+    "\n\n"
+    compileExports(options, ruleNames)
+    "\n\n"
+    //@ts-ignore
+    rules[Symbol.for("code")]
   ], genOpts
 
   if options.inlineMap
@@ -402,7 +381,13 @@ reType := (types: boolean, str: string) ->
   else
     ""
 
-generate := (node, options): string ->
+type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string } | { children: ASTNode[] } | undefined
+type GenerateOptions = {
+  updateSourceMap?: (outputStr: string, inputPos?: number) => void
+}
+generate := (node: ASTNode, options: GenerateOptions): string ->
+  if !node return ""
+
   if typeof node is "string"
     // increment output line/column
     options.updateSourceMap? node
@@ -415,9 +400,139 @@ generate := (node, options): string ->
     .join('')
 
   if typeof node is "object"
-    if node.$loc?
+    if "$loc" in node
       {token, $loc} := node
       options.updateSourceMap?(token, $loc.pos)
       return token
-
+    /* c8 ignore next */
     return generate node.children, options
+  /* c8 ignore next */
+  throw new Error "unknown node type"
+
+jsHead := """
+  const {
+    $C,
+    $E,
+    $EVENT,
+    $EVENT_C,
+    $EXPECT,
+    $L,
+    $N,
+    $P,
+    $Q,
+    $R,
+    $R$0,
+    $S,
+    $T,
+    $TEXT,
+    $TR,
+    $TS,
+    $TV,
+    $Y,
+    HeraGrammar,
+    Parser,
+    ParseState,
+    ParserContext,
+    ParserOptions,
+    Validator
+  } = require("./machine.js")
+
+"""
+
+jsTail := """
+  const parser = (function() {
+    const { fail, validate, reset } = Validator()
+    let ctx = { expectation: "", fail }
+
+    return {
+      parse: (input, options = {}) => {
+        if (typeof input !== "string") throw new Error("Input must be a string")
+
+        const parser = (options.startRule != null)
+          ? grammar[options.startRule]
+          : Object.values(grammar)[0]
+
+        if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
+
+        const filename = options.filename || "<anonymous>";
+
+        reset()
+        Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+
+        return validate(input, parser(ctx, {
+          input,
+          pos: 0,
+        }), {
+          filename: filename
+        })
+      }
+    }
+  }())
+
+  exports.default = parser
+  exports.parse = parser.parse
+"""
+
+tsHead := """
+  import {
+    $C,
+    $E,
+    $EVENT,
+    $EVENT_C,
+    $EXPECT,
+    $L,
+    $N,
+    $P,
+    $Q,
+    $R,
+    $R$0,
+    $S,
+    $T,
+    $TEXT,
+    $TR,
+    $TS,
+    $TV,
+    $Y,
+    HeraGrammar,
+    Parser,
+    ParseState,
+    ParserContext,
+    ParserOptions,
+    Validator
+  } from "./machine.ts"
+
+"""
+
+tsTail := """
+  const parser = (function() {
+    const { fail, validate, reset } = Validator()
+    let ctx: ParserContext = { expectation: "", fail }
+
+    return {
+      parse: (input: string, options: ParserOptions<typeof grammar> = {}) => {
+        if (typeof input !== "string") throw new Error("Input must be a string")
+
+        const parser = (options.startRule != null)
+          ? grammar[options.startRule]
+          : Object.values(grammar)[0]
+
+        if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
+
+        const filename = options.filename || "<anonymous>";
+
+        reset()
+        Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+
+        return validate(input, parser(ctx, {
+          input,
+          pos: 0,
+        }), {
+          filename: filename
+        })
+      }
+    }
+  }())
+
+  export default parser
+  export const { parse } = parser
+"""

@@ -92,7 +92,6 @@ describe "Hera", ->
 
   it "should recursively generate itself", ->
     heraSrc = readFile('source/hera.hera')
-    debugger
     {parse} = generate heraSrc
 
     assert.deepEqual parse(heraSrc), parse(heraSrc)
@@ -658,7 +657,6 @@ describe "Hera", ->
         aaa
       """
     , (thrown) ->
-      debugger
       assert.equal thrown.line, 4
       assert.equal thrown.column, 1
       assert.equal thrown.offset, 15
@@ -775,16 +773,12 @@ describe "Hera", ->
 
       assert.deepEqual eventLog, [
         ["Rule", {
-          events,
           input: "a",
           pos: 0,
-          tokenize: false
         }]
         ["Rule", {
-          events,
           input: "a",
           pos: 0,
-          tokenize: false
         }, {
           loc:
             length: 1

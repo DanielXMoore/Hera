@@ -1,4 +1,8 @@
 /**
+ * This is the common parser machinery.
+ */
+
+/**
  * Location information within a string. A position and a length. Can be
  * converted into line numbers when reporting errors.
  */
@@ -14,11 +18,24 @@ export interface Loc {
 export interface ParseState {
   input: string
   pos: number
-  tokenize: boolean
-  events?: {
-    enter(name: string): void
-    exit(name: string, result: any): void
+}
+
+export type ParserContext = {
+  expectation: string
+  fail: Fail
+  tokenize?: boolean
+  enter?(name: string, state: ParseState): {
+    /**
+     * If a key named `cache` is present then its value is returned immediately
+     * and the rule is not processed further.
+     */
+    cache?: unknown
+    /**
+     * Optional data to be passed to the exit handler.
+     */
+    data?: unknown
   } | undefined
+  exit?(name: string, state: ParseState, result: any, data?: unknown): void
 }
 
 /**
@@ -43,34 +60,6 @@ export type MaybeResult<T> = ParseResult<T> | undefined
  */
 export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
 
-export type Terminal = string | RegExp
-
-export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-export type StructuralTerminal =
-  boolean |
-  null |
-  number |
-  string |
-  undefined |
-  { v: PositionalVariable } |
-  { o: { [key: string]: StructuralHandling } } |
-  { l: any }
-export type StructuralHandling = StructuralTerminal | StructuralHandling[]
-export type Handler = { f: string } | StructuralHandling
-export type TerminalOp = "L" | "R"
-export type SequenceOp = "S" | "/"
-export type PrefixOp = "&" | "!" | "$"
-export type SuffixOp = "+" | "*" | "?"
-export type Literal = [TerminalOp, string]
-export type TerminalNode = [TerminalOp, string, Handler?]
-export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
-export type PrefixNode = [PrefixOp, HeraAST, Handler?]
-export type SuffixNode = [SuffixOp, HeraAST, Handler?]
-export type NameNode = [{ name: string }, HeraAST, Handler?]
-export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
-
-export type HeraRules = { [key: string]: HeraAST }
-
 export type Token = {
   type: string
   children: (Token | string)[]
@@ -86,7 +75,7 @@ type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
  * detailed error messages.
  */
 interface Fail {
-  (pos: number, expectation: any): void
+  (pos: number, expectation: string): void
 }
 
 /**
@@ -94,16 +83,19 @@ interface Fail {
  * a result if it matches.
  */
 export interface Parser<T> {
-  (state: ParseState): MaybeResult<T>
+  (ctx: ParserContext, state: ParseState): MaybeResult<T>
 }
 
-export function $EXPECT<T>(parser: Parser<T>, fail: Fail, expectation: string): Parser<T> {
-  return function (state: ParseState) {
-    const result = parser(state);
-    if (result) return result;
-    const { pos } = state;
-    fail(pos, expectation)
-    return
+/**
+ * $EXPECT sets the friendlier `expectation` name.
+ */
+export function $EXPECT<T>(parser: Parser<T>, expectation: string): Parser<T> {
+  return function (ctx, state) {
+    // NOTE: we don't need to use a stack because we're only tracking failures on
+    // string and regex leaf nodes right now.
+    const result = parser(ctx, state);
+    if (!result) ctx.fail(state.pos, expectation)
+    return result
   }
 }
 
@@ -111,20 +103,22 @@ export function $EXPECT<T>(parser: Parser<T>, fail: Fail, expectation: string): 
  * Match a string literal.
  */
 export function $L<T extends string>(str: T): Parser<T> {
-  return function (state: ParseState) {
-    const { input, pos } = state;
-    const { length } = str;
+  return function (_ctx, state) {
+    const { input, pos } = state,
+      { length } = str,
+      end = pos + length;
 
-    if (input.substr(pos, length) === str) {
+    if (input.substring(pos, end) === str) {
       return {
         loc: {
           pos: pos,
           length: length
         },
-        pos: pos + length,
+        pos: end,
         value: str
       }
     }
+
     return
   }
 }
@@ -133,7 +127,7 @@ export function $L<T extends string>(str: T): Parser<T> {
  * Match a regular expression (must be sticky).
  */
 export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
-  return function (state: ParseState) {
+  return function (_ctx, state) {
     const { input, pos } = state
     regExp.lastIndex = state.pos
 
@@ -152,17 +146,19 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
         value: m,
       }
     }
+
     return
   }
 }
 
-/** Choice
+/**
+ * Choice
  * A / B / C / ...
  * Proioritized choice
  * roughly a(...) || b(...) in JS
  */
 
-export function $C(): (state: ParseState) => undefined
+export function $C(): (ctx: ParserContext, state: ParseState) => undefined
 export function $C<A>(a: Parser<A>): Parser<A>
 export function $C<A, B>(a: Parser<A>, b: Parser<B>): Parser<A | B>
 export function $C<A, B, C>(a: Parser<A>, b: Parser<B>, c: Parser<C>): Parser<A | B | C>
@@ -174,12 +170,12 @@ export function $C<A, B, C, D, E, F, H, I>(a: Parser<A>, b: Parser<B>, c: Parser
 export function $C<A, B, C, D, E, F, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<A | B | C | D | E | F | H | I | J>
 
 export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
-  return (state: ParseState): MaybeResult<T[number]> => {
+  return (ctx, state): MaybeResult<T[number]> => {
     let i = 0
     const l = terms.length
 
     while (i < l) {
-      const r = terms[i++](state);
+      const r = terms[i++](ctx, state);
       if (r) return r
     }
 
@@ -187,7 +183,8 @@ export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
   }
 }
 
-/** Sequence
+/**
+ * Sequence
  * A B C ...
  * A followed by by B followed by C followed by ...
  */
@@ -205,15 +202,15 @@ export function $S<A, B, C, D, E, F, G, H, I>(a: Parser<A>, b: Parser<B>, c: Par
 export function $S<A, B, C, D, E, F, G, H, I, J>(a: Parser<A>, b: Parser<B>, c: Parser<C>, d: Parser<D>, e: Parser<E>, f: Parser<F>, g: Parser<G>, h: Parser<H>, i: Parser<I>, j: Parser<J>): Parser<[A, B, C, D, E, F, G, H, I, J]>
 
 export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
-  return (state: ParseState): MaybeResult<T> => {
-    let { input, pos, tokenize, events } = state,
+  return (ctx, state): MaybeResult<T> => {
+    let { input, pos } = state,
       i = 0, value
     const results = [] as unknown as T,
       s = pos,
       l = terms.length
 
     while (i < l) {
-      const r = terms[i++]({ input, pos, tokenize, events })
+      const r = terms[i++](ctx, { input, pos })
 
       if (r) {
         ({ pos, value } = r)
@@ -235,8 +232,8 @@ export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }):
 
 // a? zero or one
 export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
-  return (state: ParseState) => {
-    const r = fn(state)
+  return (ctx, state: ParseState) => {
+    const r = fn(ctx, state)
     if (r) return r
 
     const { pos } = state
@@ -251,17 +248,18 @@ export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
   }
 }
 
-// *
-// NOTE: zero length repetitions (where position doesn't advance) return
-// an empty array of values. A repetition where the position doesn't advance
-// would be an infinite loop, so this avoids that problem cleanly.
-
-// Since this always returns a result `&x*` will always succeed and `!x*` will
-// always fail. Same goes for `&x?` and `!x?`. Relatedly `&x+ == &x` and
-// `!x+ == !x`.
+/**
+ * `*`
+ * NOTE: zero length repetitions (where position doesn't advance) return
+ * an empty array of values. A repetition where the position doesn't advance
+ * would be an infinite loop, so this avoids that problem cleanly.
+ * Since this always returns a result `&x*` will always succeed and `!x*` will
+ * always fail. Same goes for `&x?` and `!x?`. Relatedly `&x+ == &x` and
+ * `!x+ == !x`.
+ */
 export function $Q<T>(fn: Parser<T>): Parser<T[]> {
-  return (state) => {
-    let { input, pos, tokenize, events } = state
+  return (ctx, state) => {
+    let { input, pos } = state
     let value: T
 
     const s = pos
@@ -269,8 +267,8 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
 
     while (true) {
       const prevPos = pos
-      const r = fn({ input, pos, tokenize, events })
-      if (r == undefined) break
+      const r = fn(ctx, { input, pos })
+      if (!r) break
 
       ({ pos, value } = r)
       if (pos === prevPos)
@@ -290,13 +288,15 @@ export function $Q<T>(fn: Parser<T>): Parser<T[]> {
   }
 }
 
-// + one or more
+/**
+ * `+` one or more
+ */
 export function $P<T>(fn: Parser<T>): Parser<T[]> {
-  return (state: ParseState) => {
-    const { input, pos: s, tokenize, events } = state
+  return (ctx, state) => {
+    const { input, pos: s } = state
     let value: T
 
-    const first = fn(state)
+    const first = fn(ctx, state)
     if (!first) return
 
     let { pos } = first
@@ -305,7 +305,7 @@ export function $P<T>(fn: Parser<T>): Parser<T[]> {
     while (true) {
       const prevPos = pos
 
-      const r = fn({ input, pos, tokenize, events })
+      const r = fn(ctx, { input, pos })
       if (!r) break
 
       ({ pos, value } = r)
@@ -326,11 +326,13 @@ export function $P<T>(fn: Parser<T>): Parser<T[]> {
   }
 }
 
-// $ prefix operator, convert result value to a string spanning the
-// matched input
+/**
+ * $ prefix operator, convert result value to a string spanning the
+ * matched input
+ */
 export function $TEXT(fn: Parser<unknown>): Parser<string> {
-  return (state: ParseState) => {
-    const newState = fn(state)
+  return (ctx, state) => {
+    const newState = fn(ctx, state)
     if (!newState) return
 
     newState.value = state.input.substring(state.pos, newState.pos)
@@ -338,24 +340,10 @@ export function $TEXT(fn: Parser<unknown>): Parser<string> {
   }
 }
 
-export function $TOKEN(name: string, state: ParseState, newState: MaybeResult<unknown>): MaybeResult<Token> {
-  if (!newState) return
-
-  newState.value = {
-    type: name,
-    //@ts-ignore
-    children: [].concat(newState.value),
-    token: state.input.substring(state.pos, newState.pos),
-    loc: newState.loc
-  }
-
-  return newState as ParseResult<Token>
-}
-
 // ! prefix operator
 export function $N(fn: Parser<unknown>): Parser<undefined> {
-  return (state: ParseState) => {
-    const newState = fn(state)
+  return (ctx, state) => {
+    const newState = fn(ctx, state)
 
     if (newState)
       return
@@ -374,8 +362,8 @@ export function $N(fn: Parser<unknown>): Parser<undefined> {
 
 // & prefix operator
 export function $Y(fn: Parser<unknown>): Parser<undefined> {
-  return (state: ParseState) => {
-    const newState = fn(state)
+  return (ctx, state) => {
+    const newState = fn(ctx, state)
 
     if (!newState) return
 
@@ -393,11 +381,11 @@ export function $Y(fn: Parser<unknown>): Parser<undefined> {
 // Transform
 // simplest value mapping transform, doesn't include location data parameter
 export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
-  return function (state) {
-    const result = parser(state);
+  return function (ctx, state) {
+    const result = parser(ctx, state);
     if (!result) return
-    // NOTE: This is a lie, tokenize returns an unmodified result
-    if (state.tokenize) return result as unknown as ParseResult<B>
+    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
+    if (ctx.tokenize) return result as unknown as ParseResult<B>
 
     const { value } = result
     const mappedValue = fn(value)
@@ -413,11 +401,12 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
 // Result handler for regexp match expressions
 // $0 is the whole match, followed by $1, $2, etc.
 export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP, $loc: Loc, ...args: string[]) => T): Parser<T> {
-  return function (state) {
-    const result = parser(state);
+  return function (ctx, state) {
+    const result = parser(ctx, state);
     if (!result) return
-    // NOTE: This is a lie, tokenize returns an unmodified result
-    if (state.tokenize) return result as unknown as ParseResult<T>
+
+    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
+    if (ctx.tokenize) return result as unknown as ParseResult<T>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, ...value)
@@ -435,11 +424,12 @@ export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP
 
 // Transform sequence
 export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
-  return function (state) {
-    const result = parser(state);
+  return function (ctx, state) {
+    const result = parser(ctx, state);
     if (!result) return
-    // NOTE: This is a lie, tokenize returns an unmodified result
-    if (state.tokenize) return result as unknown as ParseResult<B>
+
+    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
+    if (ctx.tokenize) return result as unknown as ParseResult<B>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, ...value)
@@ -457,11 +447,12 @@ export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SK
 
 // Transform value $0 and $1 are both singular value
 export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, $0: A, $1: A) => B): Parser<B> {
-  return function (state) {
-    const result = parser(state);
+  return function (ctx, state) {
+    const result = parser(ctx, state);
     if (!result) return
-    // NOTE: This is a lie, tokenize returns an unmodified result
-    if (state.tokenize) return result as unknown as ParseResult<B>
+
+    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
+    if (ctx.tokenize) return result as unknown as ParseResult<B>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, value)
@@ -479,8 +470,8 @@ export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc,
 
 // Default regexp result handler RegExpMatchArray => $0
 export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
-  return function (state) {
-    const result = parser(state);
+  return function (ctx, state) {
+    const result = parser(ctx, state);
     if (!result) return
 
     const value = result.value[0]
@@ -490,59 +481,107 @@ export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
   }
 }
 
+/**
+ * Handles triggering enter/exit events and early reslut returning from results cache for a
+ * single rule.
+ */
+export function $EVENT<T>(ctx: ParserContext, state: ParseState, name: string, fn: Parser<T>) {
+  let eventData, enter, exit;
+  if (enter = ctx.enter) {
+    const result = enter(name, state);
+    if (result) {
+      if ('cache' in result)
+        return result.cache as ReturnType<typeof fn>
+      eventData = result.data;
+    }
+  }
+  let result = fn(ctx, state);
+  if (result && ctx.tokenize) {
+    // When tokenizing we ignore the existing types
+    //@ts-ignore
+    result = $TOKEN(name, state, result)
+  }
+  if (exit = ctx.exit) exit(name, state, result, eventData);
+  return result;
+}
+
+type ParserReturnTypes<T extends Parser<any>[]> =
+  T[number] extends Parser<infer P> ? MaybeResult<P> : never
+
+/**
+ * Handles triggering enter/exit events and early reslut returning from results cache for an
+ * array of rules where the first match is returned (Choice).
+ */
+export function $EVENT_C<T extends Parser<any>[]>(ctx: ParserContext, state: ParseState, name: string, fns: T): ParserReturnTypes<T> {
+  let eventData, enter, exit;
+  if (enter = ctx.enter) {
+    const result = enter(name, state);
+    if (result) {
+      if ('cache' in result)
+        return result.cache as ParserReturnTypes<T>
+      eventData = result.data;
+    }
+  }
+  let result, i = 0, l = fns.length;
+  while (!result && i < l) {
+    if (result = fns[i](ctx, state)) break;
+    i++;
+  }
+
+  if (result && ctx.tokenize) {
+    result = $TOKEN(name, state, result)
+  }
+
+  if (exit = ctx.exit) exit(name, state, result, eventData);
+  return result as ParserReturnTypes<T>;
+}
+
+/**
+ * Replace the result value with a token object.
+ */
+function $TOKEN(name: string, state: ParseState, newState: MaybeResult<Token | string>): MaybeResult<Token> {
+  if (!newState) return
+
+  newState.value = {
+    type: name,
+    children: [newState.value].flat(),
+    token: state.input.substring(state.pos, newState.pos),
+    loc: newState.loc
+  }
+
+  return newState as ParseResult<Token>
+}
+
 const SKIP = {}
 
 // End of machinery
 // Parser specific things below
 
-const failHintRegex = /\S+|\s+|$/y
+export function Validator() {
+  const failHintRegex = /\S+|\s+|$/y
 
-// Error tracking
-// Goal is zero allocations
-const failExpected = Array(16)
-let failIndex = 0
-let maxFailPos = 0
+  // Error tracking
+  // Goal is zero allocations
+  const failExpected = Array(16)
+  let failIndex = 0
+  let maxFailPos = 0
 
-//@ts-ignore
-function fail(pos: number, expected: any) {
-  if (pos < maxFailPos) return
+  function fail(pos: number, expected: unknown) {
+    if (pos < maxFailPos) return
 
-  if (pos > maxFailPos) {
-    maxFailPos = pos
-    failExpected.length = failIndex = 0
+    if (pos > maxFailPos) {
+      maxFailPos = pos
+      failExpected.length = failIndex = 0
+    }
+
+    failExpected[failIndex++] = expected
+
+    return
   }
 
-  failExpected[failIndex++] = expected
-
-  return
-}
-
-export type HeraGrammar = { [key: string]: Parser<any> }
-
-export interface ParserOptions<T extends HeraGrammar> {
-  /** The name of the file being parsed */
-  filename?: string
-  startRule?: keyof T
-  tokenize?: boolean
-  events?: ParseState["events"]
-}
-
-class ParseError extends Error {
-  constructor(
-    public message: string,
-    public name: string,
-    public filename: string,
-    public line: number,
-    public column: number,
-    public offset: number,
-  ) {
-    super(message)
-  }
-}
-
-export function parserState<G extends HeraGrammar>(grammar: G) {
-
-  /** Utility function to convert position in a string input to 1 based line:colum */
+  /**
+  * Utility function to convert position in a string input to 1 based line:colum
+  */
   function location(input: string, pos: number): [number, number] {
     const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
       const l = line.length + 1
@@ -607,30 +646,28 @@ ${input.slice(result.pos)}
     throw new Error("No result")
   }
 
+  function reset() {
+    failIndex = 0
+    maxFailPos = 0
+    failExpected.length = 0
+  }
+
   return {
-    parse: (input: string, options: ParserOptions<G> = {}) => {
-      if (typeof input !== "string") throw new Error("Input must be a string")
+    fail,
+    validate,
+    reset,
+  }
+}
 
-      const parser = (options.startRule != null)
-        ? grammar[options.startRule]
-        : Object.values(grammar)[0]
-
-      if (!parser) throw new Error("Could not find rule with name '#{opts.startRule}'")
-
-      const filename = options.filename || "<anonymous>";
-
-      failIndex = 0
-      maxFailPos = 0
-      failExpected.length = 0
-
-      return validate(input, parser({
-        input,
-        pos: 0,
-        tokenize: options.tokenize || false,
-        events: options.events,
-      }), {
-        filename: filename
-      })
-    }
+class ParseError extends Error {
+  constructor(
+    public message: string,
+    public name: string,
+    public filename: string,
+    public line: number,
+    public column: number,
+    public offset: number,
+  ) {
+    super(message)
   }
 }

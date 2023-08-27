@@ -271,11 +271,19 @@
             "*",
             "Space"
           ],
+          [
+            "?",
+            "TypeAnnotation"
+          ],
           "Arrow",
           "HandlingExpression"
         ],
         {
-          "v": 3
+          "f": "if ($2) $4.t = $2\nreturn $4",
+          "$loc": {
+            "pos": 1471,
+            "length": 37
+          }
         }
       ]
     ]
@@ -315,7 +323,7 @@
     {
       "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
       "$loc": {
-        "pos": 1601,
+        "pos": 1650,
         "length": 64
       }
     }
@@ -354,7 +362,7 @@
         {
           "f": "return JSON.parse(`\"${$1}\"`)",
           "$loc": {
-            "pos": 1774,
+            "pos": 1823,
             "length": 33
           }
         }
@@ -419,7 +427,7 @@
     {
       "f": "return {\n  o: Object.fromEntries($2)\n}",
       "$loc": {
-        "pos": 2047,
+        "pos": 2096,
         "length": 52
       }
     }
@@ -489,7 +497,7 @@
         {
           "f": "return parseInt($1, 10)",
           "$loc": {
-            "pos": 2258,
+            "pos": 2307,
             "length": 28
           }
         }
@@ -521,7 +529,7 @@
         {
           "f": "return null",
           "$loc": {
-            "pos": 2366,
+            "pos": 2415,
             "length": 16
           }
         }
@@ -532,7 +540,7 @@
         {
           "f": "return {l: undefined}",
           "$loc": {
-            "pos": 2399,
+            "pos": 2448,
             "length": 27
           }
         }
@@ -548,7 +556,7 @@
         {
           "f": "return parseInt($0, 16)",
           "$loc": {
-            "pos": 2459,
+            "pos": 2508,
             "length": 28
           }
         }
@@ -559,7 +567,7 @@
         {
           "f": "return parseFloat($0)",
           "$loc": {
-            "pos": 2511,
+            "pos": 2560,
             "length": 27
           }
         }
@@ -792,6 +800,25 @@
   "TripleBacktick": [
     "L",
     "```"
+  ],
+  "TypeAnnotation": [
+    "S",
+    [
+      [
+        "L",
+        "::"
+      ],
+      [
+        "$",
+        [
+          "R",
+          "(?:(?!->).)*"
+        ]
+      ]
+    ],
+    {
+      "v": 2
+    }
   ],
   "CodeBody": [
     "$",

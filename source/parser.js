@@ -1,453 +1,32 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.parserState = exports.$R$0 = exports.$TV = exports.$TS = exports.$TR = exports.$T = exports.$Y = exports.$N = exports.$TOKEN = exports.$TEXT = exports.$P = exports.$Q = exports.$E = exports.$S = exports.$C = exports.$R = exports.$L = exports.$EXPECT = void 0;
-function $EXPECT(parser, fail, expectation) {
-    return function (state) {
-        const result = parser(state);
-        if (result)
-            return result;
-        const { pos } = state;
-        fail(pos, expectation);
-        return;
-    };
-}
-exports.$EXPECT = $EXPECT;
-/**
- * Match a string literal.
- */
-function $L(str) {
-    return function (state) {
-        const { input, pos } = state;
-        const { length } = str;
-        if (input.substr(pos, length) === str) {
-            return {
-                loc: {
-                    pos: pos,
-                    length: length
-                },
-                pos: pos + length,
-                value: str
-            };
-        }
-        return;
-    };
-}
-exports.$L = $L;
-/**
- * Match a regular expression (must be sticky).
- */
-function $R(regExp) {
-    return function (state) {
-        const { input, pos } = state;
-        regExp.lastIndex = state.pos;
-        let l, m, v;
-        if (m = input.match(regExp)) {
-            v = m[0];
-            l = v.length;
-            return {
-                loc: {
-                    pos: pos,
-                    length: l,
-                },
-                pos: pos + l,
-                value: m,
-            };
-        }
-        return;
-    };
-}
-exports.$R = $R;
-function $C(...terms) {
-    return (state) => {
-        let i = 0;
-        const l = terms.length;
-        while (i < l) {
-            const r = terms[i++](state);
-            if (r)
-                return r;
-        }
-        return;
-    };
-}
-exports.$C = $C;
-function $S(...terms) {
-    return (state) => {
-        let { input, pos, tokenize, events } = state, i = 0, value;
-        const results = [], s = pos, l = terms.length;
-        while (i < l) {
-            const r = terms[i++]({ input, pos, tokenize, events });
-            if (r) {
-                ({ pos, value } = r);
-                results.push(value);
-            }
-            else
-                return;
-        }
-        return {
-            loc: {
-                pos: s,
-                length: pos - s,
-            },
-            pos: pos,
-            value: results,
-        };
-    };
-}
-exports.$S = $S;
-// a? zero or one
-function $E(fn) {
-    return (state) => {
-        const r = fn(state);
-        if (r)
-            return r;
-        const { pos } = state;
-        return {
-            loc: {
-                pos: pos,
-                length: 0
-            },
-            pos: pos,
-            value: undefined
-        };
-    };
-}
-exports.$E = $E;
-// *
-// NOTE: zero length repetitions (where position doesn't advance) return
-// an empty array of values. A repetition where the position doesn't advance
-// would be an infinite loop, so this avoids that problem cleanly.
-// Since this always returns a result `&x*` will always succeed and `!x*` will
-// always fail. Same goes for `&x?` and `!x?`. Relatedly `&x+ == &x` and
-// `!x+ == !x`.
-function $Q(fn) {
-    return (state) => {
-        let { input, pos, tokenize, events } = state;
-        let value;
-        const s = pos;
-        const results = [];
-        while (true) {
-            const prevPos = pos;
-            const r = fn({ input, pos, tokenize, events });
-            if (r == undefined)
-                break;
-            ({ pos, value } = r);
-            if (pos === prevPos)
-                break;
-            else
-                results.push(value);
-        }
-        return {
-            loc: {
-                pos: s,
-                length: pos - s,
-            },
-            pos: pos,
-            value: results
-        };
-    };
-}
-exports.$Q = $Q;
-// + one or more
-function $P(fn) {
-    return (state) => {
-        const { input, pos: s, tokenize, events } = state;
-        let value;
-        const first = fn(state);
-        if (!first)
-            return;
-        let { pos } = first;
-        const results = [first.value];
-        while (true) {
-            const prevPos = pos;
-            const r = fn({ input, pos, tokenize, events });
-            if (!r)
-                break;
-            ({ pos, value } = r);
-            if (pos === prevPos)
-                break;
-            results.push(value);
-        }
-        return {
-            loc: {
-                pos: s,
-                length: pos - s,
-            },
-            value: results,
-            pos: pos
-        };
-    };
-}
-exports.$P = $P;
-// $ prefix operator, convert result value to a string spanning the
-// matched input
-function $TEXT(fn) {
-    return (state) => {
-        const newState = fn(state);
-        if (!newState)
-            return;
-        newState.value = state.input.substring(state.pos, newState.pos);
-        return newState;
-    };
-}
-exports.$TEXT = $TEXT;
-function $TOKEN(name, state, newState) {
-    if (!newState)
-        return;
-    newState.value = {
-        type: name,
-        //@ts-ignore
-        children: [].concat(newState.value),
-        token: state.input.substring(state.pos, newState.pos),
-        loc: newState.loc
-    };
-    return newState;
-}
-exports.$TOKEN = $TOKEN;
-// ! prefix operator
-function $N(fn) {
-    return (state) => {
-        const newState = fn(state);
-        if (newState)
-            return;
-        return {
-            loc: {
-                pos: state.pos,
-                length: 0,
-            },
-            value: undefined,
-            pos: state.pos,
-        };
-    };
-}
-exports.$N = $N;
-// & prefix operator
-function $Y(fn) {
-    return (state) => {
-        const newState = fn(state);
-        if (!newState)
-            return;
-        return {
-            loc: {
-                pos: state.pos,
-                length: 0,
-            },
-            value: undefined,
-            pos: state.pos,
-        };
-    };
-}
-exports.$Y = $Y;
-// Transform
-// simplest value mapping transform, doesn't include location data parameter
-function $T(parser, fn) {
-    return function (state) {
-        const result = parser(state);
-        if (!result)
-            return;
-        // NOTE: This is a lie, tokenize returns an unmodified result
-        if (state.tokenize)
-            return result;
-        const { value } = result;
-        const mappedValue = fn(value);
-        //@ts-ignore
-        result.value = mappedValue;
-        return result;
-    };
-}
-exports.$T = $T;
-// Transform RegExp
-// Result handler for regexp match expressions
-// $0 is the whole match, followed by $1, $2, etc.
-function $TR(parser, fn) {
-    return function (state) {
-        const result = parser(state);
-        if (!result)
-            return;
-        // NOTE: This is a lie, tokenize returns an unmodified result
-        if (state.tokenize)
-            return result;
-        const { loc, value } = result;
-        const mappedValue = fn(SKIP, loc, ...value);
-        if (mappedValue === SKIP) {
-            // TODO track fail?
-            return;
-        }
-        //@ts-ignore
-        result.value = mappedValue;
-        return result;
-    };
-}
-exports.$TR = $TR;
-// Transform sequence
-function $TS(parser, fn) {
-    return function (state) {
-        const result = parser(state);
-        if (!result)
-            return;
-        // NOTE: This is a lie, tokenize returns an unmodified result
-        if (state.tokenize)
-            return result;
-        const { loc, value } = result;
-        const mappedValue = fn(SKIP, loc, value, ...value);
-        if (mappedValue === SKIP) {
-            // TODO track fail?
-            return;
-        }
-        //@ts-ignore
-        result.value = mappedValue;
-        return result;
-    };
-}
-exports.$TS = $TS;
-// Transform value $0 and $1 are both singular value
-function $TV(parser, fn) {
-    return function (state) {
-        const result = parser(state);
-        if (!result)
-            return;
-        // NOTE: This is a lie, tokenize returns an unmodified result
-        if (state.tokenize)
-            return result;
-        const { loc, value } = result;
-        const mappedValue = fn(SKIP, loc, value, value);
-        if (mappedValue === SKIP) {
-            // TODO track fail?
-            return;
-        }
-        //@ts-ignore
-        result.value = mappedValue;
-        return result;
-    };
-}
-exports.$TV = $TV;
-// Default regexp result handler RegExpMatchArray => $0
-function $R$0(parser) {
-    return function (state) {
-        const result = parser(state);
-        if (!result)
-            return;
-        const value = result.value[0];
-        //@ts-ignore
-        result.value = value;
-        return result;
-    };
-}
-exports.$R$0 = $R$0;
-const SKIP = {};
-// End of machinery
-// Parser specific things below
-const failHintRegex = /\S+|\s+|$/y;
-// Error tracking
-// Goal is zero allocations
-const failExpected = Array(16);
-let failIndex = 0;
-let maxFailPos = 0;
-//@ts-ignore
-function fail(pos, expected) {
-    if (pos < maxFailPos)
-        return;
-    if (pos > maxFailPos) {
-        maxFailPos = pos;
-        failExpected.length = failIndex = 0;
-    }
-    failExpected[failIndex++] = expected;
-    return;
-}
-class ParseError extends Error {
-    constructor(message, name, filename, line, column, offset) {
-        super(message);
-        this.message = message;
-        this.name = name;
-        this.filename = filename;
-        this.line = line;
-        this.column = column;
-        this.offset = offset;
-    }
-}
-function parserState(grammar) {
-    /** Utility function to convert position in a string input to 1 based line:colum */
-    function location(input, pos) {
-        const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
-            const l = line.length + 1;
-            if (pos >= l) {
-                pos -= l;
-                return [row + 1, 1];
-            }
-            else if (pos >= 0) {
-                col += pos;
-                pos = -1;
-                return [row, col];
-            }
-            else {
-                return [row, col];
-            }
-        }, [1, 1]);
-        return [line, column];
-    }
-    function validate(input, result, { filename }) {
-        if (result && result.pos === input.length)
-            return result.value;
-        const expectations = Array.from(new Set(failExpected.slice(0, failIndex)));
-        let l = location(input, maxFailPos), [line, column] = l;
-        // The parse completed with a result but there is still input
-        if (result && result.pos > maxFailPos) {
-            l = location(input, result.pos);
-            throw new Error(`${filename}:${line}:${column} Unconsumed input at #{l}
-
-${input.slice(result.pos)}
-`);
-        }
-        if (expectations.length) {
-            failHintRegex.lastIndex = maxFailPos;
-            let [hint] = input.match(failHintRegex);
-            if (hint.length)
-                hint = JSON.stringify(hint);
-            else
-                hint = "EOF";
-            const error = new ParseError(`${filename}:${line}:${column} Failed to parse
-Expected:
-\t${expectations.join("\n\t")}
-Found: ${hint}
-`, "ParseError", filename, line, column, maxFailPos);
-            throw error;
-        }
-        if (result) {
-            throw new Error(`
-Unconsumed input at ${l}
-
-${input.slice(result.pos)}
-`);
-        }
-        throw new Error("No result");
-    }
-    return {
-        parse: (input, options = {}) => {
-            if (typeof input !== "string")
-                throw new Error("Input must be a string");
-            const parser = (options.startRule != null)
-                ? grammar[options.startRule]
-                : Object.values(grammar)[0];
-            if (!parser)
-                throw new Error("Could not find rule with name '#{opts.startRule}'");
-            const filename = options.filename || "<anonymous>";
-            failIndex = 0;
-            maxFailPos = 0;
-            failExpected.length = 0;
-            return validate(input, parser({
-                input,
-                pos: 0,
-                tokenize: options.tokenize || false,
-                events: options.events,
-            }), {
-                filename: filename
-            });
-        }
-    };
-}
-exports.parserState = parserState;
+const {
+  $C,
+  $E,
+  $EVENT,
+  $EVENT_C,
+  $EXPECT,
+  $L,
+  $N,
+  $P,
+  $Q,
+  $R,
+  $R$0,
+  $S,
+  $T,
+  $TEXT,
+  $TR,
+  $TS,
+  $TV,
+  $Y,
+  HeraGrammar,
+  Parser,
+  ParseState,
+  ParserContext,
+  ParserOptions,
+  Validator
+} = require("./machine.js")
 
 
-const { parse } = parserState({
+const grammar = {
     Grammar: Grammar,
 Statement: Statement,
 CodeBlock: CodeBlock,
@@ -501,8 +80,10 @@ Space: Space,
 NonCommentEOS: NonCommentEOS,
 EOS: EOS,
 TripleBacktick: TripleBacktick,
+TypeAnnotation: TypeAnnotation,
 CodeBody: CodeBody
-  });
+  };
+
 const $L0 = $L("/");
 const $L1 = $L(":");
 const $L2 = $L("true");
@@ -517,6 +98,7 @@ const $L10 = $L("->");
 const $L11 = $L("\\");
 const $L12 = $L("  ");
 const $L13 = $L("```");
+const $L14 = $L("::");
 
 
 const $R0 = $R(new RegExp("[$&!]", 'suy'));
@@ -543,7 +125,8 @@ const $R20 = $R(new RegExp("[ \\t]*\\)", 'suy'));
 const $R21 = $R(new RegExp("[ \\t]+", 'suy'));
 const $R22 = $R(new RegExp("([ \\t]*(\\n|\\r\\n|\\r|$))+", 'suy'));
 const $R23 = $R(new RegExp("([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+", 'suy'));
-const $R24 = $R(new RegExp("(?:(?:`(?!``))|[^`])*", 'suy'));
+const $R24 = $R(new RegExp("(?:(?!->).)*", 'suy'));
+const $R25 = $R(new RegExp("(?:(?:`(?!``))|[^`])*", 'suy'));
 
 
 const Grammar$0 = $TV($Q(Statement), function($skip, $loc, $0, $1) {
@@ -553,89 +136,18 @@ const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
 rules[Symbol.for("code")] = code
 return rules
 });
-function Grammar(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Grammar", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Grammar", state, Grammar$0(state));
-    if (state.events) state.events.exit?.("Grammar", state, result, eventData);
-    return result;
-  } else {
-    const result = Grammar$0(state);
-    if (state.events) state.events.exit?.("Grammar", state, result, eventData);
-    return result;
-  }
-}
+function Grammar(ctx, state) { return $EVENT(ctx, state, "Grammar", Grammar$0) }
 
 const Statement$0 = $T($S($E(EOS), CodeBlock), function(value) {return value[1] });
 const Statement$1 = $T($S($E(EOS), Rule), function(value) {return value[1] });
-function Statement(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Statement", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Statement", state, Statement$0(state) || Statement$1(state));
-    if (state.events) state.events.exit?.("Statement", state, result, eventData);
-    return result;
-  } else {
-    const result = Statement$0(state) || Statement$1(state);
-    if (state.events) state.events.exit?.("Statement", state, result, eventData);
-    return result;
-  }
-}
+const Statement$$ = [Statement$0,Statement$1]
+function Statement(ctx, state) { return $EVENT_C(ctx, state, "Statement", Statement$$) }
 
 const CodeBlock$0 = $T($S(TripleBacktick, CodeBody, TripleBacktick), function(value) {return value[1] });
-function CodeBlock(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CodeBlock", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CodeBlock", state, CodeBlock$0(state));
-    if (state.events) state.events.exit?.("CodeBlock", state, result, eventData);
-    return result;
-  } else {
-    const result = CodeBlock$0(state);
-    if (state.events) state.events.exit?.("CodeBlock", state, result, eventData);
-    return result;
-  }
-}
+function CodeBlock(ctx, state) { return $EVENT(ctx, state, "CodeBlock", CodeBlock$0) }
 
 const Rule$0 = $T($S(Name, EOS, RuleBody), function(value) {return [value[0], value[2]] });
-function Rule(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Rule", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Rule", state, Rule$0(state));
-    if (state.events) state.events.exit?.("Rule", state, result, eventData);
-    return result;
-  } else {
-    const result = Rule$0(state);
-    if (state.events) state.events.exit?.("Rule", state, result, eventData);
-    return result;
-  }
-}
+function Rule(ctx, state) { return $EVENT(ctx, state, "Rule", Rule$0) }
 
 const RuleBody$0 = $TV($P($S(Indent, Choice)), function($skip, $loc, $0, $1) {
 
@@ -643,25 +155,7 @@ var r = $1.map((a) => a[1])
 if (r.length === 1) return r[0];
 return ["/", r]
 });
-function RuleBody(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("RuleBody", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("RuleBody", state, RuleBody$0(state));
-    if (state.events) state.events.exit?.("RuleBody", state, result, eventData);
-    return result;
-  } else {
-    const result = RuleBody$0(state);
-    if (state.events) state.events.exit?.("RuleBody", state, result, eventData);
-    return result;
-  }
-}
+function RuleBody(ctx, state) { return $EVENT(ctx, state, "RuleBody", RuleBody$0) }
 
 const Choice$0 = $TS($S(Sequence, Handling), function($skip, $loc, $0, $1, $2) {
 
@@ -673,25 +167,7 @@ if ($2 !== undefined) {
 }
 return $1
 });
-function Choice(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Choice", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Choice", state, Choice$0(state));
-    if (state.events) state.events.exit?.("Choice", state, result, eventData);
-    return result;
-  } else {
-    const result = Choice$0(state);
-    if (state.events) state.events.exit?.("Choice", state, result, eventData);
-    return result;
-  }
-}
+function Choice(ctx, state) { return $EVENT(ctx, state, "Choice", Choice$0) }
 
 const Sequence$0 = $TS($S(Expression, $P(SequenceExpression)), function($skip, $loc, $0, $1, $2) {
 
@@ -704,88 +180,17 @@ $2.unshift($1)
 return ["/", $2]
 });
 const Sequence$2 = Expression
-function Sequence(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Sequence", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Sequence", state, Sequence$0(state) || Sequence$1(state) || Sequence$2(state));
-    if (state.events) state.events.exit?.("Sequence", state, result, eventData);
-    return result;
-  } else {
-    const result = Sequence$0(state) || Sequence$1(state) || Sequence$2(state);
-    if (state.events) state.events.exit?.("Sequence", state, result, eventData);
-    return result;
-  }
-}
+const Sequence$$ = [Sequence$0,Sequence$1,Sequence$2]
+function Sequence(ctx, state) { return $EVENT_C(ctx, state, "Sequence", Sequence$$) }
 
 const SequenceExpression$0 = $T($S(Space, Expression), function(value) {return value[1] });
-function SequenceExpression(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("SequenceExpression", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("SequenceExpression", state, SequenceExpression$0(state));
-    if (state.events) state.events.exit?.("SequenceExpression", state, result, eventData);
-    return result;
-  } else {
-    const result = SequenceExpression$0(state);
-    if (state.events) state.events.exit?.("SequenceExpression", state, result, eventData);
-    return result;
-  }
-}
+function SequenceExpression(ctx, state) { return $EVENT(ctx, state, "SequenceExpression", SequenceExpression$0) }
 
-const ChoiceExpression$0 = $T($S(Space, $EXPECT($L0, fail, "ChoiceExpression \"/\""), Space, Expression), function(value) {return value[3] });
-function ChoiceExpression(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("ChoiceExpression", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("ChoiceExpression", state, ChoiceExpression$0(state));
-    if (state.events) state.events.exit?.("ChoiceExpression", state, result, eventData);
-    return result;
-  } else {
-    const result = ChoiceExpression$0(state);
-    if (state.events) state.events.exit?.("ChoiceExpression", state, result, eventData);
-    return result;
-  }
-}
+const ChoiceExpression$0 = $T($S(Space, $EXPECT($L0, "ChoiceExpression \"/\""), Space, Expression), function(value) {return value[3] });
+function ChoiceExpression(ctx, state) { return $EVENT(ctx, state, "ChoiceExpression", ChoiceExpression$0) }
 
-const ParameterName$0 = $T($S($EXPECT($L1, fail, "ParameterName \":\""), Name), function(value) {return value[1] });
-function ParameterName(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("ParameterName", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("ParameterName", state, ParameterName$0(state));
-    if (state.events) state.events.exit?.("ParameterName", state, result, eventData);
-    return result;
-  } else {
-    const result = ParameterName$0(state);
-    if (state.events) state.events.exit?.("ParameterName", state, result, eventData);
-    return result;
-  }
-}
+const ParameterName$0 = $T($S($EXPECT($L1, "ParameterName \":\""), Name), function(value) {return value[1] });
+function ParameterName(ctx, state) { return $EVENT(ctx, state, "ParameterName", ParameterName$0) }
 
 const Expression$0 = $TS($S($E(PrefixOperator), Suffix, $E(ParameterName)), function($skip, $loc, $0, $1, $2, $3) {
 
@@ -796,184 +201,48 @@ if ($3)
   return [{name: $3}, result]
 return result
 });
-function Expression(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Expression", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Expression", state, Expression$0(state));
-    if (state.events) state.events.exit?.("Expression", state, result, eventData);
-    return result;
-  } else {
-    const result = Expression$0(state);
-    if (state.events) state.events.exit?.("Expression", state, result, eventData);
-    return result;
-  }
-}
+function Expression(ctx, state) { return $EVENT(ctx, state, "Expression", Expression$0) }
 
-const PrefixOperator$0 = $R$0($EXPECT($R0, fail, "PrefixOperator /[$&!]/"))
-function PrefixOperator(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("PrefixOperator", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("PrefixOperator", state, PrefixOperator$0(state));
-    if (state.events) state.events.exit?.("PrefixOperator", state, result, eventData);
-    return result;
-  } else {
-    const result = PrefixOperator$0(state);
-    if (state.events) state.events.exit?.("PrefixOperator", state, result, eventData);
-    return result;
-  }
-}
+const PrefixOperator$0 = $R$0($EXPECT($R0, "PrefixOperator /[$&!]/"))
+function PrefixOperator(ctx, state) { return $EVENT(ctx, state, "PrefixOperator", PrefixOperator$0) }
 
 const Suffix$0 = $TS($S(Primary, $E(SuffixOperator)), function($skip, $loc, $0, $1, $2) {
 
 if ($2) return [$2, $1]
 else return $1
 });
-function Suffix(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Suffix", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Suffix", state, Suffix$0(state));
-    if (state.events) state.events.exit?.("Suffix", state, result, eventData);
-    return result;
-  } else {
-    const result = Suffix$0(state);
-    if (state.events) state.events.exit?.("Suffix", state, result, eventData);
-    return result;
-  }
-}
+function Suffix(ctx, state) { return $EVENT(ctx, state, "Suffix", Suffix$0) }
 
-const SuffixOperator$0 = $R$0($EXPECT($R1, fail, "SuffixOperator /[+?*]/"))
-function SuffixOperator(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("SuffixOperator", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("SuffixOperator", state, SuffixOperator$0(state));
-    if (state.events) state.events.exit?.("SuffixOperator", state, result, eventData);
-    return result;
-  } else {
-    const result = SuffixOperator$0(state);
-    if (state.events) state.events.exit?.("SuffixOperator", state, result, eventData);
-    return result;
-  }
-}
+const SuffixOperator$0 = $R$0($EXPECT($R1, "SuffixOperator /[+?*]/"))
+function SuffixOperator(ctx, state) { return $EVENT(ctx, state, "SuffixOperator", SuffixOperator$0) }
 
 const Primary$0 = Name
 const Primary$1 = Literal
 const Primary$2 = $T($S(OpenParenthesis, Sequence, CloseParenthesis), function(value) {return value[1] });
-function Primary(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Primary", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Primary", state, Primary$0(state) || Primary$1(state) || Primary$2(state));
-    if (state.events) state.events.exit?.("Primary", state, result, eventData);
-    return result;
-  } else {
-    const result = Primary$0(state) || Primary$1(state) || Primary$2(state);
-    if (state.events) state.events.exit?.("Primary", state, result, eventData);
-    return result;
-  }
-}
+const Primary$$ = [Primary$0,Primary$1,Primary$2]
+function Primary(ctx, state) { return $EVENT_C(ctx, state, "Primary", Primary$$) }
 
 const Literal$0 = StringLiteral
 const Literal$1 = RegExpLiteral
-function Literal(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Literal", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Literal", state, Literal$0(state) || Literal$1(state));
-    if (state.events) state.events.exit?.("Literal", state, result, eventData);
-    return result;
-  } else {
-    const result = Literal$0(state) || Literal$1(state);
-    if (state.events) state.events.exit?.("Literal", state, result, eventData);
-    return result;
-  }
-}
+const Literal$$ = [Literal$0,Literal$1]
+function Literal(ctx, state) { return $EVENT_C(ctx, state, "Literal", Literal$$) }
 
 const Handling$0 = $TS($S(EOS), function($skip, $loc, $0, $1) {
 
 return undefined
 });
-const Handling$1 = $T($S($Q(Space), Arrow, HandlingExpression), function(value) {return value[2] });
-function Handling(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Handling", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Handling", state, Handling$0(state) || Handling$1(state));
-    if (state.events) state.events.exit?.("Handling", state, result, eventData);
-    return result;
-  } else {
-    const result = Handling$0(state) || Handling$1(state);
-    if (state.events) state.events.exit?.("Handling", state, result, eventData);
-    return result;
-  }
-}
+const Handling$1 = $TS($S($Q(Space), $E(TypeAnnotation), Arrow, HandlingExpression), function($skip, $loc, $0, $1, $2, $3, $4) {
+
+if ($2) $4.t = $2
+return $4
+});
+const Handling$$ = [Handling$0,Handling$1]
+function Handling(ctx, state) { return $EVENT_C(ctx, state, "Handling", Handling$$) }
 
 const HandlingExpression$0 = $T($S(EOS, HandlingExpressionBody, $E(EOS)), function(value) {return value[1] });
 const HandlingExpression$1 = $T($S(StructuralMapping, EOS), function(value) {return value[0] });
-function HandlingExpression(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("HandlingExpression", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("HandlingExpression", state, HandlingExpression$0(state) || HandlingExpression$1(state));
-    if (state.events) state.events.exit?.("HandlingExpression", state, result, eventData);
-    return result;
-  } else {
-    const result = HandlingExpression$0(state) || HandlingExpression$1(state);
-    if (state.events) state.events.exit?.("HandlingExpression", state, result, eventData);
-    return result;
-  }
-}
+const HandlingExpression$$ = [HandlingExpression$0,HandlingExpression$1]
+function HandlingExpression(ctx, state) { return $EVENT_C(ctx, state, "HandlingExpression", HandlingExpression$$) }
 
 const HandlingExpressionBody$0 = $TV($P(HandlingExpressionLine), function($skip, $loc, $0, $1) {
 
@@ -982,46 +251,10 @@ return {
   $loc,
 }
 });
-function HandlingExpressionBody(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("HandlingExpressionBody", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("HandlingExpressionBody", state, HandlingExpressionBody$0(state));
-    if (state.events) state.events.exit?.("HandlingExpressionBody", state, result, eventData);
-    return result;
-  } else {
-    const result = HandlingExpressionBody$0(state);
-    if (state.events) state.events.exit?.("HandlingExpressionBody", state, result, eventData);
-    return result;
-  }
-}
+function HandlingExpressionBody(ctx, state) { return $EVENT(ctx, state, "HandlingExpressionBody", HandlingExpressionBody$0) }
 
-const HandlingExpressionLine$0 = $T($S(Indent, Indent, $TEXT($S($EXPECT($R2, fail, "HandlingExpressionLine /[^\\n\\r]*/"), NonCommentEOS))), function(value) {return value[2] });
-function HandlingExpressionLine(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("HandlingExpressionLine", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("HandlingExpressionLine", state, HandlingExpressionLine$0(state));
-    if (state.events) state.events.exit?.("HandlingExpressionLine", state, result, eventData);
-    return result;
-  } else {
-    const result = HandlingExpressionLine$0(state);
-    if (state.events) state.events.exit?.("HandlingExpressionLine", state, result, eventData);
-    return result;
-  }
-}
+const HandlingExpressionLine$0 = $T($S(Indent, Indent, $TEXT($S($EXPECT($R2, "HandlingExpressionLine /[^\\n\\r]*/"), NonCommentEOS))), function(value) {return value[2] });
+function HandlingExpressionLine(ctx, state) { return $EVENT(ctx, state, "HandlingExpressionLine", HandlingExpressionLine$0) }
 
 const StructuralMapping$0 = $TS($S(StringValue), function($skip, $loc, $0, $1) {
 
@@ -1033,67 +266,14 @@ const StructuralMapping$3 = NullValue
 const StructuralMapping$4 = $T($S(Variable), function(value) {return {"v": value[0]} });
 const StructuralMapping$5 = JSArray
 const StructuralMapping$6 = JSObject
-function StructuralMapping(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("StructuralMapping", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("StructuralMapping", state, StructuralMapping$0(state) || StructuralMapping$1(state) || StructuralMapping$2(state) || StructuralMapping$3(state) || StructuralMapping$4(state) || StructuralMapping$5(state) || StructuralMapping$6(state));
-    if (state.events) state.events.exit?.("StructuralMapping", state, result, eventData);
-    return result;
-  } else {
-    const result = StructuralMapping$0(state) || StructuralMapping$1(state) || StructuralMapping$2(state) || StructuralMapping$3(state) || StructuralMapping$4(state) || StructuralMapping$5(state) || StructuralMapping$6(state);
-    if (state.events) state.events.exit?.("StructuralMapping", state, result, eventData);
-    return result;
-  }
-}
+const StructuralMapping$$ = [StructuralMapping$0,StructuralMapping$1,StructuralMapping$2,StructuralMapping$3,StructuralMapping$4,StructuralMapping$5,StructuralMapping$6]
+function StructuralMapping(ctx, state) { return $EVENT_C(ctx, state, "StructuralMapping", StructuralMapping$$) }
 
 const JSArray$0 = $T($S(OpenBracket, $Q(ArrayItem), CloseBracket), function(value) {return value[1] });
-function JSArray(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("JSArray", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("JSArray", state, JSArray$0(state));
-    if (state.events) state.events.exit?.("JSArray", state, result, eventData);
-    return result;
-  } else {
-    const result = JSArray$0(state);
-    if (state.events) state.events.exit?.("JSArray", state, result, eventData);
-    return result;
-  }
-}
+function JSArray(ctx, state) { return $EVENT(ctx, state, "JSArray", JSArray$0) }
 
-const ArrayItem$0 = $T($S(StructuralMapping, $EXPECT($R3, fail, "ArrayItem /,\\s*|\\s*(?=\\])/")), function(value) {return value[0] });
-function ArrayItem(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("ArrayItem", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("ArrayItem", state, ArrayItem$0(state));
-    if (state.events) state.events.exit?.("ArrayItem", state, result, eventData);
-    return result;
-  } else {
-    const result = ArrayItem$0(state);
-    if (state.events) state.events.exit?.("ArrayItem", state, result, eventData);
-    return result;
-  }
-}
+const ArrayItem$0 = $T($S(StructuralMapping, $EXPECT($R3, "ArrayItem /,\\s*|\\s*(?=\\])/")), function(value) {return value[0] });
+function ArrayItem(ctx, state) { return $EVENT(ctx, state, "ArrayItem", ArrayItem$0) }
 
 const JSObject$0 = $TS($S(OpenBrace, $Q(ObjectField), CloseBrace), function($skip, $loc, $0, $1, $2, $3) {
 
@@ -1101,679 +281,219 @@ return {
   o: Object.fromEntries($2)
 }
 });
-function JSObject(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("JSObject", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("JSObject", state, JSObject$0(state));
-    if (state.events) state.events.exit?.("JSObject", state, result, eventData);
-    return result;
-  } else {
-    const result = JSObject$0(state);
-    if (state.events) state.events.exit?.("JSObject", state, result, eventData);
-    return result;
-  }
-}
+function JSObject(ctx, state) { return $EVENT(ctx, state, "JSObject", JSObject$0) }
 
-const ObjectField$0 = $T($S($C(StringValue, Name), $EXPECT($R4, fail, "ObjectField /:[ \\t]*/"), StructuralMapping, $EXPECT($R5, fail, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], value[2]] });
-const ObjectField$1 = $T($S(Name, $EXPECT($R5, fail, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], {"v": value[0]}] });
-function ObjectField(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("ObjectField", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("ObjectField", state, ObjectField$0(state) || ObjectField$1(state));
-    if (state.events) state.events.exit?.("ObjectField", state, result, eventData);
-    return result;
-  } else {
-    const result = ObjectField$0(state) || ObjectField$1(state);
-    if (state.events) state.events.exit?.("ObjectField", state, result, eventData);
-    return result;
-  }
-}
+const ObjectField$0 = $T($S($C(StringValue, Name), $EXPECT($R4, "ObjectField /:[ \\t]*/"), StructuralMapping, $EXPECT($R5, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], value[2]] });
+const ObjectField$1 = $T($S(Name, $EXPECT($R5, "ObjectField /,\\s*|\\s*(?=\\})/")), function(value) {return [value[0], {"v": value[0]}] });
+const ObjectField$$ = [ObjectField$0,ObjectField$1]
+function ObjectField(ctx, state) { return $EVENT_C(ctx, state, "ObjectField", ObjectField$$) }
 
-const Variable$0 = $TR($EXPECT($R6, fail, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const Variable$0 = $TR($EXPECT($R6, "Variable /\\$(\\d)/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseInt($1, 10)
 });
 const Variable$1 = Name
-function Variable(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Variable", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Variable", state, Variable$0(state) || Variable$1(state));
-    if (state.events) state.events.exit?.("Variable", state, result, eventData);
-    return result;
-  } else {
-    const result = Variable$0(state) || Variable$1(state);
-    if (state.events) state.events.exit?.("Variable", state, result, eventData);
-    return result;
-  }
-}
+const Variable$$ = [Variable$0,Variable$1]
+function Variable(ctx, state) { return $EVENT_C(ctx, state, "Variable", Variable$$) }
 
-const BooleanValue$0 = $T($EXPECT($L2, fail, "BooleanValue \"true\""), function(value) { return true });
-const BooleanValue$1 = $T($EXPECT($L3, fail, "BooleanValue \"false\""), function(value) { return false });
-function BooleanValue(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("BooleanValue", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("BooleanValue", state, BooleanValue$0(state) || BooleanValue$1(state));
-    if (state.events) state.events.exit?.("BooleanValue", state, result, eventData);
-    return result;
-  } else {
-    const result = BooleanValue$0(state) || BooleanValue$1(state);
-    if (state.events) state.events.exit?.("BooleanValue", state, result, eventData);
-    return result;
-  }
-}
+const BooleanValue$0 = $T($EXPECT($L2, "BooleanValue \"true\""), function(value) { return true });
+const BooleanValue$1 = $T($EXPECT($L3, "BooleanValue \"false\""), function(value) { return false });
+const BooleanValue$$ = [BooleanValue$0,BooleanValue$1]
+function BooleanValue(ctx, state) { return $EVENT_C(ctx, state, "BooleanValue", BooleanValue$$) }
 
-const NullValue$0 = $TV($EXPECT($L4, fail, "NullValue \"null\""), function($skip, $loc, $0, $1) {
+const NullValue$0 = $TV($EXPECT($L4, "NullValue \"null\""), function($skip, $loc, $0, $1) {
 
 return null
 });
-const NullValue$1 = $TV($EXPECT($L5, fail, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {
+const NullValue$1 = $TV($EXPECT($L5, "NullValue \"undefined\""), function($skip, $loc, $0, $1) {
 
 return {l: undefined}
 });
-function NullValue(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("NullValue", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("NullValue", state, NullValue$0(state) || NullValue$1(state));
-    if (state.events) state.events.exit?.("NullValue", state, result, eventData);
-    return result;
-  } else {
-    const result = NullValue$0(state) || NullValue$1(state);
-    if (state.events) state.events.exit?.("NullValue", state, result, eventData);
-    return result;
-  }
-}
+const NullValue$$ = [NullValue$0,NullValue$1]
+function NullValue(ctx, state) { return $EVENT_C(ctx, state, "NullValue", NullValue$$) }
 
-const NumberValue$0 = $TR($EXPECT($R7, fail, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const NumberValue$0 = $TR($EXPECT($R7, "NumberValue /0x[\\da-fA-F]+/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseInt($0, 16)
 });
-const NumberValue$1 = $TR($EXPECT($R8, fail, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
+const NumberValue$1 = $TR($EXPECT($R8, "NumberValue /[-+]?\\d+(\\.\\d+)?/"), function($skip, $loc, $0, $1, $2, $3, $4, $5, $6, $7, $8, $9) {
 return parseFloat($0)
 });
-function NumberValue(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("NumberValue", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("NumberValue", state, NumberValue$0(state) || NumberValue$1(state));
-    if (state.events) state.events.exit?.("NumberValue", state, result, eventData);
-    return result;
-  } else {
-    const result = NumberValue$0(state) || NumberValue$1(state);
-    if (state.events) state.events.exit?.("NumberValue", state, result, eventData);
-    return result;
-  }
-}
+const NumberValue$$ = [NumberValue$0,NumberValue$1]
+function NumberValue(ctx, state) { return $EVENT_C(ctx, state, "NumberValue", NumberValue$$) }
 
-const StringValue$0 = $T($S($EXPECT($L6, fail, "StringValue \"\\\\\\\"\""), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L6, fail, "StringValue \"\\\\\\\"\"")), function(value) {return value[1] });
-function StringValue(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("StringValue", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("StringValue", state, StringValue$0(state));
-    if (state.events) state.events.exit?.("StringValue", state, result, eventData);
-    return result;
-  } else {
-    const result = StringValue$0(state);
-    if (state.events) state.events.exit?.("StringValue", state, result, eventData);
-    return result;
-  }
-}
+const StringValue$0 = $T($S($EXPECT($L6, "StringValue \"\\\\\\\"\""), $TEXT($Q(DoubleStringCharacter)), $EXPECT($L6, "StringValue \"\\\\\\\"\"")), function(value) {return value[1] });
+function StringValue(ctx, state) { return $EVENT(ctx, state, "StringValue", StringValue$0) }
 
-const DoubleStringCharacter$0 = $R$0($EXPECT($R9, fail, "DoubleStringCharacter /[^\"\\\\]+/"))
+const DoubleStringCharacter$0 = $R$0($EXPECT($R9, "DoubleStringCharacter /[^\"\\\\]+/"))
 const DoubleStringCharacter$1 = EscapeSequence
-function DoubleStringCharacter(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("DoubleStringCharacter", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("DoubleStringCharacter", state, DoubleStringCharacter$0(state) || DoubleStringCharacter$1(state));
-    if (state.events) state.events.exit?.("DoubleStringCharacter", state, result, eventData);
-    return result;
-  } else {
-    const result = DoubleStringCharacter$0(state) || DoubleStringCharacter$1(state);
-    if (state.events) state.events.exit?.("DoubleStringCharacter", state, result, eventData);
-    return result;
-  }
-}
+const DoubleStringCharacter$$ = [DoubleStringCharacter$0,DoubleStringCharacter$1]
+function DoubleStringCharacter(ctx, state) { return $EVENT_C(ctx, state, "DoubleStringCharacter", DoubleStringCharacter$$) }
 
-const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R10, fail, "EscapeSequence /./")))
-function EscapeSequence(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("EscapeSequence", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("EscapeSequence", state, EscapeSequence$0(state));
-    if (state.events) state.events.exit?.("EscapeSequence", state, result, eventData);
-    return result;
-  } else {
-    const result = EscapeSequence$0(state);
-    if (state.events) state.events.exit?.("EscapeSequence", state, result, eventData);
-    return result;
-  }
-}
+const EscapeSequence$0 = $TEXT($S(Backslash, $EXPECT($R10, "EscapeSequence /./")))
+function EscapeSequence(ctx, state) { return $EVENT(ctx, state, "EscapeSequence", EscapeSequence$0) }
 
 const StringLiteral$0 = $T($S(StringValue), function(value) {return ["L", value[0]] });
-function StringLiteral(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("StringLiteral", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("StringLiteral", state, StringLiteral$0(state));
-    if (state.events) state.events.exit?.("StringLiteral", state, result, eventData);
-    return result;
-  } else {
-    const result = StringLiteral$0(state);
-    if (state.events) state.events.exit?.("StringLiteral", state, result, eventData);
-    return result;
-  }
-}
+function StringLiteral(ctx, state) { return $EVENT(ctx, state, "StringLiteral", StringLiteral$0) }
 
-const RegExpLiteral$0 = $T($S($EXPECT($L0, fail, "RegExpLiteral \"/\""), $N(Space), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, fail, "RegExpLiteral \"/\"")), function(value) {return ["R", value[2]] });
+const RegExpLiteral$0 = $T($S($EXPECT($L0, "RegExpLiteral \"/\""), $N(Space), $TEXT($Q(RegExpCharacter)), $EXPECT($L0, "RegExpLiteral \"/\"")), function(value) {return ["R", value[2]] });
 const RegExpLiteral$1 = $T($TEXT(CharacterClassExpression), function(value) { return ["R", value] });
-const RegExpLiteral$2 = $T($EXPECT($L7, fail, "RegExpLiteral \".\""), function(value) { return ["R", value] });
-function RegExpLiteral(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("RegExpLiteral", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("RegExpLiteral", state, RegExpLiteral$0(state) || RegExpLiteral$1(state) || RegExpLiteral$2(state));
-    if (state.events) state.events.exit?.("RegExpLiteral", state, result, eventData);
-    return result;
-  } else {
-    const result = RegExpLiteral$0(state) || RegExpLiteral$1(state) || RegExpLiteral$2(state);
-    if (state.events) state.events.exit?.("RegExpLiteral", state, result, eventData);
-    return result;
-  }
-}
+const RegExpLiteral$2 = $T($EXPECT($L7, "RegExpLiteral \".\""), function(value) { return ["R", value] });
+const RegExpLiteral$$ = [RegExpLiteral$0,RegExpLiteral$1,RegExpLiteral$2]
+function RegExpLiteral(ctx, state) { return $EVENT_C(ctx, state, "RegExpLiteral", RegExpLiteral$$) }
 
 const CharacterClassExpression$0 = $P(CharacterClass)
-function CharacterClassExpression(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CharacterClassExpression", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CharacterClassExpression", state, CharacterClassExpression$0(state));
-    if (state.events) state.events.exit?.("CharacterClassExpression", state, result, eventData);
-    return result;
-  } else {
-    const result = CharacterClassExpression$0(state);
-    if (state.events) state.events.exit?.("CharacterClassExpression", state, result, eventData);
-    return result;
-  }
-}
+function CharacterClassExpression(ctx, state) { return $EVENT(ctx, state, "CharacterClassExpression", CharacterClassExpression$0) }
 
-const RegExpCharacter$0 = $R$0($EXPECT($R11, fail, "RegExpCharacter /[^\\/\\\\]+/"))
+const RegExpCharacter$0 = $R$0($EXPECT($R11, "RegExpCharacter /[^\\/\\\\]+/"))
 const RegExpCharacter$1 = EscapeSequence
-function RegExpCharacter(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("RegExpCharacter", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("RegExpCharacter", state, RegExpCharacter$0(state) || RegExpCharacter$1(state));
-    if (state.events) state.events.exit?.("RegExpCharacter", state, result, eventData);
-    return result;
-  } else {
-    const result = RegExpCharacter$0(state) || RegExpCharacter$1(state);
-    if (state.events) state.events.exit?.("RegExpCharacter", state, result, eventData);
-    return result;
-  }
-}
+const RegExpCharacter$$ = [RegExpCharacter$0,RegExpCharacter$1]
+function RegExpCharacter(ctx, state) { return $EVENT_C(ctx, state, "RegExpCharacter", RegExpCharacter$$) }
 
-const CharacterClass$0 = $S($EXPECT($L8, fail, "CharacterClass \"[\""), $Q(CharacterClassCharacter), $EXPECT($L9, fail, "CharacterClass \"]\""), $E(Quantifier))
-function CharacterClass(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CharacterClass", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CharacterClass", state, CharacterClass$0(state));
-    if (state.events) state.events.exit?.("CharacterClass", state, result, eventData);
-    return result;
-  } else {
-    const result = CharacterClass$0(state);
-    if (state.events) state.events.exit?.("CharacterClass", state, result, eventData);
-    return result;
-  }
-}
+const CharacterClass$0 = $S($EXPECT($L8, "CharacterClass \"[\""), $Q(CharacterClassCharacter), $EXPECT($L9, "CharacterClass \"]\""), $E(Quantifier))
+function CharacterClass(ctx, state) { return $EVENT(ctx, state, "CharacterClass", CharacterClass$0) }
 
-const CharacterClassCharacter$0 = $R$0($EXPECT($R12, fail, "CharacterClassCharacter /[^\\]\\\\]+/"))
+const CharacterClassCharacter$0 = $R$0($EXPECT($R12, "CharacterClassCharacter /[^\\]\\\\]+/"))
 const CharacterClassCharacter$1 = EscapeSequence
-function CharacterClassCharacter(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CharacterClassCharacter", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
+const CharacterClassCharacter$$ = [CharacterClassCharacter$0,CharacterClassCharacter$1]
+function CharacterClassCharacter(ctx, state) { return $EVENT_C(ctx, state, "CharacterClassCharacter", CharacterClassCharacter$$) }
+
+const Quantifier$0 = $R$0($EXPECT($R13, "Quantifier /[?+*]|\\{\\d+(,\\d+)?\\}/"))
+function Quantifier(ctx, state) { return $EVENT(ctx, state, "Quantifier", Quantifier$0) }
+
+const Name$0 = $R$0($EXPECT($R14, "Name /[_a-zA-Z][_a-zA-Z0-9]*/"))
+function Name(ctx, state) { return $EVENT(ctx, state, "Name", Name$0) }
+
+const Arrow$0 = $S($EXPECT($L10, "Arrow \"->\""), $Q(Space))
+function Arrow(ctx, state) { return $EVENT(ctx, state, "Arrow", Arrow$0) }
+
+const Backslash$0 = $EXPECT($L11, "Backslash \"\\\\\\\\\"")
+function Backslash(ctx, state) { return $EVENT(ctx, state, "Backslash", Backslash$0) }
+
+const OpenBrace$0 = $R$0($EXPECT($R15, "OpenBrace /\\{\\s*/"))
+function OpenBrace(ctx, state) { return $EVENT(ctx, state, "OpenBrace", OpenBrace$0) }
+
+const CloseBrace$0 = $R$0($EXPECT($R16, "CloseBrace /\\}[ \\t]*/"))
+function CloseBrace(ctx, state) { return $EVENT(ctx, state, "CloseBrace", CloseBrace$0) }
+
+const OpenBracket$0 = $R$0($EXPECT($R17, "OpenBracket /\\[\\s*/"))
+function OpenBracket(ctx, state) { return $EVENT(ctx, state, "OpenBracket", OpenBracket$0) }
+
+const CloseBracket$0 = $R$0($EXPECT($R18, "CloseBracket /\\][ \\t]*/"))
+function CloseBracket(ctx, state) { return $EVENT(ctx, state, "CloseBracket", CloseBracket$0) }
+
+const OpenParenthesis$0 = $R$0($EXPECT($R19, "OpenParenthesis /\\([ \\t]*/"))
+function OpenParenthesis(ctx, state) { return $EVENT(ctx, state, "OpenParenthesis", OpenParenthesis$0) }
+
+const CloseParenthesis$0 = $R$0($EXPECT($R20, "CloseParenthesis /[ \\t]*\\)/"))
+function CloseParenthesis(ctx, state) { return $EVENT(ctx, state, "CloseParenthesis", CloseParenthesis$0) }
+
+const Indent$0 = $EXPECT($L12, "Indent \"  \"")
+function Indent(ctx, state) { return $EVENT(ctx, state, "Indent", Indent$0) }
+
+const Space$0 = $R$0($EXPECT($R21, "Space /[ \\t]+/"))
+function Space(ctx, state) { return $EVENT(ctx, state, "Space", Space$0) }
+
+const NonCommentEOS$0 = $R$0($EXPECT($R22, "NonCommentEOS /([ \\t]*(\\n|\\r\\n|\\r|$))+/"))
+function NonCommentEOS(ctx, state) { return $EVENT(ctx, state, "NonCommentEOS", NonCommentEOS$0) }
+
+const EOS$0 = $R$0($EXPECT($R23, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
+function EOS(ctx, state) { return $EVENT(ctx, state, "EOS", EOS$0) }
+
+const TripleBacktick$0 = $EXPECT($L13, "TripleBacktick \"```\"")
+function TripleBacktick(ctx, state) { return $EVENT(ctx, state, "TripleBacktick", TripleBacktick$0) }
+
+const TypeAnnotation$0 = $T($S($EXPECT($L14, "TypeAnnotation \"::\""), $TEXT($EXPECT($R24, "TypeAnnotation /(?:(?!->).)*/"))), function(value) {return value[1] });
+function TypeAnnotation(ctx, state) { return $EVENT(ctx, state, "TypeAnnotation", TypeAnnotation$0) }
+
+const CodeBody$0 = $TEXT($EXPECT($R25, "CodeBody /(?:(?:`(?!``))|[^`])*/"))
+function CodeBody(ctx, state) { return $EVENT(ctx, state, "CodeBody", CodeBody$0) }
+
+
+
+const parser = (function() {
+  const { fail, validate, reset } = Validator()
+  let ctx = { expectation: "", fail }
+
+  return {
+    parse: (input, options = {}) => {
+      if (typeof input !== "string") throw new Error("Input must be a string")
+
+      const parser = (options.startRule != null)
+        ? grammar[options.startRule]
+        : Object.values(grammar)[0]
+
+      if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
+
+      const filename = options.filename || "<anonymous>";
+
+      reset()
+      Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+
+      return validate(input, parser(ctx, {
+        input,
+        pos: 0,
+      }), {
+        filename: filename
+      })
     }
   }
-  if (state.tokenize) {
-    const result = $TOKEN("CharacterClassCharacter", state, CharacterClassCharacter$0(state) || CharacterClassCharacter$1(state));
-    if (state.events) state.events.exit?.("CharacterClassCharacter", state, result, eventData);
-    return result;
-  } else {
-    const result = CharacterClassCharacter$0(state) || CharacterClassCharacter$1(state);
-    if (state.events) state.events.exit?.("CharacterClassCharacter", state, result, eventData);
-    return result;
-  }
-}
+}())
 
-const Quantifier$0 = $R$0($EXPECT($R13, fail, "Quantifier /[?+*]|\\{\\d+(,\\d+)?\\}/"))
-function Quantifier(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Quantifier", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Quantifier", state, Quantifier$0(state));
-    if (state.events) state.events.exit?.("Quantifier", state, result, eventData);
-    return result;
-  } else {
-    const result = Quantifier$0(state);
-    if (state.events) state.events.exit?.("Quantifier", state, result, eventData);
-    return result;
-  }
-}
+exports.default = parser
+exports.parse = parser.parse
 
-const Name$0 = $R$0($EXPECT($R14, fail, "Name /[_a-zA-Z][_a-zA-Z0-9]*/"))
-function Name(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Name", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Name", state, Name$0(state));
-    if (state.events) state.events.exit?.("Name", state, result, eventData);
-    return result;
-  } else {
-    const result = Name$0(state);
-    if (state.events) state.events.exit?.("Name", state, result, eventData);
-    return result;
-  }
-}
+exports.Grammar = Grammar;
+exports.Statement = Statement;
+exports.CodeBlock = CodeBlock;
+exports.Rule = Rule;
+exports.RuleBody = RuleBody;
+exports.Choice = Choice;
+exports.Sequence = Sequence;
+exports.SequenceExpression = SequenceExpression;
+exports.ChoiceExpression = ChoiceExpression;
+exports.ParameterName = ParameterName;
+exports.Expression = Expression;
+exports.PrefixOperator = PrefixOperator;
+exports.Suffix = Suffix;
+exports.SuffixOperator = SuffixOperator;
+exports.Primary = Primary;
+exports.Literal = Literal;
+exports.Handling = Handling;
+exports.HandlingExpression = HandlingExpression;
+exports.HandlingExpressionBody = HandlingExpressionBody;
+exports.HandlingExpressionLine = HandlingExpressionLine;
+exports.StructuralMapping = StructuralMapping;
+exports.JSArray = JSArray;
+exports.ArrayItem = ArrayItem;
+exports.JSObject = JSObject;
+exports.ObjectField = ObjectField;
+exports.Variable = Variable;
+exports.BooleanValue = BooleanValue;
+exports.NullValue = NullValue;
+exports.NumberValue = NumberValue;
+exports.StringValue = StringValue;
+exports.DoubleStringCharacter = DoubleStringCharacter;
+exports.EscapeSequence = EscapeSequence;
+exports.StringLiteral = StringLiteral;
+exports.RegExpLiteral = RegExpLiteral;
+exports.CharacterClassExpression = CharacterClassExpression;
+exports.RegExpCharacter = RegExpCharacter;
+exports.CharacterClass = CharacterClass;
+exports.CharacterClassCharacter = CharacterClassCharacter;
+exports.Quantifier = Quantifier;
+exports.Name = Name;
+exports.Arrow = Arrow;
+exports.Backslash = Backslash;
+exports.OpenBrace = OpenBrace;
+exports.CloseBrace = CloseBrace;
+exports.OpenBracket = OpenBracket;
+exports.CloseBracket = CloseBracket;
+exports.OpenParenthesis = OpenParenthesis;
+exports.CloseParenthesis = CloseParenthesis;
+exports.Indent = Indent;
+exports.Space = Space;
+exports.NonCommentEOS = NonCommentEOS;
+exports.EOS = EOS;
+exports.TripleBacktick = TripleBacktick;
+exports.TypeAnnotation = TypeAnnotation;
+exports.CodeBody = CodeBody;
 
-const Arrow$0 = $S($EXPECT($L10, fail, "Arrow \"->\""), $Q(Space))
-function Arrow(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Arrow", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Arrow", state, Arrow$0(state));
-    if (state.events) state.events.exit?.("Arrow", state, result, eventData);
-    return result;
-  } else {
-    const result = Arrow$0(state);
-    if (state.events) state.events.exit?.("Arrow", state, result, eventData);
-    return result;
-  }
-}
-
-const Backslash$0 = $EXPECT($L11, fail, "Backslash \"\\\\\\\\\"")
-function Backslash(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Backslash", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Backslash", state, Backslash$0(state));
-    if (state.events) state.events.exit?.("Backslash", state, result, eventData);
-    return result;
-  } else {
-    const result = Backslash$0(state);
-    if (state.events) state.events.exit?.("Backslash", state, result, eventData);
-    return result;
-  }
-}
-
-const OpenBrace$0 = $R$0($EXPECT($R15, fail, "OpenBrace /\\{\\s*/"))
-function OpenBrace(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("OpenBrace", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("OpenBrace", state, OpenBrace$0(state));
-    if (state.events) state.events.exit?.("OpenBrace", state, result, eventData);
-    return result;
-  } else {
-    const result = OpenBrace$0(state);
-    if (state.events) state.events.exit?.("OpenBrace", state, result, eventData);
-    return result;
-  }
-}
-
-const CloseBrace$0 = $R$0($EXPECT($R16, fail, "CloseBrace /\\}[ \\t]*/"))
-function CloseBrace(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CloseBrace", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CloseBrace", state, CloseBrace$0(state));
-    if (state.events) state.events.exit?.("CloseBrace", state, result, eventData);
-    return result;
-  } else {
-    const result = CloseBrace$0(state);
-    if (state.events) state.events.exit?.("CloseBrace", state, result, eventData);
-    return result;
-  }
-}
-
-const OpenBracket$0 = $R$0($EXPECT($R17, fail, "OpenBracket /\\[\\s*/"))
-function OpenBracket(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("OpenBracket", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("OpenBracket", state, OpenBracket$0(state));
-    if (state.events) state.events.exit?.("OpenBracket", state, result, eventData);
-    return result;
-  } else {
-    const result = OpenBracket$0(state);
-    if (state.events) state.events.exit?.("OpenBracket", state, result, eventData);
-    return result;
-  }
-}
-
-const CloseBracket$0 = $R$0($EXPECT($R18, fail, "CloseBracket /\\][ \\t]*/"))
-function CloseBracket(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CloseBracket", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CloseBracket", state, CloseBracket$0(state));
-    if (state.events) state.events.exit?.("CloseBracket", state, result, eventData);
-    return result;
-  } else {
-    const result = CloseBracket$0(state);
-    if (state.events) state.events.exit?.("CloseBracket", state, result, eventData);
-    return result;
-  }
-}
-
-const OpenParenthesis$0 = $R$0($EXPECT($R19, fail, "OpenParenthesis /\\([ \\t]*/"))
-function OpenParenthesis(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("OpenParenthesis", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("OpenParenthesis", state, OpenParenthesis$0(state));
-    if (state.events) state.events.exit?.("OpenParenthesis", state, result, eventData);
-    return result;
-  } else {
-    const result = OpenParenthesis$0(state);
-    if (state.events) state.events.exit?.("OpenParenthesis", state, result, eventData);
-    return result;
-  }
-}
-
-const CloseParenthesis$0 = $R$0($EXPECT($R20, fail, "CloseParenthesis /[ \\t]*\\)/"))
-function CloseParenthesis(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CloseParenthesis", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CloseParenthesis", state, CloseParenthesis$0(state));
-    if (state.events) state.events.exit?.("CloseParenthesis", state, result, eventData);
-    return result;
-  } else {
-    const result = CloseParenthesis$0(state);
-    if (state.events) state.events.exit?.("CloseParenthesis", state, result, eventData);
-    return result;
-  }
-}
-
-const Indent$0 = $EXPECT($L12, fail, "Indent \"  \"")
-function Indent(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Indent", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Indent", state, Indent$0(state));
-    if (state.events) state.events.exit?.("Indent", state, result, eventData);
-    return result;
-  } else {
-    const result = Indent$0(state);
-    if (state.events) state.events.exit?.("Indent", state, result, eventData);
-    return result;
-  }
-}
-
-const Space$0 = $R$0($EXPECT($R21, fail, "Space /[ \\t]+/"))
-function Space(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("Space", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("Space", state, Space$0(state));
-    if (state.events) state.events.exit?.("Space", state, result, eventData);
-    return result;
-  } else {
-    const result = Space$0(state);
-    if (state.events) state.events.exit?.("Space", state, result, eventData);
-    return result;
-  }
-}
-
-const NonCommentEOS$0 = $R$0($EXPECT($R22, fail, "NonCommentEOS /([ \\t]*(\\n|\\r\\n|\\r|$))+/"))
-function NonCommentEOS(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("NonCommentEOS", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("NonCommentEOS", state, NonCommentEOS$0(state));
-    if (state.events) state.events.exit?.("NonCommentEOS", state, result, eventData);
-    return result;
-  } else {
-    const result = NonCommentEOS$0(state);
-    if (state.events) state.events.exit?.("NonCommentEOS", state, result, eventData);
-    return result;
-  }
-}
-
-const EOS$0 = $R$0($EXPECT($R23, fail, "EOS /([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+/"))
-function EOS(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("EOS", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("EOS", state, EOS$0(state));
-    if (state.events) state.events.exit?.("EOS", state, result, eventData);
-    return result;
-  } else {
-    const result = EOS$0(state);
-    if (state.events) state.events.exit?.("EOS", state, result, eventData);
-    return result;
-  }
-}
-
-const TripleBacktick$0 = $EXPECT($L13, fail, "TripleBacktick \"```\"")
-function TripleBacktick(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("TripleBacktick", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("TripleBacktick", state, TripleBacktick$0(state));
-    if (state.events) state.events.exit?.("TripleBacktick", state, result, eventData);
-    return result;
-  } else {
-    const result = TripleBacktick$0(state);
-    if (state.events) state.events.exit?.("TripleBacktick", state, result, eventData);
-    return result;
-  }
-}
-
-const CodeBody$0 = $TEXT($EXPECT($R24, fail, "CodeBody /(?:(?:`(?!``))|[^`])*/"))
-function CodeBody(state) {
-  let eventData;
-  if (state.events) {
-    const result = state.events.enter?.("CodeBody", state);
-    if (result) {
-      if (result.cache) return result.cache;
-      eventData = result.data;
-    }
-  }
-  if (state.tokenize) {
-    const result = $TOKEN("CodeBody", state, CodeBody$0(state));
-    if (state.events) state.events.exit?.("CodeBody", state, result, eventData);
-    return result;
-  } else {
-    const result = CodeBody$0(state);
-    if (state.events) state.events.exit?.("CodeBody", state, result, eventData);
-    return result;
-  }
-}
-
-
-
-exports.parse = parse
-exports.default = { parse }
