@@ -5,7 +5,7 @@ import type {
   HeraAST
   HeraRules
   StructuralHandling
-} from ./machine.js
+} from ./hera-types.ts
 
 /**
 Convert HeraRules to a Hera source text
