@@ -93,8 +93,9 @@ export function $EXPECT<T>(parser: Parser<T>, expectation: string): Parser<T> {
   return function (ctx, state) {
     // NOTE: we don't need to use a stack because we're only tracking failures on
     // string and regex leaf nodes right now.
-    ctx.expectation = expectation
-    return parser(ctx, state);
+    const result = parser(ctx, state);
+    if (!result) ctx.fail(state.pos, expectation)
+    return result
   }
 }
 
@@ -102,7 +103,7 @@ export function $EXPECT<T>(parser: Parser<T>, expectation: string): Parser<T> {
  * Match a string literal.
  */
 export function $L<T extends string>(str: T): Parser<T> {
-  return function (ctx, state) {
+  return function (_ctx, state) {
     const { input, pos } = state,
       { length } = str,
       end = pos + length;
@@ -118,7 +119,6 @@ export function $L<T extends string>(str: T): Parser<T> {
       }
     }
 
-    ctx.fail(pos, ctx.expectation)
     return
   }
 }
@@ -127,7 +127,7 @@ export function $L<T extends string>(str: T): Parser<T> {
  * Match a regular expression (must be sticky).
  */
 export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
-  return function (ctx, state) {
+  return function (_ctx, state) {
     const { input, pos } = state
     regExp.lastIndex = state.pos
 
@@ -147,7 +147,6 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
       }
     }
 
-    ctx.fail(pos, ctx.expectation)
     return
   }
 }
