@@ -1,0 +1,230 @@
+Grammar
+  Statement* ->
+    const code = $1.filter(a => typeof a === "string")
+    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
+    rules[Symbol.for("code")] = code
+    return rules
+
+Statement
+  EOS? CodeBlock -> $2
+  EOS? Rule -> $2
+
+CodeBlock
+  TripleBacktick CodeBody TripleBacktick -> $2
+
+Rule
+  Name EOS RuleBody -> [$1, $3]
+
+RuleBody
+  ( Indent Choice )+ ->
+    var r = $1.map((a) => a[1])
+    if (r.length === 1) return r[0];
+    return ["/", r]
+
+Choice
+  Sequence Handling ->
+    if ($2 !== undefined) {
+      if (!$1.push)
+        $1 = ["S", [$1], $2]
+      else
+        $1.push($2)
+    }
+    return $1
+
+Sequence
+  Expression SequenceExpression+ ->
+    $2.unshift($1)
+    return ["S", $2]
+  Expression ChoiceExpression+ ->
+    $2.unshift($1)
+    return ["/", $2]
+  Expression
+
+SequenceExpression
+  Space Expression -> $2
+
+ChoiceExpression
+  Space "/" Space Expression -> $4
+
+ParameterName
+  ":" Name -> $2
+
+Expression
+  PrefixOperator? Suffix ParameterName? ->
+    var result = null
+    if ($1) result = [$1, $2]
+    else result = $2
+    if ($3)
+      return [{name: $3}, result]
+    return result
+
+PrefixOperator
+  [$&!]
+
+Suffix
+  Primary SuffixOperator? ->
+    if ($2) return [$2, $1]
+    else return $1
+
+SuffixOperator
+  [+?*]
+
+Primary
+  Name
+  Literal
+  OpenParenthesis Sequence CloseParenthesis -> $2
+
+Literal
+  StringLiteral
+  RegExpLiteral
+
+Handling
+  EOS ->
+    return undefined
+  Space* TypeAnnotation? Arrow HandlingExpression ->
+    if ($2) $4.t = $2
+    return $4
+
+HandlingExpression
+  EOS HandlingExpressionBody EOS? -> $2
+  StructuralMapping EOS -> $1
+
+HandlingExpressionBody
+  HandlingExpressionLine+ ->
+    return {
+      f: $1.join("").trimEnd(),
+      $loc,
+    }
+
+HandlingExpressionLine
+  Indent Indent $( [^\n\r]* NonCommentEOS ) -> $3
+
+StructuralMapping
+  StringValue ->
+    return JSON.parse(`"${$1}"`)
+  NumberValue
+  BooleanValue
+  NullValue
+  Variable -> {v: $1}
+  JSArray
+  JSObject
+
+JSArray
+  OpenBracket ArrayItem* CloseBracket -> $2
+
+ArrayItem
+  StructuralMapping /,\s*|\s*(?=\])/ -> $1
+
+JSObject
+  OpenBrace ObjectField* CloseBrace ->
+    return {
+      o: Object.fromEntries($2)
+    }
+
+ObjectField
+  ( StringValue / Name ) /:[ \t]*/ StructuralMapping /,\s*|\s*(?=\})/ -> [$1, $3]
+  Name /,\s*|\s*(?=\})/ -> [$1, {v: $1}]
+
+Variable
+  /\$(\d)/ ->
+    return parseInt($1, 10)
+  Name
+
+BooleanValue
+  "true" -> true
+  "false" -> false
+
+NullValue
+  "null" ->
+    return null
+  "undefined" ->
+    return {l: undefined}
+
+NumberValue
+  /0x[\da-fA-F]+/ ->
+    return parseInt($0, 16)
+  /[-+]?\d+(\.\d+)?/ ->
+    return parseFloat($0)
+
+StringValue
+  "\"" $DoubleStringCharacter* "\"" -> $2
+
+DoubleStringCharacter
+  [^"\\]+
+  EscapeSequence
+
+EscapeSequence
+  $( Backslash . )
+
+StringLiteral
+  StringValue -> ["L", $1]
+
+RegExpLiteral
+  "/" !Space $RegExpCharacter* "/" -> ["R", $3]
+  $CharacterClassExpression -> ["R", $1]
+  "." -> ["R", $1]
+
+CharacterClassExpression
+  CharacterClass+
+
+RegExpCharacter
+  [^\/\\]+
+  EscapeSequence
+
+CharacterClass
+  "[" CharacterClassCharacter* "]" Quantifier?
+
+CharacterClassCharacter
+  [^\]\\]+
+  EscapeSequence
+
+Quantifier
+  /[?+*]|\{\d+(,\d+)?\}/
+
+Name
+  [_a-zA-Z][_a-zA-Z0-9]*
+
+Arrow
+  "->" Space*
+
+Backslash
+  "\\"
+
+OpenBrace
+  /\{\s*/
+
+CloseBrace
+  /\}[ \t]*/
+
+OpenBracket
+  /\[\s*/
+
+CloseBracket
+  /\][ \t]*/
+
+OpenParenthesis
+  /\([ \t]*/
+
+CloseParenthesis
+  /[ \t]*\)/
+
+Indent
+  "  "
+
+Space
+  [ \t]+
+
+NonCommentEOS
+  /([ \t]*(\n|\r\n|\r|$))+/
+
+EOS
+  /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/
+
+TripleBacktick
+  "```"
+
+TypeAnnotation
+  "::" $/(?:(?!->).)*/ -> $2
+
+CodeBody
+  $/(?:(?:`(?!``))|[^`])*/
