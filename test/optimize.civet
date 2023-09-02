@@ -1,9 +1,10 @@
 { optimize } from ../source/optimizer.civet
+import type { HeraRules } from ../source/hera-types.ts
 assert from assert
 
-describe "AST Optimization", ->
-  it.only "should convert sequences of string literals into a single string literal", ->
-    ast := {
+describe.only "AST Optimization", ->
+  it "should convert sequences of string literals into a single string literal", ->
+    ast: HeraRules := {
       "Rule": [ "S", [
         [ "L", "a" ],
         [ "L", "b" ],
@@ -11,14 +12,14 @@ describe "AST Optimization", ->
       ]]
     }
 
-    optimized := {
+    optimized: HeraRules := {
       "Rule": [ "L", "abc" ]
     }
 
     assert.deepEqual optimize(ast), optimized
 
   it "should convert sequences of strings and regexps into a single regexp literal", ->
-    ast := {
+    ast: HeraRules := {
       "Rule": [ "S", [
         [ "L", "a" ],
         [ "R", "[^c]*" ],
@@ -26,27 +27,39 @@ describe "AST Optimization", ->
       ]]
     }
 
+    optimized: HeraRules := {
+      "Rule": [ "R", "a(?:[^c]*)c" ]
+    }
+
+    assert.deepEqual optimize(ast), optimized
 
   it "should optimize sequences and choices with aliases", ->
-    ast :=
-      "CharacterClass": [
-        "S",
-        [
-          [
-            "L",
-            "["
-          ],
-          [
-            "*",
-            "CharacterClassCharacter"
-          ],
-          [
-            "L",
-            "]"
-          ],
-          [
-            "?",
-            "Quantifier"
-          ]
-        ]
-      ],
+    ast: HeraRules :=
+      "CharacterClass": [ "S", [
+        [ "L", "[" ],
+        [ "*", "CharacterClassCharacter" ],
+        [ "L", "]" ],
+        [ "?", "Quantifier" ]
+      ]],
+      "CharacterClassCharacter": [ "/", [
+        [ "R", "[^\\]\\\\]+" ],
+        "EscapeSequence"
+      ]],
+      "EscapeSequence": [ "$", [ "S", [
+        "Backslash",
+        ["R", "." ]
+      ]]],
+      "Backslash": [ "L", "\\\\" ],
+      "Quantifier":
+        [ "R", "[?+*]|\\{\\d+(,\\d+)?\\}" ],
+
+    optimized: HeraRules := {
+      "CharacterClass": [ "R", "\\[(?:(?:[^\\]\\\\]+|\\\\\\\\(?:.))*)\\](?:(?:[?+*]|\\{\\d+(,\\d+)?\\})?)" ],
+      "CharacterClassCharacter": [ "R", "[^\\]\\\\]+|\\\\\\\\(?:.)" ],
+      "EscapeSequence": [ "R", "\\\\\\\\(?:.)" ],
+      "Backslash": [ "L", "\\\\" ],
+      "Quantifier":
+        [ "R", "[?+*]|\\{\\d+(,\\d+)?\\}" ],
+    }
+
+    assert.deepEqual optimize(ast), optimized

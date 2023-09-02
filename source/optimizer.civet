@@ -1,41 +1,148 @@
-import type { HeraAST, HeraRules, SequenceNode, TerminalNode } from "./hera-types.ts"
+import type { HeraAST, HeraRules, SequenceNode, SuffixNode } from "./hera-types.ts"
+
+optimizing := Symbol("optimizing")
+type Optimizing = typeof optimizing
 
 export optimize := (ast: HeraRules) ->
-  optimized := {} as HeraRules
+  optimized: Map<string, HeraAST | Optimizing> := new Map
 
-  Object.entries ast
-  .forEach ([ruleName, value]) ->
-    debugger
-    optimized[ruleName] = optimizeRule value
+  Object.keys ast
+  .forEach (ruleName) ->
+    optimizeRule ruleName, optimized, ast
 
-  return optimized
+  Object.fromEntries optimized
 
-optimizeRule := (production: HeraAST): HeraAST ->
-  if production <? "string" // named rule
-    return production
+optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >, ast: HeraRules): HeraAST ->
+  current := optimized.get(ruleName)
 
-  if production[0] == "L" // string literal
-    return production
+  if current is optimizing
+    throw new Error "Recursive rule detected: #{ruleName}"
 
-  if production[0] == "S" // sequence
-    if production.length == 2 // No handler on sequence
-      return optimizeSequence production
+  if current
+    return current
 
-  return production
+  optimized.set ruleName, optimizing
+  production := ast[ruleName]
 
-isStringLiteral := (item: HeraAST) ->
+  if production <? "string" // named rule alias
+    optimizedRule := optimizeRule production, ast[production], optimized, ast
+    optimized.set ruleName, optimizedRule
+    return optimizedRule
+
+  optimizedRule := optimizeProduction production, optimized, ast
+
+  optimized.set ruleName, optimizedRule
+  return optimizedRule
+
+isLiteral := (item: HeraAST) ->
   if item <? "string" or item.length !== 2
     return false
 
-  return item[0] == "L"
+  [ kind ] := item
 
-optimizeSequence := (node: SequenceNode): SequenceNode | TerminalNode ->
+  return kind is "L" or kind is "R"
+
+optimizeProduction := (production: HeraAST, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  if production <? "string"
+    return optimizeRule production, optimized, ast
+
+  switch production[0]
+    when "S" // sequence
+      optimizeSequence production, optimized, ast
+    when "/" // Ordered Choice
+      optimizeChoice production, optimized, ast
+    when "*", "?", "+" // Quantifiers
+      optimizeRepetition production, optimized, ast
+    when "!", "&" // Assertions
+      optimizeAssertion production, optimized, ast
+    when "$" // Raw Text TODO
+      optimizeProduction production[1], optimized, ast
+    when "L", "R"
+      production
+    else
+      throw new Error `Unknown production type: ${JSON.stringify(production[0])}`
+
+optimizeChoice := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
   items := node[1]
-  if items.every isStringLiteral
-    literalItems := items as ["L", string][]
-    return combineLiterals literalItems
+
+  if items.length is 0
+    return ["L", ""]
+
+  if items.length is 1
+    return optimizeProduction items[0], optimized, ast
+
+  optimizedItems := items.map (item) ->
+    optimizeProduction item, optimized, ast
+
+  if optimizedItems.every isLiteral
+    literalItems := optimizedItems as ["L" | "R", string][]
+    return combineLiteralChoice literalItems
 
   return node
 
-combineLiterals := (literals: ["L", string][]): ["L", string] ->
-  ["L", literals.map(([,s]) => s).join("")]
+optimizeRepetition := (node: SuffixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  [kind, item] := node
+
+  optimizedItem := optimizeProduction item, optimized, ast
+
+  if optimizedItem <? "string"
+    return node
+
+  if optimizedItem[0] is "R"
+    return ["R", `(?:${optimizedItem[1]})${kind}`]
+
+  if optimizedItem[0] is "L"
+    return ["R", `(?:${regExpEscape optimizedItem[1]})${kind}`]
+
+  return [ kind, optimizedItem ]
+
+optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  items := node[1]
+
+  if items.length is 0
+    return ["L", ""]
+
+  if items.length is 1
+    return optimizeProduction items[0], optimized, ast
+
+  optimizedItems := items.map (item) ->
+    optimizeProduction item, optimized, ast
+
+  if optimizedItems.every isLiteral
+    literalItems := optimizedItems as ["L" | "R", string][]
+    // If they are all string literals, we can combine them as string literals
+    if literalItems.every ([kind]) -> kind is "L"
+      return combineLiteralSequence "L", literalItems
+    else // if any of them are regex literals, we can combine them as regex literals, escaping the strings as needed
+      return combineLiteralSequence "R", literalItems
+
+  return node
+
+combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
+  [
+    "R",
+    literals.map ([k, s]) =>
+      if k is "R"
+        s
+      else
+        regExpEscape s
+    .join("|")
+  ]
+
+combineLiteralSequence := (kind: "L"|"R", literals: ["L" | "R", string][]): ["L" | "R", string] ->
+  if kind is "L"
+    [kind, literals.map(([,s]) => s).join("")]
+  else
+    [
+      kind,
+      literals.map ([k, s]) =>
+        if k is "R"
+          // Wrap in a group to prevent merging with adjacent literals
+          `(?:${s})`
+        else
+          regExpEscape s
+      .join("")
+    ]
+
+regExpEscape := (s: string): string ->
+  s.replace /[-\/\\^$*+?.()|[\]{}]/g, "\\$&"
