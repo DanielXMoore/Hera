@@ -1,0 +1,52 @@
+{ optimize } from ../source/optimizer.civet
+assert from assert
+
+describe "AST Optimization", ->
+  it.only "should convert sequences of string literals into a single string literal", ->
+    ast := {
+      "Rule": [ "S", [
+        [ "L", "a" ],
+        [ "L", "b" ],
+        [ "L", "c" ]
+      ]]
+    }
+
+    optimized := {
+      "Rule": [ "L", "abc" ]
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should convert sequences of strings and regexps into a single regexp literal", ->
+    ast := {
+      "Rule": [ "S", [
+        [ "L", "a" ],
+        [ "R", "[^c]*" ],
+        [ "L", "c" ]
+      ]]
+    }
+
+
+  it "should optimize sequences and choices with aliases", ->
+    ast :=
+      "CharacterClass": [
+        "S",
+        [
+          [
+            "L",
+            "["
+          ],
+          [
+            "*",
+            "CharacterClassCharacter"
+          ],
+          [
+            "L",
+            "]"
+          ],
+          [
+            "?",
+            "Quantifier"
+          ]
+        ]
+      ],

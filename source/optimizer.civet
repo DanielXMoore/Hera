@@ -1,0 +1,41 @@
+import type { HeraAST, HeraRules, SequenceNode, TerminalNode } from "./hera-types.ts"
+
+export optimize := (ast: HeraRules) ->
+  optimized := {} as HeraRules
+
+  Object.entries ast
+  .forEach ([ruleName, value]) ->
+    debugger
+    optimized[ruleName] = optimizeRule value
+
+  return optimized
+
+optimizeRule := (production: HeraAST): HeraAST ->
+  if production <? "string" // named rule
+    return production
+
+  if production[0] == "L" // string literal
+    return production
+
+  if production[0] == "S" // sequence
+    if production.length == 2 // No handler on sequence
+      return optimizeSequence production
+
+  return production
+
+isStringLiteral := (item: HeraAST) ->
+  if item <? "string" or item.length !== 2
+    return false
+
+  return item[0] == "L"
+
+optimizeSequence := (node: SequenceNode): SequenceNode | TerminalNode ->
+  items := node[1]
+  if items.every isStringLiteral
+    literalItems := items as ["L", string][]
+    return combineLiterals literalItems
+
+  return node
+
+combineLiterals := (literals: ["L", string][]): ["L", string] ->
+  ["L", literals.map(([,s]) => s).join("")]
