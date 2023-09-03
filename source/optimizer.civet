@@ -1,4 +1,4 @@
-import type { HeraAST, HeraRules, SequenceNode, SuffixNode } from "./hera-types.ts"
+import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode } from "./hera-types.ts"
 
 optimizing := Symbol("optimizing")
 type Optimizing = typeof optimizing
@@ -25,7 +25,7 @@ optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >
   production := ast[ruleName]
 
   if production <? "string" // named rule alias
-    optimizedRule := optimizeRule production, ast[production], optimized, ast
+    optimizedRule := optimizeRule production, optimized, ast
     optimized.set ruleName, optimizedRule
     return optimizedRule
 
@@ -93,6 +93,24 @@ optimizeRepetition := (node: SuffixNode, optimized: Map<string, HeraAST | Optimi
 
   if optimizedItem[0] is "L"
     return ["R", `(?:${regExpEscape optimizedItem[1]})${kind}`]
+
+  return [ kind, optimizedItem ]
+
+optimizeAssertion := (node: PrefixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  [kind, item] := node
+
+  assertionType := kind is "&" ? "=" : "!"
+
+  optimizedItem := optimizeProduction item, optimized, ast
+
+  if optimizedItem <? "string"
+    return node
+
+  if optimizedItem[0] is "R"
+    return ["R", `(?${assertionType}${optimizedItem[1]})`]
+
+  if optimizedItem[0] is "L"
+    return ["R", `(?${assertionType}${regExpEscape optimizedItem[1]})`]
 
   return [ kind, optimizedItem ]
 
