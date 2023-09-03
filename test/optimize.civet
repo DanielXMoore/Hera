@@ -63,3 +63,22 @@ describe.only "AST Optimization", ->
     }
 
     assert.deepEqual optimize(ast), optimized
+
+  it "should optimize what it can even with cyclic rules", ->
+    ast: HeraRules :=
+      "Rule": [ "S", [
+        [ "L", "(" ],
+        [ "L", " " ],
+        "Rule",
+        [ "L", " " ],
+        [ "L", ")" ],
+      ]]
+
+    optimized: HeraRules :=
+      "Rule": [ "S", [
+        [ "L", "( " ],
+        "Rule",
+        [ "L", " )" ],
+      ]]
+
+    assert.deepEqual optimize(ast), optimized

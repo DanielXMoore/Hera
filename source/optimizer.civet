@@ -6,17 +6,16 @@ type Optimizing = typeof optimizing
 export optimize := (ast: HeraRules) ->
   optimized: Map<string, HeraAST | Optimizing> := new Map
 
-  Object.keys ast
-  .forEach (ruleName) ->
-    optimizeRule ruleName, optimized, ast
-
+  rules := Object.keys ast
+  optimizeRule rules[0], optimized, ast
   Object.fromEntries optimized
 
 optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >, ast: HeraRules): HeraAST ->
   current := optimized.get(ruleName)
 
   if current is optimizing
-    throw new Error "Recursive rule detected: #{ruleName}"
+    // Cyclic rule so we just return the rule name string
+    return ruleName
 
   if current
     return current
@@ -117,24 +116,44 @@ optimizeAssertion := (node: PrefixNode, optimized: Map<string, HeraAST | Optimiz
 optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
   items := node[1]
 
-  if items.length is 0
-    return ["L", ""]
-
-  if items.length is 1
-    return optimizeProduction items[0], optimized, ast
-
   optimizedItems := items.map (item) ->
     optimizeProduction item, optimized, ast
 
-  if optimizedItems.every isLiteral
-    literalItems := optimizedItems as ["L" | "R", string][]
-    // If they are all string literals, we can combine them as string literals
-    if literalItems.every ([kind]) -> kind is "L"
-      return combineLiteralSequence "L", literalItems
-    else // if any of them are regex literals, we can combine them as regex literals, escaping the strings as needed
-      return combineLiteralSequence "R", literalItems
+  // Join runs of adjacent literals
+  { length } := items
+  i .= 0
+  resultItems := []
+  pendingItems := []
+  while i < length
+    do
+      item := optimizedItems[i]
+      if isLiteral item
+        pendingItems.push item
+        i++
+      else
+        break
+    while i < length
 
-  return node
+    if pendingItems.length > 1
+      //@ts-ignore
+      resultItems.push combineLiteralSequence pendingItems
+    else if pendingItems.length is 1
+      resultItems.push pendingItems[0]
+
+    pendingItems.length = 0
+
+    if i < length
+      item := optimizedItems[i]
+      resultItems.push item
+      i++
+
+  if resultItems.length is 0
+    return ["L", ""]
+
+  if resultItems.length is 1
+    return resultItems[0]
+
+  return ["S", resultItems]
 
 combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
   [
@@ -147,7 +166,9 @@ combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] -
     .join("|")
   ]
 
-combineLiteralSequence := (kind: "L"|"R", literals: ["L" | "R", string][]): ["L" | "R", string] ->
+combineLiteralSequence := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
+  kind := literals.every(([k]) -> k is "L") ? "L" : "R"
+
   if kind is "L"
     [kind, literals.map(([,s]) => s).join("")]
   else
