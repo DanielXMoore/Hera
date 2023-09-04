@@ -1,5 +1,6 @@
 { optimize } from ../source/optimizer.civet
 import type { HeraRules } from ../source/hera-types.ts
+fs from fs
 assert from assert
 
 describe.only "AST Optimization", ->
@@ -82,3 +83,37 @@ describe.only "AST Optimization", ->
       ]]
 
     assert.deepEqual optimize(ast), optimized
+
+  it.only "should optimize shared prefixes", ->
+    ast: HeraRules := {
+      "Statement": [ "/", [
+        [ "S", [
+          [ "?", "EOS" ],
+          "CodeBlock"
+        ], { "v": 2 } ],
+        [ "S", [
+          [ "?", "EOS" ],
+          "Rule"
+        ], { "v": 2 } ]
+      ] ],
+      "EOS": [ "R", "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+" ],
+      "CodeBlock": ["L", "codeblock"],
+      "Rule": [ "L", "rule" ],
+    }
+
+    optimized := {
+      // TODO: use () to capture the { v: 2 } output
+      // TODO: re-index handler to the lowest capture group
+      // TODO: consolidate shared prefixes (maybe as an ast transform pass)
+      "Statement": [ "R", "(?:(?:([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+)?)(codeblock|rule)", { "v": 1 } ],
+      "EOS": [ "R", "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+" ],
+      "CodeBlock": ["L", "codeblock"],
+      "Rule": [ "L", "rule" ],
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should optimize Hera AST", ->
+    ast := JSON.parse fs.readFileSync("source/rules.json", "utf8")
+
+    fs.writeFileSync "opt.json", JSON.stringify(optimize(ast), null, 2)
