@@ -1,4 +1,4 @@
-import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode } from "./hera-types.ts"
+import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode, Handler, PositionalVariable } from "./hera-types.ts"
 
 optimizing := Symbol("optimizing")
 type Optimizing = typeof optimizing
@@ -80,7 +80,7 @@ optimizeChoice := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizi
   return node
 
 optimizeRepetition := (node: SuffixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
-  [kind, item] := node
+  [kind, item, handler] := node
 
   optimizedItem := optimizeProduction item, optimized, ast
 
@@ -93,7 +93,7 @@ optimizeRepetition := (node: SuffixNode, optimized: Map<string, HeraAST | Optimi
   if optimizedItem[0] is "L"
     return ["R", `(?:${regExpEscape optimizedItem[1]})${kind}`]
 
-  return [ kind, optimizedItem ]
+  return [ kind, optimizedItem, handler ]
 
 optimizeAssertion := (node: PrefixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
   [kind, item] := node
@@ -115,6 +115,9 @@ optimizeAssertion := (node: PrefixNode, optimized: Map<string, HeraAST | Optimiz
 
 optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
   items := node[1]
+  handling := node[2]
+
+  captureIndex .= handling and "v" in handling ? handling.v : -1
 
   optimizedItems := items.map (item) ->
     optimizeProduction item, optimized, ast
@@ -136,7 +139,7 @@ optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimi
 
     if pendingItems.length > 1
       //@ts-ignore
-      resultItems.push combineLiteralSequence pendingItems
+      resultItems.push combineLiteralSequence pendingItems, captureIndex
     else if pendingItems.length is 1
       resultItems.push pendingItems[0]
 
@@ -153,7 +156,11 @@ optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimi
   if resultItems.length is 1
     return resultItems[0]
 
-  return ["S", resultItems]
+  // TODO: remap handling
+  if handling
+    ["S", resultItems, handling]
+  else
+    ["S", resultItems]
 
 combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
   [
@@ -166,22 +173,32 @@ combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] -
     .join("|")
   ]
 
-combineLiteralSequence := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
+combineLiteralSequence := (literals: ["L" | "R", string][], captureIndex: number): ["L" | "R", string, Handler?] ->
   kind := literals.every(([k]) -> k is "L") ? "L" : "R"
+  let result: ["L" | "R", string, { v: PositionalVariable }?]
 
   if kind is "L"
-    [kind, literals.map(([,s]) => s).join("")]
+    result = [kind, literals.map(([,s]) => s).join("")]
   else
-    [
+    result = [
       kind,
-      literals.map ([k, s]) =>
+      literals.map ([k, s], i) =>
+        noCapture := captureIndex is i + 1 ? "" : "?:"
+        // Wrap in a group to prevent merging with adjacent literals
         if k is "R"
-          // Wrap in a group to prevent merging with adjacent literals
-          `(?:${s})`
+          `(${noCapture}${s})`
         else
-          regExpEscape s
-      .join("")
+          if noCapture
+            regExpEscape s
+          else
+            `(${regExpEscape s})`
+      .join(""),
     ]
+
+  if captureIndex > 0
+    result.push v: 1
+
+  return result
 
 regExpEscape := (s: string): string ->
   s.replace /[-\/\\^$*+?.()|[\]{}]/g, "\\$&"

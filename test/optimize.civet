@@ -66,6 +66,7 @@ describe.only "AST Optimization", ->
     assert.deepEqual optimize(ast), optimized
 
   it "should optimize what it can even with cyclic rules", ->
+    debugger
     ast: HeraRules :=
       "Rule": [ "S", [
         [ "L", "(" ],
@@ -84,7 +85,24 @@ describe.only "AST Optimization", ->
 
     assert.deepEqual optimize(ast), optimized
 
-  it.only "should optimize shared prefixes", ->
+  it "should optimize with handler", ->
+    ast: HeraRules :=
+      "Codeblock": [ "S", [
+        "TripleBacktick",
+        "CodeBody",
+        "TripleBacktick"
+      ], { v: 2 } ],
+      "TripleBacktick": [ "L", "```" ],
+      "CodeBody": [ "R", "(?:(?:`(?!``))|[^`])*" ],
+
+    optimized: HeraRules :=
+      "Codeblock": [ "R", "```((?:(?:`(?!``))|[^`])*)```", { v: 1 } ],
+      "TripleBacktick": [ "L", "```" ],
+      "CodeBody": [ "R", "(?:(?:`(?!``))|[^`])*" ],
+
+    assert.deepEqual optimize(ast), optimized
+
+  it.skip "should optimize shared prefixes", ->
     ast: HeraRules := {
       "Statement": [ "/", [
         [ "S", [
