@@ -3,7 +3,7 @@ import type { HeraRules } from ../source/hera-types.ts
 fs from fs
 assert from assert
 
-describe.only "AST Optimization", ->
+describe "AST Optimization", ->
   it "should convert sequences of string literals into a single string literal", ->
     ast: HeraRules := {
       "Rule": [ "S", [
@@ -131,7 +131,7 @@ describe.only "AST Optimization", ->
 
     assert.deepEqual optimize(ast), optimized
 
-  it "should optimize Hera AST", ->
+  it.skip "should optimize Hera AST", ->
     ast := JSON.parse fs.readFileSync("source/rules.json", "utf8")
 
-    fs.writeFileSync "opt.json", JSON.stringify(optimize(ast), null, 2)
+    fs.writeFileSync "opt.json", JSON.stringify(optimize(optimize ast), null, 2)

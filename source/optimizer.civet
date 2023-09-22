@@ -1,4 +1,4 @@
-import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode, Handler, PositionalVariable } from "./hera-types.ts"
+import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode, Handler, PositionalVariable, TerminalNode } from "./hera-types.ts"
 
 optimizing := Symbol("optimizing")
 type Optimizing = typeof optimizing
@@ -8,7 +8,7 @@ export optimize := (ast: HeraRules) ->
 
   rules := Object.keys ast
   optimizeRule rules[0], optimized, ast
-  Object.fromEntries optimized
+  Object.fromEntries(optimized) as HeraRules
 
 optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >, ast: HeraRules): HeraAST ->
   current := optimized.get(ruleName)
@@ -33,7 +33,7 @@ optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >
   optimized.set ruleName, optimizedRule
   return optimizedRule
 
-isLiteral := (item: HeraAST) ->
+isSimpleLiteral := (item: HeraAST) ->
   if item <? "string" or item.length !== 2
     return false
 
@@ -64,17 +64,14 @@ optimizeProduction := (production: HeraAST, optimized: Map<string, HeraAST | Opt
 optimizeChoice := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
   items := node[1]
 
-  if items.length is 0
-    return ["L", ""]
-
   if items.length is 1
     return optimizeProduction items[0], optimized, ast
 
   optimizedItems := items.map (item) ->
     optimizeProduction item, optimized, ast
 
-  if optimizedItems.every isLiteral
-    literalItems := optimizedItems as ["L" | "R", string][]
+  if optimizedItems.every isSimpleLiteral
+    literalItems := optimizedItems as TerminalNode[]
     return combineLiteralChoice literalItems
 
   return node
@@ -117,7 +114,11 @@ optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimi
   items := node[1]
   handling := node[2]
 
-  captureIndex .= handling and "v" in handling ? handling.v : -1
+  // TODO: Find all handling captures
+  captureOffset .= 0
+  captureIndices := new Set<number>
+  if handling and "v" in handling
+    captureIndices.add handling.v
 
   optimizedItems := items.map (item) ->
     optimizeProduction item, optimized, ast
@@ -126,32 +127,34 @@ optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimi
   { length } := items
   i .= 0
   resultItems := []
-  pendingItems := []
+  pendingItems: TerminalNode[] := []
   while i < length
     do
       item := optimizedItems[i]
-      if isLiteral item
-        pendingItems.push item
+      if isSimpleLiteral item
+        pendingItems.push item as TerminalNode
         i++
       else
         break
     while i < length
 
     if pendingItems.length > 1
-      //@ts-ignore
-      resultItems.push combineLiteralSequence pendingItems, captureIndex
+      // TODO: track capture offset
+      combinedSequence := combineLiteralSequence pendingItems, captureIndices, captureOffset
+      if captureIndices.size > 0
+        // TODO: Better remapping
+        combinedSequence[2] = v: 1
+      resultItems.push combinedSequence
     else if pendingItems.length is 1
       resultItems.push pendingItems[0]
 
+    captureOffset += pendingItems.length
     pendingItems.length = 0
 
     if i < length
       item := optimizedItems[i]
       resultItems.push item
       i++
-
-  if resultItems.length is 0
-    return ["L", ""]
 
   if resultItems.length is 1
     return resultItems[0]
@@ -162,10 +165,14 @@ optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimi
   else
     ["S", resultItems]
 
-combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] ->
+/**
+ * Combines adjacent literal choices into a single regex using alternation
+ */
+combineLiteralChoice := (literals: TerminalNode[]): TerminalNode ->
   [
     "R",
     literals.map ([k, s]) =>
+      // I think it's fine not to wrap since the alternation bar will separate regexes
       if k is "R"
         s
       else
@@ -173,7 +180,12 @@ combineLiteralChoice := (literals: ["L" | "R", string][]): ["L" | "R", string] -
     .join("|")
   ]
 
-combineLiteralSequence := (literals: ["L" | "R", string][], captureIndex: number): ["L" | "R", string, Handler?] ->
+/**
+ * Combines adjacent sequence literals into a string literal matcher if they are all string literals
+ * or a regex literal matcher if some are regex literals.
+ * Adds capture groups so that the sequence handler can remap bindings.
+ */
+combineLiteralSequence := (literals: TerminalNode[], captureIndices?: Set<number>, captureOffset = 0): TerminalNode ->
   kind := literals.every(([k]) -> k is "L") ? "L" : "R"
   let result: ["L" | "R", string, { v: PositionalVariable }?]
 
@@ -183,8 +195,8 @@ combineLiteralSequence := (literals: ["L" | "R", string][], captureIndex: number
     result = [
       kind,
       literals.map ([k, s], i) =>
-        noCapture := captureIndex is i + 1 ? "" : "?:"
-        // Wrap in a group to prevent merging with adjacent literals
+        noCapture := captureIndices?.has(captureOffset + i + 1) ? "" : "?:"
+        // Wrap regexp in a group to prevent merging with adjacent literals
         if k is "R"
           `(${noCapture}${s})`
         else
@@ -194,9 +206,6 @@ combineLiteralSequence := (literals: ["L" | "R", string][], captureIndex: number
             `(${regExpEscape s})`
       .join(""),
     ]
-
-  if captureIndex > 0
-    result.push v: 1
 
   return result
 
