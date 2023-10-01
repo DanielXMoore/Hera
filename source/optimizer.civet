@@ -1,0 +1,213 @@
+import type { HeraAST, HeraRules, SequenceNode, SuffixNode, PrefixNode, Handler, PositionalVariable, TerminalNode } from "./hera-types.ts"
+
+optimizing := Symbol("optimizing")
+type Optimizing = typeof optimizing
+
+export optimize := (ast: HeraRules) ->
+  optimized: Map<string, HeraAST | Optimizing> := new Map
+
+  rules := Object.keys ast
+  optimizeRule rules[0], optimized, ast
+  Object.fromEntries(optimized) as HeraRules
+
+optimizeRule := (ruleName: string, optimized: Map<string, HeraAST | Optimizing >, ast: HeraRules): HeraAST ->
+  current := optimized.get(ruleName)
+
+  if current is optimizing
+    // Cyclic rule so we just return the rule name string
+    return ruleName
+
+  if current
+    return current
+
+  optimized.set ruleName, optimizing
+  production := ast[ruleName]
+
+  if production <? "string" // named rule alias
+    optimizedRule := optimizeRule production, optimized, ast
+    optimized.set ruleName, optimizedRule
+    return optimizedRule
+
+  optimizedRule := optimizeProduction production, optimized, ast
+
+  optimized.set ruleName, optimizedRule
+  return optimizedRule
+
+isSimpleLiteral := (item: HeraAST) ->
+  if item <? "string" or item.length !== 2
+    return false
+
+  [ kind ] := item
+
+  return kind is "L" or kind is "R"
+
+optimizeProduction := (production: HeraAST, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  if production <? "string"
+    return optimizeRule production, optimized, ast
+
+  switch production[0]
+    when "S" // sequence
+      optimizeSequence production, optimized, ast
+    when "/" // Ordered Choice
+      optimizeChoice production, optimized, ast
+    when "*", "?", "+" // Quantifiers
+      optimizeRepetition production, optimized, ast
+    when "!", "&" // Assertions
+      optimizeAssertion production, optimized, ast
+    when "$" // Raw Text TODO
+      optimizeProduction production[1], optimized, ast
+    when "L", "R"
+      production
+    else
+      throw new Error `Unknown production type: ${JSON.stringify(production[0])}`
+
+optimizeChoice := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  items := node[1]
+
+  if items.length is 1
+    return optimizeProduction items[0], optimized, ast
+
+  optimizedItems := items.map (item) ->
+    optimizeProduction item, optimized, ast
+
+  if optimizedItems.every isSimpleLiteral
+    literalItems := optimizedItems as TerminalNode[]
+    return combineLiteralChoice literalItems
+
+  return node
+
+optimizeRepetition := (node: SuffixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  [kind, item, handler] := node
+
+  optimizedItem := optimizeProduction item, optimized, ast
+
+  if optimizedItem <? "string"
+    return node
+
+  if optimizedItem[0] is "R"
+    return ["R", `(?:${optimizedItem[1]})${kind}`]
+
+  if optimizedItem[0] is "L"
+    return ["R", `(?:${regExpEscape optimizedItem[1]})${kind}`]
+
+  return [ kind, optimizedItem, handler ]
+
+optimizeAssertion := (node: PrefixNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  [kind, item] := node
+
+  assertionType := kind is "&" ? "=" : "!"
+
+  optimizedItem := optimizeProduction item, optimized, ast
+
+  if optimizedItem <? "string"
+    return node
+
+  if optimizedItem[0] is "R"
+    return ["R", `(?${assertionType}${optimizedItem[1]})`]
+
+  if optimizedItem[0] is "L"
+    return ["R", `(?${assertionType}${regExpEscape optimizedItem[1]})`]
+
+  return [ kind, optimizedItem ]
+
+optimizeSequence := (node: SequenceNode, optimized: Map<string, HeraAST | Optimizing>, ast: HeraRules): HeraAST ->
+  items := node[1]
+  handling := node[2]
+
+  // TODO: Find all handling captures
+  captureOffset .= 0
+  captureIndices := new Set<number>
+  if handling and "v" in handling
+    captureIndices.add handling.v
+
+  optimizedItems := items.map (item) ->
+    optimizeProduction item, optimized, ast
+
+  // Join runs of adjacent literals
+  { length } := items
+  i .= 0
+  resultItems := []
+  pendingItems: TerminalNode[] := []
+  while i < length
+    do
+      item := optimizedItems[i]
+      if isSimpleLiteral item
+        pendingItems.push item as TerminalNode
+        i++
+      else
+        break
+    while i < length
+
+    if pendingItems.length > 1
+      // TODO: track capture offset
+      combinedSequence := combineLiteralSequence pendingItems, captureIndices, captureOffset
+      if captureIndices.size > 0
+        // TODO: Better remapping
+        combinedSequence[2] = v: 1
+      resultItems.push combinedSequence
+    else if pendingItems.length is 1
+      resultItems.push pendingItems[0]
+
+    captureOffset += pendingItems.length
+    pendingItems.length = 0
+
+    if i < length
+      item := optimizedItems[i]
+      resultItems.push item
+      i++
+
+  if resultItems.length is 1
+    return resultItems[0]
+
+  // TODO: remap handling
+  if handling
+    ["S", resultItems, handling]
+  else
+    ["S", resultItems]
+
+/**
+ * Combines adjacent literal choices into a single regex using alternation
+ */
+combineLiteralChoice := (literals: TerminalNode[]): TerminalNode ->
+  [
+    "R",
+    literals.map ([k, s]) =>
+      // I think it's fine not to wrap since the alternation bar will separate regexes
+      if k is "R"
+        s
+      else
+        regExpEscape s
+    .join("|")
+  ]
+
+/**
+ * Combines adjacent sequence literals into a string literal matcher if they are all string literals
+ * or a regex literal matcher if some are regex literals.
+ * Adds capture groups so that the sequence handler can remap bindings.
+ */
+combineLiteralSequence := (literals: TerminalNode[], captureIndices?: Set<number>, captureOffset = 0): TerminalNode ->
+  kind := literals.every(([k]) -> k is "L") ? "L" : "R"
+  let result: ["L" | "R", string, { v: PositionalVariable }?]
+
+  if kind is "L"
+    result = [kind, literals.map(([,s]) => s).join("")]
+  else
+    result = [
+      kind,
+      literals.map ([k, s], i) =>
+        noCapture := captureIndices?.has(captureOffset + i + 1) ? "" : "?:"
+        // Wrap regexp in a group to prevent merging with adjacent literals
+        if k is "R"
+          `(${noCapture}${s})`
+        else
+          if noCapture
+            regExpEscape s
+          else
+            `(${regExpEscape s})`
+      .join(""),
+    ]
+
+  return result
+
+regExpEscape := (s: string): string ->
+  s.replace /[-\/\\^$*+?.()|[\]{}]/g, "\\$&"

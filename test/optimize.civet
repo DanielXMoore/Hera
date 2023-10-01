@@ -1,0 +1,137 @@
+{ optimize } from ../source/optimizer.civet
+import type { HeraRules } from ../source/hera-types.ts
+fs from fs
+assert from assert
+
+describe "AST Optimization", ->
+  it "should convert sequences of string literals into a single string literal", ->
+    ast: HeraRules := {
+      "Rule": [ "S", [
+        [ "L", "a" ],
+        [ "L", "b" ],
+        [ "L", "c" ]
+      ]]
+    }
+
+    optimized: HeraRules := {
+      "Rule": [ "L", "abc" ]
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should convert sequences of strings and regexps into a single regexp literal", ->
+    ast: HeraRules := {
+      "Rule": [ "S", [
+        [ "L", "a" ],
+        [ "R", "[^c]*" ],
+        [ "L", "c" ]
+      ]]
+    }
+
+    optimized: HeraRules := {
+      "Rule": [ "R", "a(?:[^c]*)c" ]
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should optimize sequences and choices with aliases", ->
+    ast: HeraRules :=
+      "CharacterClass": [ "S", [
+        [ "L", "[" ],
+        [ "*", "CharacterClassCharacter" ],
+        [ "L", "]" ],
+        [ "?", "Quantifier" ]
+      ]],
+      "CharacterClassCharacter": [ "/", [
+        [ "R", "[^\\]\\\\]+" ],
+        "EscapeSequence"
+      ]],
+      "EscapeSequence": [ "$", [ "S", [
+        "Backslash",
+        ["R", "." ]
+      ]]],
+      "Backslash": [ "L", "\\\\" ],
+      "Quantifier":
+        [ "R", "[?+*]|\\{\\d+(,\\d+)?\\}" ],
+
+    optimized: HeraRules := {
+      "CharacterClass": [ "R", "\\[(?:(?:[^\\]\\\\]+|\\\\\\\\(?:.))*)\\](?:(?:[?+*]|\\{\\d+(,\\d+)?\\})?)" ],
+      "CharacterClassCharacter": [ "R", "[^\\]\\\\]+|\\\\\\\\(?:.)" ],
+      "EscapeSequence": [ "R", "\\\\\\\\(?:.)" ],
+      "Backslash": [ "L", "\\\\" ],
+      "Quantifier":
+        [ "R", "[?+*]|\\{\\d+(,\\d+)?\\}" ],
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should optimize what it can even with cyclic rules", ->
+    debugger
+    ast: HeraRules :=
+      "Rule": [ "S", [
+        [ "L", "(" ],
+        [ "L", " " ],
+        "Rule",
+        [ "L", " " ],
+        [ "L", ")" ],
+      ]]
+
+    optimized: HeraRules :=
+      "Rule": [ "S", [
+        [ "L", "( " ],
+        "Rule",
+        [ "L", " )" ],
+      ]]
+
+    assert.deepEqual optimize(ast), optimized
+
+  it "should optimize with handler", ->
+    ast: HeraRules :=
+      "Codeblock": [ "S", [
+        "TripleBacktick",
+        "CodeBody",
+        "TripleBacktick"
+      ], { v: 2 } ],
+      "TripleBacktick": [ "L", "```" ],
+      "CodeBody": [ "R", "(?:(?:`(?!``))|[^`])*" ],
+
+    optimized: HeraRules :=
+      "Codeblock": [ "R", "```((?:(?:`(?!``))|[^`])*)```", { v: 1 } ],
+      "TripleBacktick": [ "L", "```" ],
+      "CodeBody": [ "R", "(?:(?:`(?!``))|[^`])*" ],
+
+    assert.deepEqual optimize(ast), optimized
+
+  it.skip "should optimize shared prefixes", ->
+    ast: HeraRules := {
+      "Statement": [ "/", [
+        [ "S", [
+          [ "?", "EOS" ],
+          "CodeBlock"
+        ], { "v": 2 } ],
+        [ "S", [
+          [ "?", "EOS" ],
+          "Rule"
+        ], { "v": 2 } ]
+      ] ],
+      "EOS": [ "R", "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+" ],
+      "CodeBlock": ["L", "codeblock"],
+      "Rule": [ "L", "rule" ],
+    }
+
+    optimized := {
+      // TODO: use () to capture the { v: 2 } output
+      // TODO: re-index handler to the lowest capture group
+      // TODO: consolidate shared prefixes (maybe as an ast transform pass)
+      "Statement": [ "R", "(?:(?:([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+)?)(codeblock|rule)", { "v": 1 } ],
+      "EOS": [ "R", "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+" ],
+      "CodeBlock": ["L", "codeblock"],
+      "Rule": [ "L", "rule" ],
+    }
+
+    assert.deepEqual optimize(ast), optimized
+
+  it.skip "should optimize Hera AST", ->
+    ast := JSON.parse fs.readFileSync("source/rules.json", "utf8")
+
+    fs.writeFileSync "opt.json", JSON.stringify(optimize(optimize ast), null, 2)

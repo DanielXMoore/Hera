@@ -30,6 +30,7 @@
   },
   "mocha": {
     "extension": [
+      "civet",
       "coffee"
     ],
     "require": [
