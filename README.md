@@ -22,21 +22,25 @@ npm install @danielx/hera
 ```
 
 ```javascript
-Hera = require("hera")
-fs = require("fs")
+import Hera from "@danielx/hera"
+import { readFileSync, writeFileSync } from "fs"
 
-source = fs.readFileSync("cool-grammar.hera")
+const filename = "cool-grammar.hera"
+const source = readFileSync(filename, "utf-8")
 
 rules = Hera.parse(source, {
-  filename: path
+  filename
 })
 
 // Generate parser.js source code
-parserSource = Hera.generate(rules)
-fs.writeFile("cool-parser.js", parserSource)
+parserSource = Hera.compile(rules)
+writeFileSync("cool-parser.js", parserSource)
+
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
 parser = require("./cool-parser")
 // or generate parser object
-parser = Hera.generate(rules, true)
+parser = Hera.generate(source)
 
 parser.parse("text that my cool parser should parse")
 
