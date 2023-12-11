@@ -1,5 +1,5 @@
 import assert from "assert"
-import hera, { compile, generate } from "../source/main.civet"
+import hera, { compile, generate, modImport } from "../source/main.civet"
 
 test = it
 
@@ -787,3 +787,12 @@ describe "Hera", ->
           value: "a"
         }, "the data"]
       ]
+
+  describe "modImport", ->
+    it "should generate module", ->
+      {parse} = await modImport """
+        Rule
+          "a"
+      """
+
+      assert parse("a")

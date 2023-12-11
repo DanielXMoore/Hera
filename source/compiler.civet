@@ -3,11 +3,12 @@
 import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 
 export type CompilerOptions = {
-  filename: string
-  inlineMap: boolean
-  source: string
-  types: boolean
+  filename?: string
+  inlineMap?: boolean
+  source?: string
+  types?: boolean
   libPath?: string | undefined
+  module?: boolean
 }
 
 strDefs: string[] := []
@@ -266,15 +267,15 @@ compileRulesObject := (ruleNames: string[]) ->
     ${meat}
   }`
 
-compileExports := (options: CompilerOptions, ruleNames: string[]) ->
-  if options.types
+compileExports := (ruleNames: string[], module: boolean) ->
+  if module
     meat := ruleNames.map (name) ->
       `  ${name}`
     .join(",\n")
 
     return `export {\n${meat}\n}`
-  else
-    ruleNames.map (name) ->
+
+  return ruleNames.map (name) ->
       `exports.${name} = ${name};`
     .join("\n")
 
@@ -309,7 +310,10 @@ defaultOptions: CompilerOptions :=
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   options := { ...defaultOptions, ...maybeOptions }
 
-  { types } := options
+  strDefs.length = 0
+  reDefs.length = 0
+
+  { types, module } := options
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
@@ -330,8 +334,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
-  head := (types ? tsHead : jsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
-  tail := (types ? tsTail : jsTail).replace("\"./machine.js\"", JSON.stringify(libPath))
+  head := (module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  tail := types ? tsTail : jsTail
+  exp := (module ? mjsExport : cjsExport)
 
   code := generate [
     head
@@ -344,7 +349,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
     "\n\n"
     tail
     "\n\n"
-    compileExports(options, ruleNames)
+    exp
+    "\n\n"
+    compileExports(ruleNames, !!module)
     "\n\n"
     //@ts-ignore
     rules[Symbol.for("code")]
@@ -409,7 +416,7 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
   /* c8 ignore next */
   throw new Error "unknown node type"
 
-jsHead := """
+cjsHead := """
   const {
     $C,
     $E,
@@ -429,9 +436,7 @@ jsHead := """
     $TS,
     $TV,
     $Y,
-    HeraGrammar,
     Parser,
-    ParseState,
     ParserContext,
     ParserOptions,
     Validator
@@ -468,12 +473,14 @@ jsTail := """
       }
     }
   }())
+"""
 
+cjsExport := """
   exports.default = parser
   exports.parse = parser.parse
 """
 
-tsHead := """
+mjsHead := """
   import {
     $C,
     $E,
@@ -493,13 +500,8 @@ tsHead := """
     $TS,
     $TV,
     $Y,
-    HeraGrammar,
-    Parser,
-    ParseState,
-    ParserContext,
-    ParserOptions,
     Validator
-  } from "./machine.ts"
+  } from "./machine.js"
 
 """
 
@@ -532,7 +534,9 @@ tsTail := """
       }
     }
   }())
+"""
 
+mjsExport := """
   export default parser
   export const { parse } = parser
 """
