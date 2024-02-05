@@ -477,7 +477,7 @@ jsTail := """
 
 cjsExport := """
   exports.default = parser
-  exports.parse = parser.parse
+  const parse = exports.parse = parser.parse
 """
 
 mjsHead := """
