@@ -27,3 +27,5 @@ fi
 
 # build hera esbuild-plugin
 civet < source/esbuild-plugin.civet > esbuild-plugin.js
+
+cp source/esm.mjs dist/
