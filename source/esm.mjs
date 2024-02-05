@@ -1,5 +1,7 @@
-import { pathToFileURL } from 'url';
-import "../register.js";
+import { fileURLToPath, pathToFileURL } from 'url';
+
+import fs from "fs";
+import { compile } from "@danielx/hera";
 
 const baseURL = pathToFileURL(process.cwd() + '/').href;
 const extensionsRegex = /\.hera$/;
@@ -20,9 +22,20 @@ export async function resolve(specifier, context, defaultResolve) {
 
 export async function load(url, context, next) {
   if (extensionsRegex.test(url)) {
-    return next(url.replace(extensionsRegex, ".cjs"), {
-      format: "commonjs"
+    const filename = fileURLToPath(url);
+    const source = compile(fs.readFileSync(filename, 'utf8'), {
+      filename,
+      inlineMap: true,
+      module: true,
     });
+
+    // TODO: how to avoid shortCircuit?
+    // We may want to pass the module to babel or whatever in the future
+    return {
+      format: "module",
+      source,
+      shortCircuit: true,
+    };
   }
 
   // Let Node.js handle all other URLs.

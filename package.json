@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -38,7 +38,7 @@
     "loader": [
       "ts-node/esm",
       "./build/coffee-esm.mjs",
-      "./build/hera-esm.mjs",
+      "./source/esm.mjs",
       "@danielx/civet/esm"
     ],
     "reporter": "spec",
@@ -90,6 +90,7 @@
     "./lib": "./dist/machine.js",
     "./esbuild-plugin": "./esbuild-plugin.js",
     "./register": "./register.js",
+    "./esm": "./dist/esm.mjs",
     "./*": "./*",
     "./dist/*": "./dist/*"
   },

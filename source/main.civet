@@ -38,9 +38,35 @@ generate := <T extends HeraGrammar>(src: string) => {
   }
 }
 
+modImport := async <T extends HeraGrammar>(src: string) => {
+  fs := await import('node:fs/promises')
+  { fileURLToPath } := await import "url"
+  { dirname } := await import "path"
+
+  __dirname := dirname fileURLToPath(import.meta.url)
+
+  js := compile(parse(src), {
+    module: true,
+    libPath: `${ __dirname }/machine.js`,
+  })
+
+  // random temp file
+  tmpPath := `${ __dirname }/hera-tmp-${ Math.random().toString(36).slice(2) }.mjs`
+  await fs.writeFile(tmpPath, js)
+
+  try
+    (await import tmpPath) as {
+      parse: (input: string, options?: ParserOptions<T>) => unknown
+    }
+  finally
+    await fs.unlink(tmpPath)
+}
+
 export {
   parse
   compile
+  execMod
+  modImport
   generate
   grammarToEBNF
 }
