@@ -345,7 +345,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
-  head := (module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  head := (types ? tsHead : module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
@@ -401,9 +401,9 @@ reType := (types: boolean | undefined, str: string) ->
   else
     ""
 
-type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string } | { children: ASTNode[] } | undefined
+type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] } | undefined
 type GenerateOptions = {
-  updateSourceMap?: (outputStr: string, inputPos?: number) => void
+  updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number) => void
 }
 generate := (node: ASTNode, options: GenerateOptions): string ->
   if !node return ""
@@ -511,12 +511,16 @@ mjsHead := """
     $TS,
     $TV,
     $Y,
-    ParserContext,
-    ParseState,
-    Validator
+    Validator,
   } from "./machine.js"
 
 """
+
+tsHead := mjsHead.replace("}", """
+  type ParserContext,
+  type ParseState,
+}
+""")
 
 tsTail := """
   const parser = (function() {
