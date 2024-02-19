@@ -231,32 +231,33 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
   stateType := types ? ": ParseState" : ""
+  ctxType := types ? ": ParserContext" : ""
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
     body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
 
     [
-      `const ${name}$0 = `,
+      `//@ts-ignore\nconst ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
       compileHandler(options, rule, name), "\n",
-      `function ${name}(ctx, state${stateType}) { return ${body} }`
+      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      [`const ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
+      [`//@ts-ignore\nconst ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
       `${name}$${i}`
 
-    choicesDec := `const ${name}$$ = [${choices.join(",")}]\n`
+    choicesDec := `//@ts-ignore\nconst ${name}$$ = [${choices.join(",")}]\n`
     body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
 
     [
       ...fns
       choicesDec
-      `function ${name}(ctx, state${stateType}) { return ${body} }`
+      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
 
 compileRulesObject := (ruleNames: string[]) ->
@@ -448,8 +449,6 @@ cjsHead := """
     $TV,
     $Y,
     Parser,
-    ParserContext,
-    ParserOptions,
     Validator
   } = require("./machine.js")
 
@@ -511,6 +510,8 @@ mjsHead := """
     $TS,
     $TV,
     $Y,
+    ParserContext,
+    ParseState,
     Validator
   } from "./machine.js"
 
