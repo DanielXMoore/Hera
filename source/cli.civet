@@ -27,6 +27,7 @@ getOptValue := (opt: string) ->
 process.stdout.write compile ast,
   types:     process.argv.includes '--types'
   inlineMap: process.argv.includes '--inlineMap'
+  module:    process.argv.includes '--module'
   filename: filename
   source: input
   libPath: getOptValue('--libPath')

@@ -5,6 +5,7 @@ import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 export type CompilerOptions = {
   filename?: string
   inlineMap?: boolean
+  sourceMap?: boolean
   source?: string
   types?: boolean
   libPath?: string | undefined
@@ -59,7 +60,7 @@ prettyPrint := (name: string, terminal: string, re?: boolean) ->
 /**
 * Compile an operator to a JS or TS string.
 */
-compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: boolean): string ->
+compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boolean): string ->
   // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
   if Array.isArray(tuple)
     switch tuple[0]
@@ -168,6 +169,7 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
       handler :=
         $loc: h.$loc
         token: h.f
+        offset: 4
 
       /* c8 ignore next */
       handlerType := options.types && h.t ? `: ${h.t}` : ""
@@ -230,32 +232,33 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
   stateType := types ? ": ParseState" : ""
+  ctxType := types ? ": ParserContext" : ""
 
   // first level choice may have nested handlings
   if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
     body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
 
     [
-      `const ${name}$0 = `,
+      `//@ts-ignore\nconst ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
       compileHandler(options, rule, name), "\n",
-      `function ${name}(ctx, state${stateType}) { return ${body} }`
+      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      [`const ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
+      [`//@ts-ignore\nconst ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
       `${name}$${i}`
 
-    choicesDec := `const ${name}$$ = [${choices.join(",")}]\n`
+    choicesDec := `//@ts-ignore\nconst ${name}$$ = [${choices.join(",")}]\n`
     body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
 
     [
       ...fns
       choicesDec
-      `function ${name}(ctx, state${stateType}) { return ${body} }`
+      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
 
 compileRulesObject := (ruleNames: string[]) ->
@@ -301,13 +304,16 @@ getNamedVariable := (op: HeraAST[0]): string | undefined ->
 defaultOptions: CompilerOptions :=
   filename: "anonymous"
   inlineMap: false
+  sourceMap: false
   source: ""
   types: false
   libPath: "@danielx/hera/lib"
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
+export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: ReturnType<typeof SourceMap> }
   options := { ...defaultOptions, ...maybeOptions }
 
   strDefs.length = 0
@@ -330,11 +336,16 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   genOpts: GenerateOptions := {}
 
   let sm: ReturnType<typeof SourceMap> | undefined
-  if options.inlineMap
+  if options.inlineMap or options.sourceMap
+    /* c8 ignore next */
+    unless options.source
+      /* c8 ignore next */
+      throw new Error "sourceMap requires source"
+
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
-  head := (module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  head := (types ? tsHead : module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
@@ -358,9 +369,11 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   ], genOpts
 
   if options.inlineMap
-    srcMapJSON := sm!.json(options.filename, "")
+    srcMapJSON := sm!.json(options.filename!, "")
     // NOTE: separate comment to prevent this string getting picked up as actual sourceMappingURL in tools
     return `${code}\n${"//#"} sourceMappingURL=data:application/json;base64,${base64Encode JSON.stringify(srcMapJSON)}\n`
+  else if options.sourceMap
+    return { code, sourceMap: sm! }
 
   return code
 
@@ -371,7 +384,7 @@ isSimpleCharacterClass := /^\[[^-^\\]*\]$/
 Generate a more specific TypeScript type for Regular expressions that consist of
 limited productions. Returns an empty string if `types` is `false`.
 */
-reType := (types: boolean, str: string) ->
+reType := (types: boolean | undefined, str: string) ->
   if types
     let specifics: string[] | undefined
     if str.match(isSimple)
@@ -388,9 +401,9 @@ reType := (types: boolean, str: string) ->
   else
     ""
 
-type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string } | { children: ASTNode[] } | undefined
+type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] } | undefined
 type GenerateOptions = {
-  updateSourceMap?: (outputStr: string, inputPos?: number) => void
+  updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number) => void
 }
 generate := (node: ASTNode, options: GenerateOptions): string ->
   if !node return ""
@@ -408,8 +421,8 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
 
   if typeof node is "object"
     if "$loc" in node
-      {token, $loc} := node
-      options.updateSourceMap?(token, $loc.pos)
+      {token, $loc, offset} := node
+      options.updateSourceMap?(token, $loc.pos, offset)
       return token
     /* c8 ignore next */
     return generate node.children, options
@@ -437,8 +450,6 @@ cjsHead := """
     $TV,
     $Y,
     Parser,
-    ParserContext,
-    ParserOptions,
     Validator
   } = require("./machine.js")
 
@@ -500,10 +511,16 @@ mjsHead := """
     $TS,
     $TV,
     $Y,
-    Validator
+    Validator,
   } from "./machine.js"
 
 """
+
+tsHead := mjsHead.replace("}", """
+  type ParserContext,
+  type ParseState,
+}
+""")
 
 tsTail := """
   const parser = (function() {

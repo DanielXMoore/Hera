@@ -69,7 +69,7 @@ export SourceMap = (sourceString: string) ->
       names: []
       sourcesContent: [sourceString]
 
-    updateSourceMap: (outputStr: string, inputPos?: number) ->
+    updateSourceMap: (outputStr: string, inputPos?: number, colOffset=0) ->
       outLines := outputStr.split(EOL)
 
       let srcLine: number,
@@ -77,13 +77,14 @@ export SourceMap = (sourceString: string) ->
 
       if inputPos?
         [srcLine, srcCol] = lookupLineColumn(srcTable, inputPos)
+        srcCol += colOffset
 
       outLines.forEach (line, i) ->
         if i > 0
           sm.lineNum++
           sm.colOffset = 0
           sm.lines[sm.lineNum] = []
-          srcCol = 0
+          srcCol = colOffset
 
         l := sm.colOffset
         sm.colOffset = line.length
