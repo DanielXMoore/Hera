@@ -169,6 +169,7 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
       handler :=
         $loc: h.$loc
         token: h.f
+        offset: 4
 
       /* c8 ignore next */
       handlerType := options.types && h.t ? `: ${h.t}` : ""
@@ -420,8 +421,8 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
 
   if typeof node is "object"
     if "$loc" in node
-      {token, $loc} := node
-      options.updateSourceMap?(token, $loc.pos)
+      {token, $loc, offset} := node
+      options.updateSourceMap?(token, $loc.pos, offset)
       return token
     /* c8 ignore next */
     return generate node.children, options
