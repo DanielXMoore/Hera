@@ -106,6 +106,12 @@ describe "Hera", ->
     """
     assert.deepEqual(parse(grammar), parse(grammar))
 
+  it "should sourcemap", ->
+    {code, sourceMap} = compile 'Rule\n  "a"', sourceMap: true
+
+    assert code
+    assert sourceMap
+
   it "should compile to ts", ->
     heraSrc = readFile('source/hera.hera')
     tsSrc = compile heraSrc, types: true

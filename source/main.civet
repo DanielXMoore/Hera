@@ -19,7 +19,7 @@ execMod := (src: string) => {
   return m.exports
 }
 
-compile: (rulesOrString: HeraRules | string, options?: CompilerOptions) => string := (rulesOrString, options) =>
+compile := (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
   let rules: HeraRules
   if typeof rulesOrString is "string"
     rules = parse(rulesOrString)

@@ -5,6 +5,7 @@ import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
 export type CompilerOptions = {
   filename?: string
   inlineMap?: boolean
+  sourceMap?: boolean
   source?: string
   types?: boolean
   libPath?: string | undefined
@@ -59,7 +60,7 @@ prettyPrint := (name: string, terminal: string, re?: boolean) ->
 /**
 * Compile an operator to a JS or TS string.
 */
-compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types: boolean): string ->
+compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boolean): string ->
   // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
   if Array.isArray(tuple)
     switch tuple[0]
@@ -301,13 +302,16 @@ getNamedVariable := (op: HeraAST[0]): string | undefined ->
 defaultOptions: CompilerOptions :=
   filename: "anonymous"
   inlineMap: false
+  sourceMap: false
   source: ""
   types: false
   libPath: "@danielx/hera/lib"
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
+export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: ReturnType<typeof SourceMap> }
   options := { ...defaultOptions, ...maybeOptions }
 
   strDefs.length = 0
@@ -330,7 +334,12 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   genOpts: GenerateOptions := {}
 
   let sm: ReturnType<typeof SourceMap> | undefined
-  if options.inlineMap
+  if options.inlineMap or options.sourceMap
+    /* c8 ignore next */
+    unless options.source
+      /* c8 ignore next */
+      throw new Error "sourceMap requires source"
+
     sm = SourceMap(options.source)
     genOpts.updateSourceMap = sm.updateSourceMap
 
@@ -358,9 +367,11 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions)
   ], genOpts
 
   if options.inlineMap
-    srcMapJSON := sm!.json(options.filename, "")
+    srcMapJSON := sm!.json(options.filename!, "")
     // NOTE: separate comment to prevent this string getting picked up as actual sourceMappingURL in tools
     return `${code}\n${"//#"} sourceMappingURL=data:application/json;base64,${base64Encode JSON.stringify(srcMapJSON)}\n`
+  else if options.sourceMap
+    return { code, sourceMap: sm! }
 
   return code
 
@@ -371,7 +382,7 @@ isSimpleCharacterClass := /^\[[^-^\\]*\]$/
 Generate a more specific TypeScript type for Regular expressions that consist of
 limited productions. Returns an empty string if `types` is `false`.
 */
-reType := (types: boolean, str: string) ->
+reType := (types: boolean | undefined, str: string) ->
   if types
     let specifics: string[] | undefined
     if str.match(isSimple)
