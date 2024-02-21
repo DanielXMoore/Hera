@@ -33,6 +33,6 @@ describe("utils", () => {
     console.log(sampleTokens.children)
     const decs = declarations(sampleTokens.children)
 
-    assert.equal(Array.from(decs.entries()).length, 54)
+    assert.equal(Array.from(decs.entries()).length, 55)
   })
 });
