@@ -2,18 +2,18 @@
 path := require 'path'
 { parse, compile } := require "./"
 
-module.exports =
+module.exports = (options) =>
   name: 'hera'
-  setup: (build) ->
+  setup: (build) =>
     build.onLoad { filter: /.\.hera$/ }, (args) ->
       readFile(args.path, 'utf8')
-      .then (source) ->
+      .then (source) =>
         filename := path.relative(process.cwd(), args.path)
 
         return {
-          contents: compile parse(source, { filename })
+          contents: compile source, { ...options, filename }
         }
-      .catch (e) ->
+      .catch (e) =>
         errors: [{
           text: e.message
         }]
