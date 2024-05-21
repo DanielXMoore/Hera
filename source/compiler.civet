@@ -449,6 +449,7 @@ cjsHead := """
     $TS,
     $TV,
     $Y,
+    ParseError,
     Parser,
     Validator
   } = require("./machine.js")
@@ -511,6 +512,7 @@ mjsHead := """
     $TS,
     $TV,
     $Y,
+    ParseError,
     Validator,
   } from "./machine.js"
 

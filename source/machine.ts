@@ -659,7 +659,7 @@ ${input.slice(result.pos)}
   }
 }
 
-class ParseError extends Error {
+export class ParseError extends Error {
   constructor(
     public message: string,
     public name: string,
