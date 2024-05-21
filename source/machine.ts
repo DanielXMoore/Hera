@@ -630,7 +630,7 @@ ${input.slice(result.pos)}
 Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
-`, "ParseError", filename, line, column, maxFailPos)
+`, filename, line, column, maxFailPos)
 
       throw error
     }
@@ -660,9 +660,9 @@ ${input.slice(result.pos)}
 }
 
 export class ParseError extends Error {
+  name = "ParseError"
   constructor(
     public message: string,
-    public name: string,
     public filename: string,
     public line: number,
     public column: number,
