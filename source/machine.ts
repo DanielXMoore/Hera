@@ -626,8 +626,7 @@ ${input.slice(result.pos)}
       else
         hint = "EOF"
 
-      const error = new ParseError(`${filename}:${line}:${column} Failed to parse
-Expected:
+      const error = new ParseError("Failed to parse", `Expected:
 \t${expectations.join("\n\t")}
 Found: ${hint}
 `, filename, line, column, maxFailPos)
@@ -662,12 +661,16 @@ ${input.slice(result.pos)}
 export class ParseError extends Error {
   name = "ParseError"
   constructor(
-    public message: string,
+    public header: string,
+    public body: string | undefined,
     public filename: string,
     public line: number,
     public column: number,
     public offset: number,
   ) {
+    let message = `${filename}:${line}:${column} ${header}`
+    if (body) message += `\n${body}`
     super(message)
+    this.message = message
   }
 }
