@@ -10,6 +10,7 @@ esbuild.build({
   entryPoints: ['source/main.civet']
   tsconfig: "./tsconfig.json"
   bundle: true
+  keepNames: true
   external: ["fs"]
   format: "cjs"
   sourcemap

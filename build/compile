@@ -16,7 +16,7 @@ chmod +x dist/hera
 
 # Compressed size check
 size=$(gzip - < dist/main.js | wc -c)
-MAX_SIZE=13000
+MAX_SIZE=14000
 
 if [ "${size}" -gt $MAX_SIZE ]; then
   echo "Size check failed: ${size} > $MAX_SIZE bytes"
