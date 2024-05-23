@@ -26,6 +26,6 @@ else
 fi
 
 # build hera esbuild-plugin
-civet < source/esbuild-plugin.civet > esbuild-plugin.js
+civet --no-config < source/esbuild-plugin.civet > esbuild-plugin.js
 
 cp source/esm.mjs dist/
