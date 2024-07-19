@@ -63,14 +63,14 @@
   },
   "files": [
     "dist/",
-    "esbuild-plugin.js",
     "register.js"
   ],
   "main": "dist/main.js",
   "exports": {
     ".": "./dist/main.js",
     "./lib": "./dist/machine.js",
-    "./esbuild-plugin": "./esbuild-plugin.js",
+    "./esbuild-plugin": "./dist/esbuild.js",
+    "./esbuild": "./dist/esbuild.js",
     "./register": "./register.js",
     "./esm": "./dist/esm.mjs",
     "./*": "./*",

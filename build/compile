@@ -25,7 +25,4 @@ else
   echo "Size check passed: ${size} < $MAX_SIZE bytes"
 fi
 
-# build hera esbuild-plugin
-civet --no-config < source/esbuild-plugin.civet > esbuild-plugin.js
-
 cp source/esm.mjs dist/

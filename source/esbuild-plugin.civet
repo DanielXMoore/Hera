@@ -1,6 +1,6 @@
 { readFile } := require 'fs/promises'
 path := require 'path'
-{ parse, compile } := require "./"
+{ compile } := require "./main.js"
 
 module.exports = (options) =>
   name: 'hera'
