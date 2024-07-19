@@ -1,10 +1,9 @@
-esbuild = require 'esbuild'
-coffeeScriptPlugin = require 'esbuild-coffeescript'
-civetPlugin = require '@danielx/civet/esbuild-plugin'
+esbuild from esbuild
+civetPlugin from @danielx/civet/esbuild-plugin
 
-watch = process.argv.includes '--watch'
-minify = process.argv.includes '--minify'
-sourcemap = false
+watch := process.argv.includes '--watch'
+minify := process.argv.includes '--minify'
+sourcemap := false
 
 esbuild.build({
   entryPoints: ['source/main.civet']
@@ -20,9 +19,6 @@ esbuild.build({
   outfile: 'dist/main.js'
   plugins: [
     civetPlugin()
-    coffeeScriptPlugin
-      bare: true
-      inlineMap: sourcemap
   ]
 }).catch -> process.exit 1
 

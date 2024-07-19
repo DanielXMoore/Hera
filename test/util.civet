@@ -1,93 +1,95 @@
-import assert from "assert"
-import { decompile, grammarToEBNF } from "../source/util.civet"
-import {parse} from "../source/main.civet"
-`import rules from "../source/rules.json" assert { type: "json" }`
+assert from assert
+{ decompile, grammarToEBNF } from ../source/util.civet
+{parse} from ../source/main.civet
+//@ts-ignore TODO: fix by updating tscofig; make sure esbuild isn't impacted in our emitted code
+rules from ../source/rules.json assert { type: "json" }
+{ readFile } from ./helper.civet
 
 describe "util", ->
   it "should parse decompiled rules", ->
-    grammar = decompile(rules)
+    grammar .= decompile(rules)
 
-    # console.log grammar
-    parsedRules = parse grammar
-    # console.log parsedRules, rules
+    // console.log grammar
+    parsedRules := parse grammar
+    // console.log parsedRules, rules
 
     Object.keys(parsedRules).forEach (key) ->
       assert.deepEqual(parsedRules[key], rules[key], "#{key} rule doesn't match")
 
-    # strip trailing whitespace before compare
+    // strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
 
-    src = readFile("source/hera.hera")
+    src := readFile("source/hera.hera")
     assert.equal grammar, src
 
   it "should convert to ebnf", ->
     grammarToEBNF(rules)
 
   it "should decompile nested choices", ->
-    rules = parse """
+    rules := parse """
       Rule
         ("A" / "C") ("B" / "D")
         "Z" -> "z"
         "N" -> 0
     """
 
-    decompiled = decompile rules
+    decompiled := decompile rules
     assert.deepEqual parse(decompiled), rules
 
   it "should decompile literal undefined", ->
-    grammar = """
+    grammar := """
       Rule
         "X" -> undefined
 
     """
-    rules = parse grammar
+    rules := parse grammar
     assert.equal decompile(rules), grammar
 
   it "decompiles to an object format", ->
-    grammar = """
+    grammar := """
       Rule
         "X" -> {a: 1, b: null}
 
     """
-    rules = parse grammar
+    rules := parse grammar
 
     assert.equal decompile(rules), grammar
 
   it "should decompile named rule", ->
-    grammar = """
+    grammar := """
       Rule
         N:x A:y ->
           return x + 1
 
     """
-    rules = parse grammar
+    rules := parse grammar
 
     assert.equal decompile(rules), grammar
 
   it "should decompile named rule", ->
-    grammar = """
+    grammar := """
       Rule
         N:x ->
           return x + 1
 
     """
-    rules = parse grammar
+    rules := parse grammar
 
     assert.equal decompile(rules), grammar
 
   it "should decompile type annotated rule", ->
-    grammar = """
+    grammar := """
       Rule
         N:x :: number ->
           return parseInt(x, 0)
 
     """
-    rules = parse grammar
+    rules := parse grammar
 
     assert.equal decompile(rules), grammar
 
   it "should throw an error when decompiling an unknown format", ->
-    rules = parse """
+    rules := parse """
       Rule
         "X" -> 0
     """
@@ -101,7 +103,7 @@ describe "util", ->
     , /Unknown/
 
   it "should throw an error when decompiling an unknown object", ->
-    rules = parse """
+    rules := parse """
       Rule
         "X" -> 0
     """
@@ -113,7 +115,7 @@ describe "util", ->
     , /Unknown/
 
   it "should throw an error when decompiling an unknown rule type", ->
-    rules = parse """
+    rules := parse """
       Rule
         "X" -> 0
     """
