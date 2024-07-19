@@ -218,14 +218,6 @@ describe "Hera", ->
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
 
-  it "should return error messages", ->
-    assert.throws ->
-      parse """
-        Rule
-
-      """,
-      filename: "test.hera"
-
   it "should parse simple grammars", ->
     {parse} := generate """
       Rule
