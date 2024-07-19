@@ -5,7 +5,7 @@ rm -rf dist
 mkdir dist
 ./node_modules/.bin/esbuild source/machine.ts --outfile=source/machine.js --bundle --platform=node
 cp source/machine.* dist/
-coffee build/esbuild.coffee
+civet build/esbuild.civet
 
 # hack to rewrite require extension
 sed --in-place -e 's/main.civet/main.js/' dist/hera
@@ -24,8 +24,5 @@ if [ "${size}" -gt $MAX_SIZE ]; then
 else
   echo "Size check passed: ${size} < $MAX_SIZE bytes"
 fi
-
-# build hera esbuild-plugin
-civet --no-config < source/esbuild-plugin.civet > esbuild-plugin.js
 
 cp source/esm.mjs dist/

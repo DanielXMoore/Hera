@@ -1,0 +1,5 @@
+import { readFileSync } from 'fs'
+
+export readFile := (p: string) ->
+  readFileSync(p, 'utf8')
+  .replace(/\r\n/g, "\n")

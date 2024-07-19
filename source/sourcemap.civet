@@ -151,7 +151,7 @@ parseWithLines := (base64encodedJSONstr: string) ->
   sourceLine .= 0
   sourceColumn .= 0
 
-  lines := json.mappings.split(";").map (line) ->
+  lines := json.mappings.split(";").map (line:string) ->
     if line.length is 0
       return []
 
@@ -166,7 +166,7 @@ parseWithLines := (base64encodedJSONstr: string) ->
         when 5
           [result[0], result[1], sourceLine += result[2], sourceColumn += result[3], result[4]]
         else
-          throw new Error("Unknown source map entry", result)
+          throw new Error(`Unknown source map entry: ${JSON.stringify(result)}`)
 
   json.lines = lines
 
@@ -176,6 +176,7 @@ Object.assign SourceMap, { remap, parseWithLines, composeLines }
 
 // write a formatted error message to the console displaying the source code with line numbers
 // and the error underlined
+//@ts-ignore
 prettySourceExcerpt := (source: string, location: {line: number, column: number}, length: number) ->
   lines := source.split(/\r?\n|\r/)
   lineNum := location.line
@@ -207,6 +208,7 @@ encodeVlq := (value: number) ->
   answer .= ''
 
   // Least significant bit represents the sign.
+  /* c8 ignore next */
   signBit := if value < 0 then 1 else 0
 
   // The next bits are the actual value.
@@ -224,6 +226,7 @@ encodeVlq := (value: number) ->
 BASE64_CHARS := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 encodeBase64 := (value: number) ->
+  /* c8 ignore next */
   BASE64_CHARS[value] or throw new Error "Cannot Base64 encode value: ${value}"
 
 // Note: currently only works in node

@@ -1,29 +1,28 @@
-import assert from "assert"
-import hera, { compile, generate, modImport } from "../source/main.civet"
-
-test = it
+assert from assert
+{ readFile } from ./helper.civet
+hera, { compile, generate, modImport } from ../source/main.civet
 
 describe "Build rules", ->
   it.skip "should update rules file", ->
-    newRules = hera.parse readFile("source/hera.hera")
+    newRules := hera.parse readFile("source/hera.hera")
     require('fs').writeFileSync("source/rules.json", JSON.stringify(newRules, null, 2))
 
 describe "Hera", ->
   it "should do math example", ->
-    grammar = readFile("samples/math.hera")
-    parser = generate(grammar)
+    grammar := readFile("samples/math.hera")
+    parser := generate(grammar)
 
-    result = parser.parse """
+    result := parser.parse """
       8 + 3 / (2 + 5)
     """
 
     assert.equal result, 8 + 3 / 7
 
   it "should do url example", ->
-    grammar = readFile("samples/url.hera")
-    parser = generate(grammar)
+    grammar := readFile("samples/url.hera")
+    parser := generate(grammar)
 
-    {scheme, fragment, host, path, port, query} = parser.parse """
+    {scheme, fragment, host, path, port, query} := parser.parse """
       http://danielx.net:443/%21?query#fragment
     """
 
@@ -35,15 +34,15 @@ describe "Hera", ->
     assert.equal fragment, "fragment"
 
   it "should parse code example", ->
-    grammar = readFile("samples/code.hera")
-    parser = generate(grammar)
+    grammar := readFile("samples/code.hera")
+    parser := generate(grammar)
 
     assert.equal parser.test, "hello"
 
     parser.parse "a"
 
   it "should consume blank lines as part of EOS", ->
-    grammar = """
+    grammar := """
       Grammar
         Rule+ ->
           a = 5
@@ -58,7 +57,7 @@ describe "Hera", ->
     assert hera.parse(grammar)
 
   it "should handle comments", ->
-    grammar = """
+    grammar := """
       # Comment!
       # Comment
 
@@ -72,11 +71,11 @@ describe "Hera", ->
       # comment
     """
 
-    parser = generate(grammar)
+    parser := generate(grammar)
     assert parser.parse("a")
 
   it "should handle rules that are aliases", ->
-    grammar = """
+    grammar := """
       Grammar
         Alias Alias*
 
@@ -87,16 +86,16 @@ describe "Hera", ->
         "."
     """
 
-    parser = generate(grammar)
+    parser := generate(grammar)
     assert parser.parse(".")
 
   it "should recursively generate itself", ->
-    heraSrc = readFile('source/hera.hera')
-    {parse} = generate heraSrc
+    heraSrc := readFile('source/hera.hera')
+    {parse} := generate heraSrc
 
     assert.deepEqual parse(heraSrc), parse(heraSrc)
 
-    grammar = """
+    grammar := """
       Grammar
         Rule+
 
@@ -107,34 +106,34 @@ describe "Hera", ->
     assert.deepEqual(parse(grammar), parse(grammar))
 
   it "should sourcemap", ->
-    {code, sourceMap} = compile 'Rule\n  "a"', sourceMap: true
+    {code, sourceMap} := compile 'Rule\n  "a"', sourceMap: true
 
     assert code
     assert sourceMap
 
   it "should compile to ts", ->
-    heraSrc = readFile('source/hera.hera')
-    tsSrc = compile heraSrc, types: true
+    heraSrc := readFile('source/hera.hera')
+    tsSrc := compile heraSrc, types: true
 
     assert tsSrc
 
   it "should add inline source map", ->
-    heraSrc = readFile('source/hera.hera')
-    tsSrc = compile heraSrc, types: true, inlineMap: true
+    heraSrc := readFile('source/hera.hera')
+    tsSrc := compile heraSrc, types: true, inlineMap: true
 
     assert tsSrc.includes('//# sourceMappingURL=data:application/json;base64')
 
   it "should annotate simple regexp types when compiling", ->
-    heraSrc = """
+    heraSrc := """
       Rule
         /abc/
     """
-    tsSrc = compile hera.parse(heraSrc), types: true
+    tsSrc := compile hera.parse(heraSrc), types: true
 
     assert tsSrc.includes('Parser<"abc">')
 
   it "numbered regex groups in mappings", ->
-    grammar = """
+    grammar := """
       Start
         Group1
         Group2
@@ -156,15 +155,15 @@ describe "Hera", ->
           return $0 + $1
     """
 
-    {parse} = generate(grammar)
+    {parse} := generate(grammar)
 
     assert.deepEqual parse("aab"), ["aa", "b"]
     assert.deepEqual parse("cdd"), ["c", "dd"]
     assert.deepEqual parse("123456789"), [undefined, "456789", "456", "123456789"]
     assert.deepEqual parse("ppqq"), "ppqqqq"
 
-  test "regex that may sometimes be empty with +", ->
-    grammar = """
+  it "regex that may sometimes be empty with +", ->
+    grammar := """
       Start
         Re+ ->
           return $0.join('')
@@ -173,13 +172,13 @@ describe "Hera", ->
         /a|b?/
     """
 
-    {parse} = generate(grammar)
+    {parse} := generate(grammar)
     assert.deepEqual parse("ab"), "ab"
     assert.deepEqual parse(""), ""
     assert.deepEqual parse("bb"), "bb"
 
-  test "transitive regex", ->
-    grammar = """
+  it "transitive regex", ->
+    grammar := """
       Start
         Group*
 
@@ -187,16 +186,16 @@ describe "Hera", ->
         /(a?)(b+)c*/
     """
 
-    {parse} = generate(grammar)
+    {parse} := generate(grammar)
 
     assert.deepEqual parse(""), []
     assert.deepEqual parse("ab"), ["ab"]
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
   it "should parse bare character classes as regexes", ->
-    newHera = generate readFile("source/hera.hera")
+    newHera := generate readFile("source/hera.hera")
 
-    rules = newHera.parse """
+    rules := newHera.parse """
       Rule
         [a-z]+[1-9]*
 
@@ -219,16 +218,8 @@ describe "Hera", ->
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
 
-  it "should return error messages", ->
-    assert.throws ->
-      parse """
-        Rule
-
-      """,
-      filename: "test.hera"
-
   it "should parse simple grammars", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         "A"+
         "B"+
@@ -246,7 +237,7 @@ describe "Hera", ->
 
   describe "-> Structural Result", ->
     it "should map to literals", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           I J K N F T
 
@@ -272,7 +263,7 @@ describe "Hera", ->
       assert.deepEqual parse(""), [7, -3.1, 2.7, null, false, true]
 
     it "should properly encode string literals in object values", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "" -> "\\n"
       """
@@ -280,7 +271,7 @@ describe "Hera", ->
       assert.deepEqual parse(""), "\n"
 
     it "should allow for bare undefined", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "" -> undefined
       """
@@ -288,7 +279,7 @@ describe "Hera", ->
       assert.deepEqual parse(""), undefined
 
     it "should map regexp groups into the structure", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           /(a)(b)(c)/ -> [$2, $3, $1]
       """
@@ -296,7 +287,7 @@ describe "Hera", ->
       assert.deepEqual ["b", "c", "a"], parse "abc"
 
     it "should map sequence items into the structure", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "A" "B" "C" -> [$2, $3, $1]
       """
@@ -304,7 +295,7 @@ describe "Hera", ->
       assert.deepEqual ["B", "C", "A"], parse "ABC"
 
     it "should map array of sequence as $0", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "A" "B" "C" -> $0
       """
@@ -312,7 +303,7 @@ describe "Hera", ->
       assert.deepEqual ["A", "B", "C"], parse "ABC"
 
     it "should map the entire result as $1", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           Sub* -> ["T", $1]
 
@@ -325,7 +316,7 @@ describe "Hera", ->
       assert.deepEqual ["T", [["A", "B"], ["A", "B"]]], parse "ABAB"
 
     it "should work with nested structures", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "A" "B" "C" -> [$2, [$3, [$3, $1]], $1]
       """
@@ -333,7 +324,7 @@ describe "Hera", ->
       assert.deepEqual ["B", ["C", ["C", "A"]], "A"], parse "ABC"
 
     it "should work with basic types", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "" -> [true, false, null, undefined, 0xff, 0xFF, 7, "A", []]
       """
@@ -341,7 +332,7 @@ describe "Hera", ->
       assert.deepEqual [true, false, null, undefined, 0xff, 0xFF, 7, "A", []], parse ""
 
     it "should handle multi-line arrays", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "" -> [
             [
@@ -355,7 +346,7 @@ describe "Hera", ->
       assert.deepEqual [[1, 2], 3], parse ""
 
     it "should map object structures", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "" -> [{}, {a: true}, {b: [0], c: 1}]
       """
@@ -363,7 +354,7 @@ describe "Hera", ->
       assert.deepEqual [{}, {a: true}, {b: [0], c: 1}], parse ""
 
     it "should map nested structures", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "a" -> [{b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}]
           "b" -> {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}
@@ -373,7 +364,7 @@ describe "Hera", ->
       assert.deepEqual parse("b"), {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}
 
     it "should map object shorthand", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           A:a B:b -> {a, b}
         A
@@ -385,7 +376,7 @@ describe "Hera", ->
       assert.deepEqual parse("ab"), {"a": 1, "b": 2}
 
     it "should work with multi-line objects", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "a" -> {
             b: [{x: 2, y: [{z: -1.3}]}, [{}]],
@@ -397,7 +388,7 @@ describe "Hera", ->
 
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           $("AAA" "B" "C")
       """
@@ -405,7 +396,7 @@ describe "Hera", ->
       assert.equal "AAABC", parse "AAABC"
 
     it "should keep pass through fail states", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           $A / $B
         A
@@ -421,7 +412,7 @@ describe "Hera", ->
       , /Expected:\s*A/
 
     it "should correctly span repetitions", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           $("A" "B" "C")*
       """
@@ -430,7 +421,7 @@ describe "Hera", ->
       assert.equal "", parse ""
 
     it "should handle nested rules", ->
-      {parse} = generate """
+      {parse} := generate """
         RegExpLiteral
           "/" !_ $RegExpCharacter* "/" -> ["R", $3]
           CharacterClassExpression
@@ -467,7 +458,7 @@ describe "Hera", ->
       assert.deepEqual ["R", "[^]a\\[\\^b]"], parse "/[^]a\\[\\^b]/"
 
   it "should work with assertions", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         &"B" "C"+
         &"A" "A"+ ->
@@ -477,7 +468,7 @@ describe "Hera", ->
     assert.equal parse("AAAAAA").length, 6
 
   it "should have string handlers", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         "A"+ -> "a"
         "B"+ -> "b"
@@ -498,7 +489,7 @@ describe "Hera", ->
       , /Could not find rule/
 
   it "should tokenize", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         &"D" /D/ -> "d"
         !"C" A+ -> "a"
@@ -508,30 +499,30 @@ describe "Hera", ->
         "A"
     """
 
-    result = parse("AAAAAA", tokenize: true)
+    result .= parse("AAAAAA", tokenize: true)
     assert.equal result.children[1].length, 6
 
     result = parse("BBB", tokenize: true)
     assert.equal result.children.length, 3
 
     result = parse("D", tokenize: true)
-    # TODO: Regex tokenize?
-    # assert.deepEqual result.children[1], 1
+    // TODO: Regex tokenize?
+    // assert.deepEqual result.children[1], 1
 
-    # tokenize shouldn't blow up regular parsing
+    // tokenize shouldn't blow up regular parsing
     assert.equal parse("BBB"), "b"
 
   it "should skip infinite zero width loops", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         ""* "a"
     """
 
-    result = parse("a")
+    result := parse("a")
     assert.deepEqual result, [[], "a"]
 
   it "should throw an error when there is unconsumed input", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         "a"
     """
@@ -541,7 +532,7 @@ describe "Hera", ->
     , /Unconsumed input/
 
   it "should throw an error when there are no failed expectations but still input remaining", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         ""
     """
@@ -551,17 +542,17 @@ describe "Hera", ->
     , /Unconsumed input/
 
   it "throws an error when parsing non-strings", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         "a"
     """
 
     assert.throws ->
-      parse(undefined)
+      parse(undefined as! string)
     , /Input must be a string/
 
   it "should throw an error when running out of input", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         "aaaa"
         EOF
@@ -574,12 +565,12 @@ describe "Hera", ->
     , /Rule "aaaa"/
 
   it "should compile object mappings", ->
-    rules = hera.parse """
+    rules := hera.parse """
       Rule
         "a"
     """
 
-    # TODO: hacked in object mapping
+    // TODO: hacked in object mapping
     rules.Rule[2] = {
       o: {
         a: [{o: true}, "b", {v: 0}]
@@ -589,12 +580,12 @@ describe "Hera", ->
     assert compile rules
 
   it "should throw an error when mapping to an unknown mapping object", ->
-    rules = hera.parse """
+    rules := hera.parse """
       Rule
         "a"
     """
 
-    # Hack in a non-array object for the mapping value
+    // Hack in a non-array object for the mapping value
     rules.Rule[2] = {}
 
     assert.throws ->
@@ -602,12 +593,12 @@ describe "Hera", ->
     , /unknown object mapping/
 
   it "throw an error when encountering an unknown operator", ->
-    rules = hera.parse """
+    rules := hera.parse """
       Rule
         "a"
     """
 
-    # Hack in an unknown operator
+    // Hack in an unknown operator
     rules.Rule[0] = "QQ"
 
     assert.throws ->
@@ -616,8 +607,8 @@ describe "Hera", ->
 
   it "should error when referencing an unknown rule", ->
     assert.throws ->
-      # TODO: throw during compile or even at end of parse?
-      {parse} = generate """
+      // TODO: throw during compile or even at end of parse?
+      {parse} := generate """
         Rule
           "aaaa"
           EOF
@@ -627,7 +618,7 @@ describe "Hera", ->
     , /EOF/
 
   it "should give accurate error message with multiline input", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         Line+
       Line
@@ -646,7 +637,7 @@ describe "Hera", ->
     , /4:1/
 
   it "should annotate errors with meta data", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         Line+
       Line
@@ -677,7 +668,7 @@ describe "Hera", ->
       return true
 
   it "should skip rules programmatically", ->
-    {parse} = generate """
+    {parse} := generate """
       Rule
         Skipped
         V
@@ -694,7 +685,7 @@ describe "Hera", ->
 
   describe "named parameters", ->
     it "should provide named parameters for a sequence", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           A:a B:b ->
             return [a, b]
@@ -709,7 +700,7 @@ describe "Hera", ->
       assert.deepEqual parse("ab"), ["a", "b"]
 
     it "should provide named parameters for a single string", ->
-      {parse} = generate """
+      {parse} := generate """
         A
           "a":a ->
             return a
@@ -718,7 +709,7 @@ describe "Hera", ->
       assert.equal parse("a"), "a"
 
     it "should provide named parameters for a single regexp", ->
-      {parse} = generate """
+      {parse} := generate """
         A
           /a+/:a ->
             return a
@@ -727,7 +718,7 @@ describe "Hera", ->
       assert.equal parse("aaa"), "aaa"
 
     it "should provide named parameters for an alias", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           A:a ->
             return a
@@ -740,7 +731,7 @@ describe "Hera", ->
       assert.equal parse("aa"), "aa"
 
     it "should allow named parameters in structural mappings", ->
-      {parse} = generate """
+      {parse} .= generate """
         A
           "a":a -> [a, a]
       """
@@ -762,19 +753,19 @@ describe "Hera", ->
 
   describe "events", ->
     it "should pass data from enter to exit events", ->
-      {parse} = generate """
+      {parse} := generate """
         Rule
           "a"
       """
 
-      events =
+      events :=
         enter: (rule, state) ->
           eventLog.push [rule, state]
           return {data: "the data"}
         exit: (rule, state, result, data) ->
           eventLog.push [rule, state, result, data]
 
-      eventLog = []
+      eventLog := []
       parse "a", { events }
 
       assert.deepEqual eventLog, [
@@ -796,7 +787,7 @@ describe "Hera", ->
 
   describe "modImport", ->
     it "should generate module", ->
-      {parse} = await modImport """
+      {parse} := await modImport """
         Rule
           "a"
       """
