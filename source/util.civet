@@ -140,12 +140,10 @@ ruleToEBNF := (rule: HeraAST, depth=0): string ->
           v
         else
           try
+            // throws if it's not a valid character class
             parse v,
               startRule: "CharacterClassExpression"
-            if v.match /]/
-              quote v
-            else
-              v
+            quote v
           catch
             quote('/' + v + '/')
 
@@ -161,7 +159,7 @@ ruleToEBNF := (rule: HeraAST, depth=0): string ->
 
         "( " + terms.join(" | ") + " )"
       else
-        if "name" in rule[0]
+        if rule[0] <? "object" and "name" in rule[0]
           return ruleToEBNF rule[1], depth+1
         throw new Error `Unknown rule type: ${JSON.stringify(rule[0])}`
   else // String name of the rule

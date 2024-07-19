@@ -65,6 +65,7 @@ describe "util", ->
     rules := parse grammar
 
     assert.equal decompile(rules), grammar
+    assert grammarToEBNF(rules)
 
   it "should decompile named rule", ->
     grammar := """
@@ -124,4 +125,16 @@ describe "util", ->
 
     assert.throws ->
       decompile rules
+    , /Unknown/
+
+  it "should throw an error when converting unknown rule to ebnf", ->
+    rules := parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[0] = "XXX"
+
+    assert.throws ->
+      grammarToEBNF rules
     , /Unknown/
