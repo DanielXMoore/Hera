@@ -21,29 +21,49 @@ Quickstart
 npm install @danielx/hera
 ```
 
+Example grammar that counts the number of 'a's followed by the number of 'b's
+then returns the difference.
+
+```hera
+# parser.hera
+Program
+  A:a B:b ->
+    return a.length - b.length
+A
+  "a"*
+B
+  "b"*
+```
+
+Import the parser into your JS/TS files:
+
 ```javascript
-import Hera from "@danielx/hera"
-import { readFileSync, writeFileSync } from "fs"
+// index.mjs
+import { parse } from "./parser.hera"
 
-const filename = "cool-grammar.hera"
-const source = readFileSync(filename, "utf-8")
+console.log(parse("aaaa"), parse("bbb"), parse("aabb")) // 4 -3 0
 
-rules = Hera.parse(source, {
-  filename
+parse("c") // throws error
+```
+
+Run on the command line:
+
+```bash
+node --require '@danielx/hera/register' index.mjs
+```
+
+Use the Hera esbuild plugin to bundle:
+
+```javascript
+import esbuild from "esbuild"
+import heraPlugin from "@danielx/hera/esbuild-plugin"
+
+await esbuild.build({
+  entryPoints: ['index.mjs'],
+  bundle: true,
+  outfile: 'out.js',
+  plugins: [heraPlugin()],
 })
-
-// Generate parser.js source code
-parserSource = Hera.compile(rules)
-writeFileSync("cool-parser.js", parserSource)
-
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-parser = require("./cool-parser")
-// or generate parser object
-parser = Hera.generate(source)
-
-parser.parse("text that my cool parser should parse")
-
 ```
 
 Overview
