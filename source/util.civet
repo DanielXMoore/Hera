@@ -103,7 +103,7 @@ toS := (rule: HeraAST, depth=0): string ->
             "( " + terms.join(" / ") + " )" + hToS(h)
         }
       else
-        if typeof rule[0] is 'object' and "name" in rule[0]
+        if rule[0] is like { name }
           return toS(rule[1], depth+1) + `:${rule[0].name}${hToS(h)}`
         throw new Error `Unknown rule type: ${JSON.stringify(rule[0])}`
   else // String name of the rule
