@@ -1,9 +1,8 @@
 assert from assert
 { decompile, grammarToEBNF } from ../source/util.civet
 {parse} from ../source/main.civet
-//@ts-ignore TODO: fix by updating tscofig; make sure esbuild isn't impacted in our emitted code
-rules from ../source/rules.json assert { type: "json" }
 { readFile } from ./helper.civet
+rules := JSON.parse readFile "source/rules.json"
 
 describe "util", ->
   it "should parse decompiled rules", ->
@@ -14,7 +13,7 @@ describe "util", ->
     // console.log parsedRules, rules
 
     Object.keys(parsedRules).forEach (key) ->
-      assert.deepEqual(parsedRules[key], rules[key], "#{key} rule doesn't match")
+      assert.deepEqual(parsedRules[key], rules[key], `${key} rule doesn't match`)
 
     // strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
