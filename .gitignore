@@ -1,7 +1,5 @@
 .nyc_output/
 coverage/
-bin/
 dist/
 node_modules/
 source/machine.js
-esbuild-plugin.js
