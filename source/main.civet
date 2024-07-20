@@ -2,7 +2,7 @@ import type {
   HeraGrammar,
   HeraRules,
   ParserOptions,
-} from ./hera-types.js
+} from ./hera-types.civet
 
 import { createRequire } from "module"
 

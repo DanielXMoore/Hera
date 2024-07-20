@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.ts
+import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string

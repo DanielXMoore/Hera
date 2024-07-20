@@ -1,11 +1,19 @@
 #!/bin/bash
 set -euox pipefail
+shopt -s globstar
 
 rm -rf dist
 mkdir dist
 ./node_modules/.bin/esbuild source/machine.ts --outfile=source/machine.js --bundle --platform=node
 cp source/machine.* dist/
 civet build/esbuild.civet
+
+# adjust .d.ts files
+for f in dist/**/*.civet.d.ts; do
+  # replace all .civet imports with .js
+  sed -i 's/\.civet"/.js"/g' "$f"
+  mv "$f" "${f%.civet.d.ts}.d.ts"
+done
 
 # hack to rewrite require extension
 sed --in-place -e 's/main.civet/main.js/' dist/hera

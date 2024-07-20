@@ -1,5 +1,5 @@
 esbuild from esbuild
-civetPlugin from @danielx/civet/esbuild-plugin
+civetPlugin from @danielx/civet/esbuild
 
 watch := process.argv.includes '--watch'
 minify := process.argv.includes '--minify'
@@ -16,9 +16,11 @@ esbuild.build({
   minify
   watch
   platform: 'node'
-  outfile: 'dist/main.js'
+  outdir: 'dist/'
   plugins: [
-    civetPlugin()
+    civetPlugin
+      ts: "civet"
+      emitDeclaration: true
   ]
 }).catch -> process.exit 1
 
@@ -33,7 +35,8 @@ esbuild.build({
   platform: 'node'
   outfile: 'dist/hera'
   plugins: [
-    civetPlugin()
+    civetPlugin
+      ts: "civet"
   ]
 }).catch -> process.exit 1
 
@@ -45,6 +48,7 @@ esbuild.build {
   platform: 'node'
   outfile: 'dist/esbuild.js'
   plugins: [
-    civetPlugin()
+    civetPlugin
+      ts: "civet"
   ]
 }
