@@ -8,17 +8,38 @@ mkdir dist
 cp source/machine.* dist/
 civet build/esbuild.civet
 
+# Cross-platform version of `sed -i`
+# Assumes that the last parameter is the file being modified
+#
+# Usage:
+#   sed_i -e '/import_meta/d' -e '/import_module/d' dist/main.js
+#     is equivalent to
+#   sed -i '' -e '/import_meta/d' -e '/import_module/d' dist/main.js
+#
+# Why? GNU and BSD sed don't both support -i in the same way.
+# See: https://stackoverflow.com/questions/5694228/sed-in-place-flag-that-works-both-on-mac-bsd-and-linux
+function sed_i() {
+  # Make a backup of the file with .bak as the extension
+  sed -i.bak "$@"
+
+  # Remove the backup file. Assumes the last parameter is the file being modified.
+  rm "${@: -1}.bak"
+}
+
 # adjust .d.ts files
 for f in dist/**/*.civet.d.ts; do
   # replace all .civet imports with .js
-  sed -i '' 's/\.civet"/.js"/g' "$f"
+  sed_i 's/\.civet"/.js"/g' "$f"
+
   mv "$f" "${f%.civet.d.ts}.d.ts"
 done
 
 # hack to rewrite require extension
-sed -i '' -e 's/main.civet/main.js/' dist/hera
+sed_i -e 's/main.civet/main.js/' dist/hera
+
 # hack to remove import_meta and just use existing require
-sed -i '' -e '/import_meta/d' -e '/import_module/d' -e 's/require2/require/' dist/main.js
+sed_i -e '/import_meta/d' -e '/import_module/d' -e 's/require2/require/' dist/main.js
+
 # Mark 'hera' cli as executable
 chmod +x dist/hera
 
