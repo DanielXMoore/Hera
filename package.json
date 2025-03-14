@@ -55,7 +55,7 @@
     "prepublishOnly": "yarn build && yarn test",
     "benchmark": "civet perf/benchmark.civet",
     "build": "bash build/compile",
-    "build:parser": "./dist/hera < samples/hera.hera > source/parser.js",
+    "build:parser": "./dist/hera --types < source/hera.hera > source/parser.ts",
     "test": "c8 mocha"
   },
   "bin": {

@@ -157,6 +157,22 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
     default // number, boolean, undefined
       String(mapping)
 
+voided := (params: string[]) ->
+  params.map((param) => `void ${param}`).join(",") + ";"
+
+handlerFunctionStart := (parameters: string[], type: string?, options: CompilerOptions) ->
+  ```
+  function(${parameters.join(", ")})${options.types && type ? `:${type}` : ''} {
+    ${options.types && voided(parameters) || ''}
+  ```
+
+asHandlerType := (handlerType: string?, options: CompilerOptions) ->
+  if options.types && handlerType
+    ` as Parser<${handlerType}>`
+  else
+    ""
+
+
 compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
   if typeof arg is "string"
     return arg // reference to other named parser function
@@ -172,7 +188,7 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
         offset: 4
 
       /* c8 ignore next */
-      handlerType := options.types && h.t ? `: ${h.t}` : ""
+      handlerType := h.t
 
       if arg[0] is "S"
         // Gather names from each element in arg[1]
@@ -185,29 +201,29 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
         return [
-          `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
+          `$TS(${parser}, ${handlerFunctionStart(parameters, handlerType, options)}`
           namedParameters
           "\n"
           handler
-          "\n});"
+          `\n})${asHandlerType(handlerType, options)};`
         ]
 
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
         return [
-          `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
+          `$TR(${parser}, ${handlerFunctionStart(regExpHandlerParams, handlerType, options)}`
           handler
-          `\n});`
+          `\n})${asHandlerType(handlerType, options)};`
         ]
       else
         namedParameters := getParameterDeclaration(arg, 0)
 
         return [
-          `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
+          `$TV(${parser}, ${handlerFunctionStart(regularHandlerParams, handlerType, options)}`
           namedParameters
           "\n"
           handler
-          "\n});"
+          `\n})${asHandlerType(handlerType, options)};`
         ]
 
     else // structural mapping
@@ -220,12 +236,12 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
           else
             ""
         .join("")
-        return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
+        return `$T(${parser}, function(value) {void value; ${namedParameters}return ${compileStructuralHandler(h, "value")} });`
       else if arg[0] is "R"
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
+        return `$T(${parser}, function(value) {void value; return ${compileStructuralHandler(h, "value", false, 0)} });`
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
+        return `$T(${parser}, function(value) {void value; return ${compileStructuralHandler(h, "value", true)} });`
 
   return compileOp(arg, name, true, options.types)
 
@@ -452,7 +468,7 @@ cjsHead := """
     ParseError,
     Parser,
     Validator
-  } = require("./machine.js")
+  } = require("./machine.ts")
 
 """
 
@@ -514,13 +530,14 @@ mjsHead := """
     $Y,
     ParseError,
     Validator,
-  } from "./machine.js"
+  } from "./machine.ts"
 
 """
 
 tsHead := mjsHead.replace("}", """
   type ParserContext,
   type ParseState,
+  type Parser,
 }
 """)
 
