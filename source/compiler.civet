@@ -239,26 +239,26 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
 
     [
-      `//@ts-ignore\nconst ${name}$0 = `,
+      `const ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
       compileHandler(options, rule, name), "\n",
-      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
+      `function ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      [`//@ts-ignore\nconst ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
+      [`const ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
       `${name}$${i}`
 
-    choicesDec := `//@ts-ignore\nconst ${name}$$ = [${choices.join(",")}]\n`
+    choicesDec := `const ${name}$$ = [${choices.join(",")}]\n`
     body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
 
     [
       ...fns
       choicesDec
-      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
+      `function ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
 
 compileRulesObject := (ruleNames: string[]) ->
