@@ -21,7 +21,7 @@ bench := (alternatives) ->
 
 console.log "running benchmark"
 
-{ parse } from ../source/parser.js
+{ parse } from ../source/hera.hera
 
 grammar := fs.readFileSync("samples/hera_v0_8.hera", "utf8")
 parse grammar
