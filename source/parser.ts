@@ -321,7 +321,7 @@ const Handling$1 = $TS(
       if ($4 && typeof $4 === "object" && "f" in $4) $4.t = $2;
       else
         throw new Error(
-          `TypeAnnotation is only supported for handler functions but you passed ${JSON.stringify($4)}`,
+          `TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`,
         );
     }
     return $4;
