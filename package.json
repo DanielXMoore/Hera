@@ -4,6 +4,7 @@
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/civet": "0.7.18",
+    "@danielx/hera": "0.8.16",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.5.6",
     "benchmark": "^2.1.4",
@@ -24,8 +25,8 @@
       "civet"
     ],
     "require": [
-      "@danielx/civet/register",
-      "./register.js"
+      "./node_modules/@danielx/hera/register",
+      "@danielx/civet/register"
     ],
     "reporter": "dot",
     "recursive": true,
@@ -34,8 +35,8 @@
     ]
   },
   "c8": {
-    "check-coverage": true,
     "100": true,
+    "check-coverage": true,
     "reporter": [
       "lcov",
       "text"
@@ -53,9 +54,8 @@
   },
   "scripts": {
     "prepublishOnly": "yarn build && yarn test",
-    "benchmark": "civet perf/benchmark.civet",
+    "benchmark": "NODE_OPTIONS='--require=./node_modules/@danielx/hera/register' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
-    "build:parser": "./dist/hera < samples/hera.hera > source/parser.js",
     "test": "c8 mocha"
   },
   "bin": {

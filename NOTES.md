@@ -8,7 +8,6 @@ Building
 
 `source/main.civet`: wrapper for both parser and compiler
 `source/compiler.civet`: Transforms Hera rules into an executable JS file.
-`source/old_main.coffee`: used for benchmarking and remembering simpler times
 `source/hera.hera`: Parser source file
 `source/machine.ts`: PEG machinery included in parser
 
