@@ -152,7 +152,7 @@ NullValue
   "null" ->
     return null
   "undefined" ->
-    return { l: "undefined" }
+    return { l: undefined }
 
 NumberValue
   /0x[\da-fA-F]+/ ->

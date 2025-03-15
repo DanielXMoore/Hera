@@ -521,7 +521,7 @@ const NullValue$1 = $TV(
   $EXPECT($L5, 'NullValue "undefined"'),
   function ($skip, $loc, $0, $1) {
     void $skip, void $loc, void $0, void $1;
-    return { l: "undefined" };
+    return { l: undefined };
   },
 );
 const NullValue$$ = [NullValue$0, NullValue$1];
