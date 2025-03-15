@@ -10,7 +10,7 @@
     "c8": "^7.12.0",
     "esbuild": "^0.15.13",
     "microtime": "^3.0.0",
-    "mocha": "^9.1.1",
+    "mocha": "^10.8.2",
     "typescript": "^5.2.2"
   },
   "homepage": "https://danielx.net/hera/docs/README.html",
