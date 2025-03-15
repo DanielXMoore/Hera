@@ -14,8 +14,9 @@ export type StructuralTerminal =
   string |
   undefined |
   { v: PositionalVariable } |
-  { o: { [key: string]: StructuralHandling } } |
-  { l: any }
+  { l: any } |
+  StructuralObject
+export type StructuralObject = { [key: string]: StructuralHandling }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandling
 export type TerminalOp = "L" | "R"
