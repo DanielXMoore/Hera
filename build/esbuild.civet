@@ -1,5 +1,7 @@
 esbuild from esbuild
 civetPlugin from @danielx/civet/esbuild
+//@ts-expect-error
+heraPlugin from ../node_modules/@danielx/hera/esbuild-plugin.js
 
 watch := process.argv.includes '--watch'
 minify := process.argv.includes '--minify'
@@ -18,6 +20,7 @@ esbuild.build({
   platform: 'node'
   outdir: 'dist/'
   plugins: [
+    heraPlugin()
     civetPlugin
       ts: "civet"
       emitDeclaration: true

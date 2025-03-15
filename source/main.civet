@@ -6,7 +6,7 @@ import type {
 
 import { createRequire } from "module"
 
-parser from ./parser.js
+parser from ./hera.hera
 { compile as heraCompile, type CompilerOptions } from ./compiler.civet
 { grammarToEBNF } from ./util.civet
 
