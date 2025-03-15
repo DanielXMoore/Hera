@@ -54,7 +54,7 @@
   },
   "scripts": {
     "prepublishOnly": "yarn build && yarn test",
-    "benchmark": "civet perf/benchmark.civet",
+    "benchmark": "NODE_OPTIONS='--require=./node_modules/@danielx/hera/register' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
     "test": "c8 mocha"
   },
