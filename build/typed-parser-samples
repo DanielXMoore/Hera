@@ -10,6 +10,6 @@ export PATH="$PWD/node_modules/.bin:$PATH"
 rm -rf ./parsers
 mkdir -p ./parsers
 
-for grammar in regex.hera ; do
+for grammar in regex.hera url.hera; do
   civet source/cli.civet --types --libPath ../source/machine < "samples/$grammar" > "parsers/$grammar.ts"
 done

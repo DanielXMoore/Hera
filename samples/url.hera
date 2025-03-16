@@ -20,6 +20,7 @@ Authority
     return {
       host: $2,
       port: $3,
+      path: '',
     }
 
 Port
