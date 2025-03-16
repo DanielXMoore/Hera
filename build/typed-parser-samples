@@ -14,5 +14,8 @@ function compile_parser() {
   civet source/cli.civet --types --libPath ../source/machine < "$1" > "parsers/$(basename "$1").ts"
 }
 
+compile_parser samples/code.hera
 compile_parser samples/regex.hera
 compile_parser samples/url.hera
+compile_parser samples/coffee.hera
+compile_parser samples/structural-mapping.hera
