@@ -2,7 +2,9 @@
  * These are types specific to the Hera parser and not grammars in general.
  */
 
-import type { Loc, Parser, ParserContext } from "./machine"
+import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine"
+
+export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
 
@@ -36,19 +38,4 @@ export const CodeSymbol = Symbol.for("code")
 export type HeraRules = {
   [key: string]: HeraAST,
   [CodeSymbol]?: string
-}
-
-export type HeraGrammar = { [key: string]: Parser<any> }
-
-export type ParserEvents = {
-  enter?: ParserContext["enter"],
-  exit?: ParserContext["exit"],
-}
-
-export interface ParserOptions<T extends HeraGrammar> {
-  /** The name of the file being parsed */
-  filename?: string
-  startRule?: keyof T
-  tokenize?: boolean
-  events?: ParserEvents
 }

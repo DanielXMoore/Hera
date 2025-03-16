@@ -490,6 +490,7 @@ jsTail := """
 cjsExport := """
   exports.default = parser
   const parse = exports.parse = parser.parse
+  void parse // make TS ok if we don't use this variable
 """
 
 mjsHead := """
@@ -520,9 +521,12 @@ mjsHead := """
 
 tsHead := mjsHead.replace("}", """
   type ParserContext,
+  type ParserOptions,
   type ParseState,
 }
-""")
+""") +
+  "\nvoid " + mjsHead.match(/\{[\s\S]+\}/m)![0] // quick-and-dirty way to void all the imports so that TS doesn't complain if they aren't used
+
 
 tsTail := """
   const parser = (function() {
