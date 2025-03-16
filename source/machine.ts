@@ -674,3 +674,18 @@ export class ParseError extends Error {
     this.message = message
   }
 }
+
+export type ParserEvents = {
+  enter?: ParserContext["enter"],
+  exit?: ParserContext["exit"],
+}
+
+export type HeraGrammar = { [key: string]: Parser<any> }
+
+export interface ParserOptions<T extends HeraGrammar> {
+  /** The name of the file being parsed */
+  filename?: string
+  startRule?: keyof T
+  tokenize?: boolean
+  events?: ParserEvents
+}

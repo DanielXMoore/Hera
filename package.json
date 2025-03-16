@@ -56,7 +56,8 @@
     "prepublishOnly": "yarn build && yarn test",
     "benchmark": "NODE_OPTIONS='--require=./node_modules/@danielx/hera/register' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
-    "test": "c8 mocha"
+    "test": "c8 mocha && yarn test:typed-parser-samples",
+    "test:typed-parser-samples": "build/typed-parser-samples && tsc --noEmit parsers/*.ts"
   },
   "bin": {
     "hera": "dist/hera"

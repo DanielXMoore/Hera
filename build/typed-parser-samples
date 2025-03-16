@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euox pipefail
+shopt -s globstar
+
+cd "$(dirname "$0")/.."
+
+export NODE_OPTIONS='--require=./node_modules/@danielx/hera/register'
+export PATH="$PWD/node_modules/.bin:$PATH"
+
+rm -rf ./parsers
+mkdir -p ./parsers
+
+for grammar in regex.hera ; do
+  civet source/cli.civet --types --libPath ../source/machine < "samples/$grammar" > "parsers/$grammar.ts"
+done
