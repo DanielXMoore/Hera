@@ -1,5 +1,5 @@
 Expression
-  Term (_ ("+" / "-") _ Term)* ->
+  Term (_ ("+" / "-") _ Term)* ::number ->
     return $2.reduce(function(result, element) {
       if (element[1] === "+") { return result + element[3]; }
       if (element[1] === "-") { return result - element[3]; }
