@@ -173,7 +173,7 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
 
       /* c8 ignore next */
       handlerType := options.types && h.t ? `: ${h.t}` : ""
-      parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t}>` : ""
+      parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t.trim()}>` : ""
 
       if arg[0] is "S"
         // Gather names from each element in arg[1]

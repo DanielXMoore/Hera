@@ -132,6 +132,16 @@ describe "Hera", ->
 
     assert tsSrc.includes('Parser<"abc">')
 
+  it "should annotate rules with types with handlers ", ->
+    heraSrc := """
+      Rule
+        "abc" ::MyType ->
+          return new MyType
+    """
+    tsSrc := compile hera.parse(heraSrc), types: true
+
+    assert tsSrc.includes('const Rule$0: Parser<MyType> = $TV')
+
   it "numbered regex groups in mappings", ->
     grammar := """
       Start
