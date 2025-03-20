@@ -1,0 +1,190 @@
+# A grammar to test the generated type annotions of the parser.
+# The generated parser code should be able to typecheck.
+
+```
+/* A helper that will fail to typecheck if the type of _actual is not in T.
+
+Warning: If T is broader than `_actual` then it will pass the type check.
+E.g. these all pass even though one might not expect them to:
+  expectType<string>(x as 'a' | 'b')
+  expectType<"a"|"b"|"c">(x as 'a')
+  expectType<string|number>(x as 'a')
+*/
+function expectType<T>(_actual: T) {}
+
+// a little helper to make the assertions easier to read
+function fromRule<K extends keyof Grammar>(startRule: K) {
+  return parse<K>("", { startRule })
+}
+```
+
+
+```
+expectType<number>(fromRule('StartRule'))
+expectType<number>(parse("")) // defaults to the first rule
+```
+StartRule
+  Numeric
+
+
+```
+expectType<string>(fromRule('RegexAsString'))
+```
+RegexAsString
+  /[a-zA-Z]+/
+
+
+```
+expectType<"foo"|"bar"|"<\"'`>">(fromRule('RegexAsConstUnion'))
+```
+RegexAsConstUnion
+  /foo|bar|<"'`>/
+
+
+```
+expectType<"a"|"b"|"c">(fromRule('RegexSimpleCharacterClassAsConstUnion'))
+```
+RegexSimpleCharacterClassAsConstUnion
+  /[abc]/
+
+
+```
+expectType<number>(fromRule('InferredFromSingleChoice'))
+```
+InferredFromSingleChoice
+  Numeric
+
+
+```
+expectType<string | number | "aaa"[]>(fromRule('InferredFromMultipleChoices'))
+```
+InferredFromMultipleChoices
+  Numeric
+  Alpha
+  "aaa"*
+
+
+```
+expectType<string | number | "aaa"[]>(fromRule('InferredFromChoices'))
+```
+InferredFromChoices
+  Numeric / Alpha / "aaa"*
+
+
+```
+expectType<number>(fromRule('StructuralHandlerTopLevel'))
+```
+StructuralHandlerTopLevel
+  Alpha Numeric -> $2
+
+
+```
+expectType<(number | string | {nested:number})[]>(fromRule('StructuralHandlerArray'))
+```
+StructuralHandlerArray
+  Numeric Alpha -> [$2, $1, $1, { nested: $1 }]
+
+
+```
+expectType<{
+  numberProp: number,
+  stringProp: string,
+  constantString: string,
+  arrayProp: (number | string)[],
+  objectProp: { n: number, s: string },
+}>(fromRule('StructuralHandlerObject'))
+```
+StructuralHandlerObject
+  Numeric Alpha -> {
+    numberProp: $1,
+    stringProp: $2,
+    constantString: "foo",
+    arrayProp: [$1, $2, $1, $2],
+    objectProp: { n: $1, s: $2 },
+  }
+
+
+```
+let explicitTypeResult = fromRule('ExplicitType')
+void explicitTypeResult // make TS happy with us not using the variable
+
+// this will fail the type check if the explicit type annotation is not being applie
+explicitTypeResult = new Date()
+```
+ExplicitType
+  Numeric ::{foo:number}|Date ->
+    return { foo: $1 }
+
+
+```
+expectType<{foo:number}>(fromRule('InferredFromHandlerReturnType'))
+```
+InferredFromHandlerReturnType
+  Numeric ->
+    return { foo: $1 }
+
+
+# Testing that the basic op results are passed to handlers as the correct types
+BasicTypesOfOps
+  "aaa" ->
+    expectType<string>($1)
+
+  /aaa/ ->
+    // TODO: shouldn't $1 be type "aaa"?
+    expectType<string>($1)
+
+  /[abc]/ ->
+    // TODO: shouldn't $1 be type "a"|"b"|"c"?
+    expectType<string>($1)
+
+  /a(a)+/ ->
+    // $0 is the entire match
+    expectType<string>($0)
+
+    // currently we get $1 through $9 as strings regardless of whether there are 9 captured groups
+    expectType<string>($1)
+    expectType<string>($2)
+    expectType<string>($3)
+
+  Numeric ->
+    expectType<number>($1)
+
+  &Numeric ->
+    expectType<undefined>($1)
+
+  $Numeric ->
+    expectType<string>($1)
+
+  !Numeric ->
+    expectType<undefined>($1)
+
+  Numeric? ->
+    expectType<number|undefined>($1)
+
+  Numeric* ->
+    expectType<number[]>($1)
+
+  Numeric* ->
+    expectType<number[]>($1)
+
+  Numeric+ ->
+    expectType<number[]>($1)
+
+  $(Numeric*) ->
+    expectType<string>($1)
+
+  Numeric !Alpha Numeric* ->
+    // `!Alpha` is passed as a parameter that is undefined (as opposed to being omitted from the parameter list)
+
+    expectType<[number, undefined, number[]]>($0)
+
+    expectType<number>($1)
+    expectType<undefined>($2)
+    expectType<number[]>($3)
+
+
+Alpha
+  /[a-zA-Z]+/
+Numeric
+  /[0-9]+/ ->
+    return Number($1)
