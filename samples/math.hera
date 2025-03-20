@@ -1,15 +1,19 @@
 Expression
   Term (_ ("+" / "-") _ Term)* ::number ->
     return $2.reduce(function(result, element) {
-      if (element[1] === "+") { return result + element[3]; }
-      if (element[1] === "-") { return result - element[3]; }
+      switch (element[1]) {
+        case "+": return result + element[3];
+        case "-": return result - element[3];
+      }
     }, $1);
 
 Term
   Factor (_ ("*" / "/") _ Factor)* ->
     return $2.reduce(function(result, element) {
-      if (element[1] === "*") { return result * element[3]; }
-      if (element[1] === "/") { return result / element[3]; }
+      switch (element[1]) {
+        case "*": return result * element[3];
+        case "/": return result / element[3];
+      }
     }, $1)
 
 Factor

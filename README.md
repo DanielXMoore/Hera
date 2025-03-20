@@ -136,7 +136,7 @@ and the matching string is available as `$0`.
 
 **Lookahead predicates** (`&`, `!`): `&...` and `!...` assert the existence or non-existence, respectively, of a match of `...`, without advancing the position or consuming any input. For example, `&/\s/` is like the look-ahead regular expression `/(?=\s)/`.
 
-**Stringify** (`*`): `*...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
+**Stringify** (`$`): `$...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
 
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.

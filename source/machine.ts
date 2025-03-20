@@ -482,7 +482,7 @@ export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
 }
 
 /**
- * Handles triggering enter/exit events and early reslut returning from results cache for a
+ * Handles triggering enter/exit events and early result returning from results cache for a
  * single rule.
  */
 export function $EVENT<T>(ctx: ParserContext, state: ParseState, name: string, fn: Parser<T>) {
@@ -509,7 +509,7 @@ type ParserReturnTypes<T extends Parser<any>[]> =
   T[number] extends Parser<infer P> ? MaybeResult<P> : never
 
 /**
- * Handles triggering enter/exit events and early reslut returning from results cache for an
+ * Handles triggering enter/exit events and early result returning from results cache for an
  * array of rules where the first match is returned (Choice).
  */
 export function $EVENT_C<T extends Parser<any>[]>(ctx: ParserContext, state: ParseState, name: string, fns: T): ParserReturnTypes<T> {
