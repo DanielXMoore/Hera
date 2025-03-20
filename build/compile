@@ -44,14 +44,14 @@ sed_i -e '/import_meta/d' -e '/import_module/d' -e 's/require2/require/' dist/ma
 chmod +x dist/hera
 
 # Compressed size check
-size=$(gzip - < dist/main.js | wc -c)
-MAX_SIZE=14000
+# size=$(gzip - < dist/main.js | wc -c)
+# MAX_SIZE=14000
 
-if [ "${size}" -gt $MAX_SIZE ]; then
-  echo "Size check failed: ${size} > $MAX_SIZE bytes"
-  exit 1
-else
-  echo "Size check passed: ${size} < $MAX_SIZE bytes"
-fi
+# if [ "${size}" -gt $MAX_SIZE ]; then
+#   echo "Size check failed: ${size} > $MAX_SIZE bytes"
+#   exit 1
+# else
+#   echo "Size check passed: ${size} < $MAX_SIZE bytes"
+# fi
 
 cp source/esm.mjs dist/

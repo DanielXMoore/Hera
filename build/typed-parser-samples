@@ -19,3 +19,6 @@ compile_parser samples/regex.hera
 compile_parser samples/url.hera
 compile_parser samples/coffee.hera
 compile_parser samples/structural-mapping.hera
+compile_parser samples/math.hera
+compile_parser samples/named-params.hera
+compile_parser samples/unary-subtract.hera

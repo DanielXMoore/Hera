@@ -157,9 +157,9 @@ compileStructuralHandler := (mapping: StructuralHandling, source: any, single=fa
     default // number, boolean, undefined
       String(mapping)
 
-compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
+compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, name: string) ->
   if typeof arg is "string"
-    return arg // reference to other named parser function
+    return `${variableName} = ${arg}` // reference to other named parser function
 
   if arg.length is 3
     h := arg[2]
@@ -173,6 +173,7 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
 
       /* c8 ignore next */
       handlerType := options.types && h.t ? `: ${h.t}` : ""
+      parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t.trim()}>` : ""
 
       if arg[0] is "S"
         // Gather names from each element in arg[1]
@@ -185,6 +186,7 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
         parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
         return [
+          `${variableName}${parserTypeAnnotation} = `
           `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
@@ -195,14 +197,16 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
       else if arg[0] is "R"
         // NOTE: RegExp named groups may go here later
         return [
+          `${variableName}${parserTypeAnnotation} = `
           `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
           handler
-          `\n});`
+          "\n});"
         ]
       else
         namedParameters := getParameterDeclaration(arg, 0)
 
         return [
+          `${variableName}${parserTypeAnnotation} = `
           `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
           namedParameters
           "\n"
@@ -220,14 +224,14 @@ compileHandler := (options: CompilerOptions, arg: HeraAST, name: string) ->
           else
             ""
         .join("")
-        return `$T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
+        return `${variableName} = $T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
       else if arg[0] is "R"
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
+        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `$T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
+        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
 
-  return compileOp(arg, name, true, options.types)
+  return `${variableName} = ${compileOp(arg, name, true, options.types)}`
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
@@ -239,15 +243,14 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
 
     [
-      `//@ts-ignore\nconst ${name}$0 = `,
       // NOTE: This can return an array so we can't just jam it into the template string
-      compileHandler(options, rule, name), "\n",
+      `//@ts-ignore\nconst `, compileHandler(`${name}$0`, options, rule, name), "\n",
       `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
     ]
   else
     args := rule[1]
     fns := args.map (arg, i) ->
-      [`//@ts-ignore\nconst ${name}$${i} = `, compileHandler(options, arg, name), "\n"]
+      [`//@ts-ignore\nconst `, compileHandler(`${name}$${i}`, options, arg, name), "\n"]
 
     choices := args.map (_, i) ->
       `${name}$${i}`
@@ -352,6 +355,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   code := generate [
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
+    `\n\const grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
     strDefSource
     "\n\n"
     reDefSource
@@ -520,6 +524,7 @@ mjsHead := """
 """
 
 tsHead := mjsHead.replace("}", """
+  type Parser,
   type ParserContext,
   type ParserOptions,
   type ParseState,
@@ -529,17 +534,26 @@ tsHead := mjsHead.replace("}", """
 
 
 tsTail := """
+  type Grammar = typeof grammar;
+  type GrammarDefaultRule = typeof grammarDefaultRule;
+  type ParserResult<P> = P extends Parser<infer T> ? T : never;
+
   const parser = (function() {
     const { fail, validate, reset } = Validator()
     let ctx: ParserContext = { expectation: "", fail }
 
     return {
-      parse: (input: string, options: ParserOptions<typeof grammar> = {}) => {
+      parse: <K extends keyof Grammar = GrammarDefaultRule>(
+        input: string,
+        options: ParserOptions<Grammar> & { startRule?: K } = {}
+      ) => {
         if (typeof input !== "string") throw new Error("Input must be a string")
 
-        const parser = (options.startRule != null)
-          ? grammar[options.startRule]
-          : Object.values(grammar)[0]
+        const parser = (
+          options.startRule != null
+            ? grammar[options.startRule]
+            : Object.values(grammar)[0]
+        )  as Parser<ParserResult<Grammar[K]>>
 
         if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 
