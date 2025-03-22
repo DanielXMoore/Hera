@@ -130,11 +130,9 @@ BasicTypesOfOps
     expectType<string>($1)
 
   /aaa/ ->
-    // TODO: shouldn't $1 be type "aaa"?
     expectType<string>($1)
 
   /[abc]/ ->
-    // TODO: shouldn't $1 be type "a"|"b"|"c"?
     expectType<string>($1)
 
   /a(a)+/ ->
