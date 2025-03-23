@@ -127,13 +127,16 @@ InferredFromHandlerReturnType
 # Testing that the basic op results are passed to handlers as the correct types
 BasicTypesOfOps
   "aaa" ->
-    expectType<string>($1)
+    expectType<"aaa">($0)
+    expectType<"aaa">($1)
 
   /aaa/ ->
-    expectType<string>($1)
+    expectType<"aaa">($0)
+    expectType<undefined>($1)
 
   /[abc]/ ->
-    expectType<string>($1)
+    expectType<"a"|"b"|"c">($0)
+    expectType<undefined>($1)
 
   /a(a)+/ ->
     // $0 is the entire match

@@ -126,7 +126,7 @@ export function $L<T extends string>(str: T): Parser<T> {
 /**
  * Match a regular expression (must be sticky).
  */
-export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
+export function $R<T = RegExpMatchArray>(regExp: RegExp): Parser<T> {
   return function (_ctx, state) {
     const { input, pos } = state
     regExp.lastIndex = state.pos
@@ -143,7 +143,7 @@ export function $R(regExp: RegExp): Parser<RegExpMatchArray> {
           length: l,
         },
         pos: pos + l,
-        value: m,
+        value: m as T,
       }
     }
 
@@ -400,7 +400,18 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
 
 // Result handler for regexp match expressions
 // $0 is the whole match, followed by $1, $2, etc.
-export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP, $loc: Loc, ...args: string[]) => T): Parser<T> {
+export function $TR<A extends unknown[], T>(
+  parser: Parser<A>,
+  fn: (
+    $skip: typeof SKIP,
+    $loc: Loc,
+    ...args: TupleOrArrayAsArgs<A> // This properly assigns the types of the arguments.
+    // If A is a tuple, e.g. ['a'|'b', 'foo'|'bar'] then $0 will be 'a'|'b' and
+    //   $1 will be 'foo'|'bar', and $2 and above will be undefined
+    // If A is an array (e.g. RegExpMatchArray, which extends string[]), then
+    //   $0...$9 will be the type of the array's elements (e.g. string)
+  ) => T
+): Parser<T> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
@@ -409,7 +420,7 @@ export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP
     if (ctx.tokenize) return result as unknown as ParseResult<T>
 
     const { loc, value } = result
-    const mappedValue = fn(SKIP, loc, ...value)
+    const mappedValue = fn(SKIP, loc, ...(value as TupleOrArrayAsArgs<A>))
 
     if (mappedValue === SKIP) {
       // TODO track fail?
@@ -421,6 +432,12 @@ export function $TR<T>(parser: Parser<RegExpMatchArray>, fn: ($skip: typeof SKIP
     return result as unknown as ParseResult<T>
   }
 }
+
+type TupleOrArrayAsArgs<A extends unknown[]> =
+  A extends [unknown, ...unknown[]] // i.e. is it a tuple of at least one element?
+    ? [...A, ...undefined[]] // if so, when it gets splatted to arguments, any extra arguments will be type undefined
+    : [...A]; // otherwise, it's an array, possibly a RegExpMatchArray, so it expands as itself
+
 
 // Transform sequence
 export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
@@ -469,7 +486,7 @@ export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc,
 }
 
 // Default regexp result handler RegExpMatchArray => $0
-export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
+export function $R$0<S>(parser: Parser<[S]>): Parser<S> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
@@ -477,7 +494,7 @@ export function $R$0(parser: Parser<RegExpMatchArray>): Parser<string> {
     const value = result.value[0]
     //@ts-ignore
     result.value = value
-    return result as unknown as ParseResult<typeof value>
+    return result as unknown as ParseResult<S>
   }
 }
 
