@@ -74,7 +74,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
           args := tuple[1]
           let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
           if defaultHandler
-            f =`$R$0(${f})${reType(types, args)}`
+            f =`$R$0(${f})`
 
           f
         }
@@ -334,7 +334,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $L${i} = $L("${str}");\n`
 
   reDefSource := reDefs.map (r, i) ->
-    `const $R${i} = $R(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
+    `const $R${i} = $R${reTupleType(types, r)}(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
 
   genOpts: GenerateOptions := {}
 
@@ -388,22 +388,21 @@ isSimpleCharacterClass := /^\[[^-^\\]*\]$/
 Generate a more specific TypeScript type for Regular expressions that consist of
 limited productions. Returns an empty string if `types` is `false`.
 */
-reType := (types: boolean | undefined, str: string) ->
-  if types
-    let specifics: string[] | undefined
-    if str.match(isSimple)
-      specifics = str.split("|").map (s) ->
-        JSON.stringify(s)
-    else if str.match(isSimpleCharacterClass)
-      specifics = str.substring(1, str.length-1).split("").map (s) ->
-        JSON.stringify(s)
+reTupleType := (types: boolean?, reSource: string) ->
+  return "" unless types
 
-    if specifics
-      ` as Parser<${specifics.join("|")}>`
+  constTypes :=
+    if reSource.match(isSimple)
+      reSource.split("|")
+    else if reSource.match(isSimpleCharacterClass)
+      reSource.substring(1, reSource# - 1).split("")
     else
-      ""
-  else
-    ""
+      return ""
+
+  constTypes
+    .map JSON.stringify(.)
+    .join("|")
+    |> `<[${&}]>`
 
 type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] } | undefined
 type GenerateOptions = {

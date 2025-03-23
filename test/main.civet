@@ -130,7 +130,7 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('Parser<"abc">')
+    assert tsSrc.includes('$R<["abc"]>')
 
   it "should annotate rules with types with handlers ", ->
     heraSrc := """
