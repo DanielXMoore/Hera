@@ -60,3 +60,27 @@ esbuild.build {
     js: 'module.exports = module.exports.default;'
   }
 }
+
+esbuild.build {
+  entryPoints: [
+    "source/esm.civet"
+    "source/hera-types.civet"
+    "source/register.civet"
+    "source/register/cjs.civet"
+    "source/register/tsc/cjs.civet"
+    "source/register/tsc/esm.civet"
+    "source/register/tsc/index.civet"
+    "source/register/tsc/transpile.civet"
+  ]
+  tsconfig: "./tsconfig.json"
+  format: "cjs"
+  bundle: false
+  platform: 'node'
+  outdir: 'dist/'
+  outbase: 'source/'
+  plugins: [
+    civetPlugin
+      ts: "civet"
+      emitDeclaration: true
+  ]
+}

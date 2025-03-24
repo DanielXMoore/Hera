@@ -1,0 +1,9 @@
+```
+// This import will only succeed if the custom tsc compiler options are applied
+import { helperValue }  from './helper.cts'
+```
+
+Rule
+  "a" ->
+    // tsc loader should transpile away the "as string"
+    return helperValue as string

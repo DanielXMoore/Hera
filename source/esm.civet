@@ -1,0 +1,71 @@
+assert from node:assert
+{ fileURLToPath, pathToFileURL } from node:url
+{ ResolveHook, LoadHook } from node:module
+
+{ compile } from ./main.civet
+type { CompilerOptions } from ./compiler.civet
+
+
+baseURL := pathToFileURL(process.cwd() + "/").href
+extensionsRegex := /\.hera$/
+loaderTag := '#hera-esm-loader'
+
+
+// module-level state that is set via the initialize function
+let heraOptions: CompilerOptions
+
+export function initialize(data: CompilerOptions = {})
+  heraOptions = data
+
+
+export resolve: ResolveHook := (specifier, context, next) =>
+  return next(specifier, context) unless extensionsRegex.test(specifier)
+
+  { parentURL = baseURL } := context
+
+  {
+    url: new URL(specifier, parentURL).href
+    shortCircuit: true
+  }
+
+
+export load: LoadHook := (url, context, next) =>
+  if url.endsWith(loaderTag)
+    throw new Error """
+      The hera ESM loader has already been registered. Use --import instead of -r/--require.
+      If you require an ESM module (which this is) with -r/--require it gets loaded twice.
+    """
+
+  return next(url, context) unless extensionsRegex.test(url)
+
+  // Pass this request down the stack to first get loaded by Node.js natively
+  // and/or be handled by other loaders in the chain.
+  { source: heraSource } := await next(
+    // Append a tag to the URL as a fragment/hash so that if we accidentally
+    // registered this hook twice (e.g. via using `--require` instead of
+    // `--import`), the next instance of this hook can detect it and raise an
+    // error.
+    //
+    // Adding this tag does not affect how Node.js loads the file.
+    `${url}#hera-esm-loader`
+    {
+      ...context
+      // without format set to 'module', Node.js tries to compile the .hera file
+      // as it were JavaScript instead of return it as a string
+      format: 'module'
+    }
+  )
+
+  assert heraSource, `${url} file source was not loaded.`
+
+  source := compile heraSource.toString(), {
+    inlineMap: true
+    filename: fileURLToPath(url)
+    ...heraOptions
+  }
+
+  {
+    source
+    format: heraOptions.module ? "module" : "commonjs"
+    shortCircuit: true
+  }

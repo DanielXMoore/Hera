@@ -1,0 +1,13 @@
+// ESM
+try
+  { register } := require('node:module')
+  { pathToFileURL } := require('node:url')
+
+  // register the Hera ESM loader
+  register './esm.js', pathToFileURL(__filename)
+catch
+  // older Node lacking module register
+
+// CJS
+// register the Hera CJS loader
+import ./register/cjs.civet

@@ -1,0 +1,10 @@
+// ESM
+{ register } from node:module
+{ pathToFileURL } from node:url
+// register basic Hera ESM loader
+register "../../esm.js", pathToFileURL(__filename)
+// register another loader that transpiles the output of the Hera loader
+register "./esm.js", pathToFileURL(__filename)
+
+// CJS
+import ./cjs.civet

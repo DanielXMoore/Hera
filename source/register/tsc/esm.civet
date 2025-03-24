@@ -1,0 +1,23 @@
+// Module hook that transpiles TypeScript to JavaScript
+
+type { LoadHook } from node:module
+assert from node:assert
+
+{ type CompilerOptions, transpileTsToJs } from ./transpile.civet
+
+
+// module-level state that is set via the initialize function
+let compilerOptions: CompilerOptions
+
+export function initialize(data: CompilerOptions = {})
+  compilerOptions = data
+
+
+export load: LoadHook := async (url, context, next) =>
+    result := await next(url, context)
+    return result unless /\.hera$/.test(url)
+
+    assert result.source, `${url} file source was not loaded`
+    source := transpileTsToJs(result.source.toString(), compilerOptions)
+
+    { ...result, source }

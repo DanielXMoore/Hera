@@ -1,0 +1,5 @@
+Rule
+  "a" ->
+    // will only work if this is compiled and loaded as an ESM module
+    if (import.meta.url)
+      return "ok"

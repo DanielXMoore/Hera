@@ -1,0 +1,38 @@
+assert from assert
+{ transpileTsToJs } from ../../../source/register/tsc/transpile.civet
+typescript from typescript
+
+describe "transpileTsToJs", ->
+  function removeSourceMap(sourceCode: string)
+    sourceCode.split('//#')[0].trim()
+
+  it "should compile TypeScript code to JavaScript", ->
+    ts := "const a = (a: number, b: number) => a + b"
+    js := transpileTsToJs(ts) |> removeSourceMap
+
+    assert.equal js, "const a = (a, b) => a + b;"
+
+  it "should accept compiler options", ->
+    ts := "const a = (a: number, b: number) => a + b"
+    js := transpileTsToJs(ts, target: typescript.ScriptTarget.ES2022) |> removeSourceMap
+
+    assert.equal js, "const a = (a, b) => a + b;"
+
+  it "should not complain about type errors", ->
+    ts := "const a: number = null"
+    js := transpileTsToJs(ts) |> removeSourceMap
+
+    assert.equal js, "const a = null;"
+
+  it "should throw and log syntax errors", ->
+    ts := "!!!; INVALID TYPESCRIPT"
+
+    logged .= ''
+
+    assert.throws
+      => transpileTsToJs(ts, {}, (message: string) => logged = message)
+      /TypeScript compilation failed/
+
+    // Multiple erros should be logged
+    assert.match logged, /Expression expected/
+    assert.match logged, /Unexpected keyword or identifier/
