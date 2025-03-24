@@ -1,8 +1,21 @@
+```
+import {
+  CodeSymbol,
+  type SequenceNode,
+  type NameNode,
+  type Handler,
+  type StructuralTerminal,
+  type StructuralObject,
+  type HeraAST,
+  type HeraRules,
+} from './hera-types'
+```
+
 Grammar
   Statement* ->
-    const code = $1.filter(a => typeof a === "string")
-    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
-    rules[Symbol.for("code")] = code
+    const code = $1.filter(a => typeof a === "string") as string[]
+    const rules: HeraRules = Object.fromEntries($1.filter(a => Array.isArray(a)) as [string, HeraAST][])
+    rules[CodeSymbol] = code
     return rules
 
 Statement
@@ -25,17 +38,17 @@ Choice
   Sequence Handling ->
     if ($2 !== undefined) {
       if (!$1.push)
-        $1 = ["S", [$1], $2]
+        $1 = ["S", [$1], $2] as SequenceNode
       else
-        $1.push($2)
+        $1.push($2 as Handler)
     }
     return $1
 
 Sequence
-  Expression SequenceExpression+ ->
+  Expression SequenceExpression+ ::SequenceNode ->
     $2.unshift($1)
     return ["S", $2]
-  Expression ChoiceExpression+ ->
+  Expression ChoiceExpression+ ::SequenceNode ->
     $2.unshift($1)
     return ["/", $2]
   Expression
@@ -50,13 +63,13 @@ ParameterName
   ":" Name -> $2
 
 Expression
-  PrefixOperator? Suffix ParameterName? ->
+  PrefixOperator? Suffix ParameterName? ::SequenceNode|NameNode ->
     var result = null
     if ($1) result = [$1, $2]
     else result = $2
     if ($3)
-      return [{name: $3}, result]
-    return result
+      return [{name: $3}, result] as NameNode
+    return result as SequenceNode
 
 PrefixOperator
   [$&!]
@@ -82,7 +95,10 @@ Handling
   EOS ->
     return undefined
   Space* TypeAnnotation? Arrow HandlingExpression ->
-    if ($2) $4.t = $2
+    if ($2) {
+      if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2
+      else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)
+    }
     return $4
 
 HandlingExpression
@@ -90,7 +106,7 @@ HandlingExpression
   StructuralMapping EOS -> $1
 
 HandlingExpressionBody
-  HandlingExpressionLine+ ->
+  HandlingExpressionLine+ ::Handler ->
     return {
       f: $1.join("").trimEnd(),
       $loc,
@@ -101,7 +117,7 @@ HandlingExpressionLine
 
 StructuralMapping
   StringValue ->
-    return JSON.parse(`"${$1}"`)
+    return JSON.parse(`"${$1}"`) as string
   NumberValue
   BooleanValue
   NullValue
@@ -110,13 +126,14 @@ StructuralMapping
   JSObject
 
 JSArray
-  OpenBracket ArrayItem* CloseBracket -> $2
+  OpenBracket ArrayItem* CloseBracket ::StructuralTerminal[] ->
+    return $2 as StructuralTerminal[]
 
 ArrayItem
   StructuralMapping /,\s*|\s*(?=\])/ -> $1
 
 JSObject
-  OpenBrace ObjectField* CloseBrace ->
+  OpenBrace ObjectField* CloseBrace ::StructuralObject ->
     return {
       o: Object.fromEntries($2)
     }
