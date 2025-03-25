@@ -6,15 +6,13 @@ import {
   type Handler,
   type StructuralTerminal,
   type StructuralObject,
-  type HeraAST,
-  type HeraRules,
 } from './hera-types'
 ```
 
 Grammar
   Statement* ->
-    const code = $1.filter(a => typeof a === "string") as string[]
-    const rules: HeraRules = Object.fromEntries($1.filter(a => Array.isArray(a)) as [string, HeraAST][])
+    const code = $1.filter(a => typeof a === "string")
+    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
     rules[CodeSymbol] = code
     return rules
 
@@ -38,9 +36,9 @@ Choice
   Sequence Handling ->
     if ($2 !== undefined) {
       if (!$1.push)
-        $1 = ["S", [$1], $2] as SequenceNode
+        $1 = ["S", [$1], $2]
       else
-        $1.push($2 as Handler)
+        $1.push($2)
     }
     return $1
 
