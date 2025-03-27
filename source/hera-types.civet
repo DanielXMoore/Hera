@@ -16,7 +16,7 @@ export type StructuralTerminal =
   string |
   undefined |
   { v: PositionalVariable } |
-  StructuralObject |
+  { o: StructuralObject } |
   { l: any }
 export type StructuralObject = { [key: string]: StructuralHandling }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]
