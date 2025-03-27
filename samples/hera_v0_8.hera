@@ -97,7 +97,7 @@ Handling
       if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2
       else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)
     }
-    return $4
+    return $4 as Handler
 
 HandlingExpression
   EOS HandlingExpressionBody EOS? -> $2
