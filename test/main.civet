@@ -693,6 +693,110 @@ describe "Hera", ->
 
     assert parse ""
 
+  describe "@transpile", ->
+    it "should transpile code", ->
+      {parse} := generate """
+        @transpile
+          return (code) => code.toLowerCase()
+
+        Rule
+          /.+/:a ->
+            RETURN `HELLO ${A}`
+      """
+
+      assert.deepEqual parse("world"), "hello world"
+
+    it "should have access to filename", ->
+      {parse} := generate """
+        @transpile
+          return function addFilenameVariable(code, filename) {
+            return `
+              const $TRANSPILED_FILENAME = ${JSON.stringify(filename)};
+              ${code}
+            `
+          }
+
+        Rule
+          "aaa" ->
+            return { str: $1, file: $TRANSPILED_FILENAME }
+      """
+
+      assert.deepEqual parse("aaa"), { str: "aaa", file: "anonymous" }
+
+    it "should throw an error when transpile function doesn't return a string", ->
+      assert.throws
+        -> generate """
+          @transpile
+            return function badTranspile(code, filename) {
+              return undefined
+            }
+
+          Rule
+            "aaa" ->
+              return $1
+        """
+        /must return a string/
+
+    it "should throw an error when @transpile block doesn't return a function", ->
+      assert.throws
+        -> generate """
+          @transpile
+            // forget to return the function
+            function transpile(code) { return code }
+
+          Rule
+            "aaa" ->
+              return $1
+        """
+        /must return a function/
+
+    it "should eval the transpile function source only once", ->
+      // @ts-ignore
+      globalThis.counts = { definedTranspileFn: 0, transpileHandler: 0 }
+
+      { parse } := generate """
+        @transpile
+          // increment every time this @transpile code block is eval'd
+          globalThis.counts.definedTranspileFn++
+
+          return (code) => {
+            // increment every time a handler is transpiled
+            globalThis.counts.transpileHandler++
+            return code.toLowerCase()
+          }
+
+        Rule
+          "a" ->
+            RETURN "ALPHA"
+          "b" ->
+            RETURN "BRAVO"
+      """
+
+      // @ts-ignore
+      assert.deepEqual globalThis.counts, { definedTranspileFn: 1, transpileHandler: 2 }
+
+      // sanity check: the parser correcly utilizes the @transpile function
+      assert.deepEqual parse("a"), "alpha"
+
+    it "should be able to use Civet", ->
+      // Would use `require` but this is an ESM module
+      globalThis.civet = await import "@danielx/civet"
+
+      {parse} := generate """
+        @transpile
+          const { compile } = civet
+          return (code) => compile(
+            `return do\\n${code.replace(/^/gm, '  ')}`,
+            { sync: true }
+          )
+
+        Rule
+          /.+/ ->
+            $0 |> .toUpperCase()
+      """
+
+      assert.deepEqual parse("a"), "A"
+
   describe "named parameters", ->
     it "should provide named parameters for a sequence", ->
       {parse} := generate """

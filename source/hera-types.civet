@@ -34,8 +34,10 @@ export type PrimaryNode = TerminalNode | SequenceNode | NameNode
 export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
 
 export const CodeSymbol = Symbol.for("code")
+export const TranspileSymbol = Symbol.for("transpile")
 
 export type HeraRules = {
   [key: string]: HeraAST,
   [CodeSymbol]?: string
+  [TranspileSymbol]?: string
 }

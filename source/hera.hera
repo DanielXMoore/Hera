@@ -1,16 +1,32 @@
 Grammar
   Statement* ->
     const code = $1.filter(a => typeof a === "string")
+
+    const [transpileBlock, ...moreTranspileBlocks] =
+      $1
+        .filter(a => a && typeof a === 'object' && 'transpile' in a)
+        .map(a => a.transpile)
+    if (moreTranspileBlocks.length) throw new Error("@transpile can only be used once")
+
     const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
     rules[Symbol.for("code")] = code
+    rules[Symbol.for("transpile")] = transpileBlock
     return rules
 
 Statement
+  EOS? TranspilCodeBlock -> $2
   EOS? CodeBlock -> $2
   EOS? Rule -> $2
 
 CodeBlock
   TripleBacktick CodeBody TripleBacktick -> $2
+
+TranspilCodeBlock
+  "@transpile" EOS TranspileCodeBlockBodyLine+ ->
+    return { transpile: $3.join("").trimEnd() }
+
+TranspileCodeBlockBodyLine
+  Indent $( [^\n\r]* NonCommentEOS ) -> $2
 
 Rule
   Name EOS RuleBody -> [$1, $3]
