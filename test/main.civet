@@ -778,6 +778,25 @@ describe "Hera", ->
       // sanity check: the parser correcly utilizes the @transpile function
       assert.deepEqual parse("a"), "alpha"
 
+    it "should be able to use Civet", ->
+      // Would use `require` but this is an ESM module
+      globalThis.civet = await import "@danielx/civet"
+
+      {parse} := generate """
+        @transpile
+          const { compile } = civet
+          return (code) => compile(
+            `return do\\n${code.replace(/^/gm, '  ')}`,
+            { sync: true }
+          )
+
+        Rule
+          /.+/ ->
+            $0 |> .toUpperCase()
+      """
+
+      assert.deepEqual parse("a"), "A"
+
   describe "named parameters", ->
     it "should provide named parameters for a sequence", ->
       {parse} := generate """
