@@ -4,3 +4,4 @@ dist/
 node_modules/
 source/machine.js
 parsers/
+tmp/

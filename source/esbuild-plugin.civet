@@ -1,19 +1,21 @@
-{ readFile } := require 'fs/promises'
-path := require 'path'
-{ compile } := require "./main.js"
+{ readFile } from node:fs/promises
+{ relative } from node:path
+{ compile } from ./main.civet
+type { CompilerOptions } from ./compiler.civet
+type { Plugin, Loader } from esbuild
 
-module.exports = (options) =>
+export interface HeraPluginOptions < CompilerOptions
+  loader?: Loader
+
+export function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions = {}): Plugin
   name: 'hera'
   setup: (build) =>
-    build.onLoad { filter: /.\.hera$/ }, (args) ->
-      readFile(args.path, 'utf8')
-      .then (source) =>
-        filename := path.relative(process.cwd(), args.path)
+    build.onLoad { filter: /.\.hera$/ }, ({ path }) =>
+      filename := relative(process.cwd(), path)
 
-        return {
-          contents: compile source, { ...options, filename }
-        }
-      .catch (e) =>
-        errors: [{
-          text: e.message
-        }]
+      readFile(path, 'utf8')
+        |> await
+        |> compile ., { ...heraOptions, filename }
+        |> { contents: & }
+        // only set the loader if it's provided; don't set it to undefined
+        |> (load) => loader ? { ...load, loader } : load
