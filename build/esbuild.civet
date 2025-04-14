@@ -54,4 +54,9 @@ esbuild.build {
     civetPlugin
       ts: "civet"
   ]
+  footer: {
+    // Rewrite default export as CJS exports object
+    // so require('esbuild-plugin') provides the plugin as the default export
+    js: 'module.exports = module.exports.default;'
+  }
 }

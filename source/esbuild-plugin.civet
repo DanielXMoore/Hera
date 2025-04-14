@@ -7,7 +7,7 @@ type { Plugin, Loader } from esbuild
 export interface HeraPluginOptions < CompilerOptions
   loader?: Loader
 
-export function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions = {}): Plugin
+export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions = {}): Plugin
   name: 'hera'
   setup: (build) =>
     build.onLoad { filter: /.\.hera$/ }, ({ path }) =>
