@@ -1,0 +1,106 @@
+assert from assert
+{ writeFileSync, mkdirSync, rmSync } from node:fs
+path from node:path
+esbuild, { type BuildOptions } from esbuild
+heraPlugin from ../source/esbuild-plugin.civet
+type { HeraPluginOptions } from ../source/esbuild-plugin.civet
+
+describe "esbuild plugin", ->
+  tmpDir := path.join 'tmp', 'esbuild-plugin-testing'
+
+  function buildAndImport(
+    basename: string
+    source: string
+    {
+      pluginOptions
+      esbuildOptions
+    }: {
+      pluginOptions?: HeraPluginOptions
+      esbuildOptions?: BuildOptions
+    } = {}
+  )
+    sourceFile := path.join tmpDir, basename
+    jsFile := path.join tmpDir, `${path.parse(basename).name}.js`
+
+    writeFileSync sourceFile, source
+
+    await esbuild.build {
+      entryPoints: [sourceFile]
+      outfile: jsFile
+      bundle: true
+      format: 'cjs'
+      plugins: [
+        heraPlugin(pluginOptions)
+      ]
+      ...esbuildOptions
+    }
+
+    import(`../${jsFile}`)
+
+
+  @beforeAll ->
+    rmSync tmpDir, recursive: true, force: true
+    mkdirSync tmpDir, recursive: true
+
+  it "should transform untyped grammars", ->
+    { parse } := await buildAndImport 'simple-grammar.hera', """
+      Rule
+        "a" ->
+          return "ok"
+    """
+
+    assert.equal parse('a'), "ok"
+
+
+  it "should transform typed grammars by allowing the loader to be specified", ->
+    { parse } := await buildAndImport 'simple-typed-grammar.hera',
+      """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      pluginOptions: { loader: 'ts' }
+
+    assert.equal parse('a'), "ok"
+
+
+  it "should transform imported untyped grammars", ->
+    { parse } := await buildAndImport 'math-example.ts', """
+      import { parse } from '../../samples/math.hera' // relative to the generated parser file
+      export { parse }
+    """
+
+    assert.equal parse('8 + 3 / 7'), 8 + 3 / 7
+
+
+  it "should transform imported typed grammars by allowing the loader to be specified", ->
+    writeFileSync path.join(tmpDir, 'imported-typed-grammar.hera'), """
+      Rule
+        "a" ->
+          return "ok" as string
+    """
+
+    { parse } := await buildAndImport 'use-typed-grammar.ts',
+      """
+        import { parse } from './imported-typed-grammar.hera' // relative to the generated parser file
+        export { parse }
+      """
+      pluginOptions: { loader: 'ts' }
+
+    assert.equal parse('a'), "ok"
+
+
+  it "should throw an error when parsting fails", ->
+    writeFileSync path.join(tmpDir, 'bad-grammar.hera'), """
+      THIS GRAMMAR SHOULD NOT COMPILE
+    """
+
+    await assert.rejects
+      =>
+        await buildAndImport 'bad-example.ts',
+          """
+            import './bad-grammar.hera' // relative to the generated parser file
+          """
+          esbuildOptions: { logLevel: 'silent' }
+
+      /Failed to parse/
