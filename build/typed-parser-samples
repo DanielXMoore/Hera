@@ -23,3 +23,10 @@ compile_parser samples/math.hera
 compile_parser samples/named-params.hera
 compile_parser samples/unary-subtract.hera
 compile_parser samples/types.hera
+
+compile_parser samples/hera_v0_8.hera
+# hera_v0_8.hera depends on hera-types.civet which depends on machine.ts.
+# Since we're compiling these parsers with the source/ version instead of dist/,
+# we need to compile these, too so they are avaible to hera_v0_8.hera.
+civet --compile source/hera-types.civet --output parsers/hera-types.ts
+tsc source/machine.ts --declaration --emitDeclarationOnly --outDir parsers --target es6 --moduleResolution bundler

@@ -124,33 +124,33 @@ regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 // and regexps start at the second because the first is the entire match
 // TODO: is 0 valid to select the entire sequence result?
 // TODO: remove offset and unify handlings
-compileStructuralHandler := (mapping: StructuralHandling, source: any, single=false, offset=-1): string ->
+compileStructuralHandler := (mapping: StructuralHandling, single=false, offset=-1): string ->
   switch typeof mapping
     when "string"
       JSON.stringify(mapping)
     when "object"
       if Array.isArray mapping
-        `[${mapping.map((m) => compileStructuralHandler(m, source, single, offset)).join(', ')}]`
+        `[${mapping.map((m) => compileStructuralHandler(m, single, offset)).join(', ')}]`
       else if mapping is null
         "null"
       else if "l" in mapping
         String(mapping.l)
       else if "v" in mapping
         if single
-          source
+          "value"
         else
           if typeof mapping.v is 'number'
             n := mapping.v+offset
             if n is -1 // Handle $0
-              source
+              "value"
             else // Handle $1, $2, etc.
-              `${source}[${n}]`
+              `value[${n}]`
           else
             mapping.v
       else if "o" in mapping
         o := mapping.o
         "{" + Object.keys(o).map (key) ->
-          `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
+          `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], single, offset)}`
         .join(", ") + "}"
       else
         throw new Error "unknown object mapping"
@@ -224,12 +224,12 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
           else
             ""
         .join("")
-        return `${variableName} = $T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
+        return `${variableName} = $T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h)} });`
       else if arg[0] is "R"
-        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
+        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, false, 0)} });`
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
+        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, true)} });`
 
   return `${variableName} = ${compileOp(arg, name, true, options.types)}`
 
