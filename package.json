@@ -43,6 +43,7 @@
     ],
     "extension": [
       ".civet",
+      ".hera",
       ".mts",
       ".ts"
     ],
