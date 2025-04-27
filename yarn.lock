@@ -23,7 +23,7 @@
     "@typescript/vfs" "^1.6.0"
     unplugin "^2.2.1"
 
-"@danielx/hera@0.8.16":
+"@danielx/hera-previous@npm:@danielx/hera@0.8.16":
   version "0.8.16"
   resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.8.16.tgz#1f29b1dd8b30a28de9a138175f0b06e380684f6c"
   integrity sha512-AtHz8SHqxXfF67cTgoTV9vT4jVsdhg0OyzL/iNk0mPajfKRVn8hQX8xYuqQwUnaOkoG1XrZcCKp8cZpAMy/34Q==
