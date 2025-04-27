@@ -1,0 +1,31 @@
+// This module is a stateful singleton because it it used to modify the behavior
+// of Node.js when loading .hera files
+
+type { Module } from node:module
+{ readFileSync } from node:fs
+
+type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
+{ compile: heraCompile } from ../../main.civet
+{ type CompilerOptions, transpileTsToJs } from ./transpile.civet
+
+// Options to pass to Hera and tsc
+export options := {
+  tsc: {} as CompilerOptions
+  hera: {} as HeraCompilerOptions
+}
+
+
+if require.extensions
+  try
+    require "@cspotcode/source-map-support/register-hook-require"
+
+  require.extensions[".hera"] = (module: Module, filename: string) =>
+    filename
+      |> readFileSync(., "utf8")
+      |> heraCompile(., {
+          filename,
+          inlineMap: true,
+          ...options.hera // these options may be set by consumers of this module
+        })
+      |> transpileTsToJs(., options.tsc)
+      |> (module as any)._compile(., filename)

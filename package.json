@@ -57,16 +57,16 @@
     "prepublishOnly": "yarn build && yarn test",
     "benchmark": "NODE_OPTIONS='--require=./node_modules/@danielx/hera/register' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
-    "test": "c8 mocha && yarn test:typed-parser-samples && yarn test:esbuild-plugin",
+    "test": "c8 mocha && yarn test:typed-parser-samples && yarn test:esbuild-plugin && yarn test:loaders",
     "test:esbuild-plugin": "cd ./esbuild-example && node ./build-and-use-example.cjs && node ./test-import.mjs && node ./test-require.cjs",
+    "test:loaders": "./loader-examples/test-examples",
     "test:typed-parser-samples": "build/typed-parser-samples && tsc -p tsconfig.parsers.json"
   },
   "bin": {
     "hera": "dist/hera"
   },
   "files": [
-    "dist/",
-    "register.js"
+    "dist/"
   ],
   "main": "dist/main.js",
   "exports": {
@@ -74,10 +74,16 @@
     "./lib": "./dist/machine.js",
     "./esbuild-plugin": "./dist/esbuild.js",
     "./esbuild": "./dist/esbuild.js",
-    "./register": "./register.js",
-    "./esm": "./dist/esm.mjs",
+    "./register": "./dist/register.js",
+    "./register/cjs": "./dist/register/cjs.js",
+    "./register/esm": "./dist/esm.js",
+    "./register/tsc": "./dist/register/tsc/index.js",
+    "./register/tsc/esm": "./dist/register/tsc/esm.js",
+    "./register/tsc/cjs": "./dist/register/tsc/cjs.js",
+    "./esm": "./dist/esm.js",
     "./*": "./*",
-    "./dist/*": "./dist/*"
+    "./dist/*": "./dist/*",
+    "./hera-types": "./dist/hera-types.js"
   },
-  "types": "dist/types.d.ts"
+  "types": "dist/main.d.ts"
 }

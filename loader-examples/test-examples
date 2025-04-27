@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s globstar
+
+cd "$(dirname "$0")"
+
+# Each of these examples are duplicated to test that the loaders work in both
+# CJS and ESM contexts
+#
+# Each example proves that it works correcly by outputing "ok" to stdout
+
+# Verifies that the example outputs "ok" to stdout.
+# This is necessary because if an example is not set up correctly, it can fail
+# to run the example properly but still exit with 0 status code.
+function test_example() {
+  echo "$@"
+  result=$("$@")
+  if [ "$result" != "ok" ]; then
+    echo "Expected 'ok' but got':"
+    echo "$result"
+    exit 1
+  fi
+}
+
+function expect_fail() {
+  echo "$@"
+  if output=$("$@" 2>&1); then
+    echo "Expected to exit with non-zero status code"
+    echo "$output"
+    exit 1
+  fi
+}
+
+# Normal grammar that use only JavaScript code
+test_example node --import  @danielx/hera/register ./hera-default/use.mjs
+test_example node --require @danielx/hera/register ./hera-default/use.cjs
+
+expect_fail node --require  @danielx/hera/register ./hera-default/use.mjs
+
+
+# Grammars that use TypeScript code; transpiled to JavaScript via the typescript npm module
+# These require the typescript module to be installed
+test_example node --import  @danielx/hera/register/tsc ./tsc-default/use.mjs
+test_example node --require @danielx/hera/register/tsc ./tsc-default/use.cjs
+
+expect_fail node --require  @danielx/hera/register/tsc ./tsc-default/use.mjs
+
+
+# JS-only grammar compiled with custom Hera options
+test_example node --import  ./hera-custom/register.js ./hera-custom/use.mjs
+test_example node --require ./hera-custom/register.js ./hera-custom/use.cjs
+
+expect_fail node --require  ./hera-custom/register.js ./hera-custom/use.mjs
+
+
+# JS-only grammar compiled as ESM module
+test_example node --import  ./hera-custom-esm-grammar/register.js ./hera-custom-esm-grammar/use.mjs
+
+expect_fail node --require  ./hera-custom-esm-grammar/register.js ./hera-custom-esm-grammar/use.mjs
+
+
+# TS grammar, transpiled to JS, using custom tsc compiler options
+# These require the typescript module to be installed
+test_example node --import  ./tsc-custom/register.js ./tsc-custom/use.mjs
+test_example node --require ./tsc-custom/register.js ./tsc-custom/use.cjs
+
+expect_fail node --require  ./tsc-custom/register.js ./tsc-custom/use.mjs
+
+

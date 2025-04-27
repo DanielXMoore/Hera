@@ -1,0 +1,38 @@
+typescript from typescript
+
+export CompilerOptions ::= typescript.TranspileOptions['compilerOptions']
+LogFn ::= (...args: any[]) => any
+
+export function transpileTsToJs(
+  tsSource: string,
+  compilerOptions: CompilerOptions = {}
+  log: LogFn = console.error
+)
+  compilerOptions = { ...compilerOptions }
+  compilerOptions.target ??= typescript.ScriptTarget.ES2022 // based on @tsconfig/node-lts
+  compilerOptions.module ??= typescript.ModuleKind.CommonJS // use CommonJS by default because it works with CJS and ESM contexts
+
+  { outputText, diagnostics } := typescript.transpileModule(tsSource, {
+    reportDiagnostics: true
+    compilerOptions
+  })
+
+  // It's possible that when using transpileModule that it will never give
+  // warnings, only errors, but I'm not sure, so we'll log all diagnostics and
+  // only throw if there are errors.
+  if diagnostics?#
+    // always log diagnositcs
+    if log
+      log
+        typescript.formatDiagnosticsWithColorAndContext diagnostics, {
+          /* c8 ignore next */
+          getCanonicalFileName: (path) => path
+          getNewLine: => typescript.sys.newLine
+          typescript.sys.getCurrentDirectory
+        }
+
+    // throw an exeption if there are errors
+    if diagnostics.find(&.category === typescript.DiagnosticCategory.Error)
+      throw new Error "TypeScript compilation failed"
+
+  outputText

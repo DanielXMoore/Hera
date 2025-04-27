@@ -58,5 +58,3 @@ chmod +x dist/hera
 # else
 #   echo "Size check passed: ${size} < $MAX_SIZE bytes"
 # fi
-
-cp source/esm.mjs dist/

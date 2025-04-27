@@ -303,3 +303,83 @@ logic into the handler, but that seems crude.
 
 >     #! setup
 >     require("./interactive")(register)
+
+
+CJS/ESM loaders
+---
+
+### `--import/--require @danielx/hera/register`
+Loads .hera files that compile to JavaScript.
+
+### `--import/--require @danielx/hera/register/tsc`
+Loads .hera files that compile to TypeScript.
+
+Attempts to load the `typescript` npm module to transpile TypeScript to JavaScript.
+
+### Specifying Hera compiler options
+
+#### ESM
+Instead of using `--import @danielx/hera/register`, register the `@danielx/hera/register/esm` hooks and pass it the compiler options.
+
+E.g.
+
+```js
+// loader.js
+const heraOptions = { ... }
+register("@danielx/hera/register/esm", pathToFileURL(__filename), { data: heraOptions })
+```
+
+```sh
+node --import ./loader.js my-script.mjs
+```
+
+See `./loader-examples/hera-custom`.
+
+#### CJS
+Instead of using `--require @danielx/hera/register`, require and set options on the `@danielx/hera/register/cjs` module.
+
+E.g.
+```js
+require("@danielx/hera/register/cjs").options.hera = { inlineMap: false }
+
+const { parse } = require("./my-typed-grammar.hera")
+```
+
+See `./loader-examples/hera-custom`.
+
+### Setting tsc compiler options
+
+#### ESM
+Instead of using `--import @danielx/hera/register/tsc`, register the `register/esm` and `register/tsc/esm` modules yourself and pass the options you want.
+
+E.g.
+```js
+// custom-loader.js
+register("@danielx/hera/register/esm", pathToFileURL(__filename), {
+  data: heraOptions
+})
+
+register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
+  data: tscCompilerOptions,
+})
+```
+
+```sh
+node --import ./custom-loader.js ./my-script.mjs
+```
+
+See `./loader-examples/tsc-custom`.
+
+#### CJS
+Instead of using `--require @danielx/hera/register/tsc`, require and set options on the `@danielx/hera/register/tsc/cjs` module.
+
+E.g.
+```js
+const loader = require("@danielx/hera/register/tsc/cjs")
+loader.options.hera = heraOptions
+loader.options.tsc = tscCompilerOptions
+
+{ parse } = require("./typed-grammar.hera")
+```
+
+See `./loader-examples/tsc-custom`
