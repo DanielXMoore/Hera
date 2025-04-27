@@ -1,10 +1,10 @@
 {
   "name": "@danielx/hera",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/civet": "0.10.2",
-    "@danielx/hera-previous": "npm:@danielx/hera@0.8.16",
+    "@danielx/hera-previous": "npm:@danielx/hera@0.8.17",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.5.6",
     "benchmark": "^2.1.4",
