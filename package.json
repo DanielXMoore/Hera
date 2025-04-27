@@ -84,5 +84,6 @@
     "./*": "./*",
     "./dist/*": "./dist/*",
     "./hera-types": "./dist/hera-types.js"
-  }
+  },
+  "types": "dist/main.d.ts"
 }
