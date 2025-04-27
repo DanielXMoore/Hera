@@ -1,7 +1,7 @@
 esbuild from esbuild
 civetPlugin from @danielx/civet/esbuild
 //@ts-expect-error
-heraPlugin from @danielx/hera-previous/esbuild-plugin.js
+heraPlugin from @danielx/hera-previous/esbuild
 
 watch := process.argv.includes '--watch'
 minify := process.argv.includes '--minify'
