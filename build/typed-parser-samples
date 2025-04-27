@@ -4,7 +4,7 @@ shopt -s globstar
 
 cd "$(dirname "$0")/.."
 
-export NODE_OPTIONS='--require=@danielx/hera-previous/register'
+export NODE_OPTIONS='--import=@danielx/hera-previous/register'
 export PATH="$PWD/node_modules/.bin:$PATH"
 
 rm -rf ./parsers
