@@ -1,6 +1,6 @@
 {
   "name": "@danielx/hera",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/civet": "0.10.2",
