@@ -23,10 +23,10 @@
     "@typescript/vfs" "^1.6.0"
     unplugin "^2.2.1"
 
-"@danielx/hera@0.8.16":
-  version "0.8.16"
-  resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.8.16.tgz#1f29b1dd8b30a28de9a138175f0b06e380684f6c"
-  integrity sha512-AtHz8SHqxXfF67cTgoTV9vT4jVsdhg0OyzL/iNk0mPajfKRVn8hQX8xYuqQwUnaOkoG1XrZcCKp8cZpAMy/34Q==
+"@danielx/hera-previous@npm:@danielx/hera@0.8.17":
+  version "0.8.17"
+  resolved "https://registry.yarnpkg.com/@danielx/hera/-/hera-0.8.17.tgz#43adbfcc0148be79b9e45c5242936993942d9d19"
+  integrity sha512-K6gA1xU0MRi5ftWE5KLodOF+st8x6RBCPgbLacctRPlbZ5racYkeBo17A0/t+Ot4GEfoIkioTuTnpSeSBEtM0g==
 
 "@esbuild/android-arm@0.15.13":
   version "0.15.13"
