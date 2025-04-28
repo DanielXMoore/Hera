@@ -1,6 +1,11 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.civet
+{
+  TranspileSymbol,
+  type HeraAST,
+  type HeraRules
+  type StructuralHandling
+} from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -10,6 +15,7 @@ export type CompilerOptions = {
   types?: boolean
   libPath?: string | undefined
   module?: boolean
+  transpileFn?: (code: string, filename?: string) => string
 }
 
 strDefs: string[] := []
@@ -166,9 +172,13 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
     if h and typeof h is "object" and "f" in h // function mapping
       parser := compileOp(arg, name, false, options.types)
 
+      handlerFunctionSource := options.transpileFn ? options.transpileFn(h.f, options.filename) : h.f
+      if typeof handlerFunctionSource !== "string"
+        throw new Error "@transpile function must return a string"
+
       handler :=
         $loc: h.$loc
-        token: h.f
+        token: handlerFunctionSource
         offset: 4
 
       /* c8 ignore next */
@@ -326,6 +336,12 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
+
+  if transpileFnSource := rules[TranspileSymbol]
+    fn := eval(`(() => { ${transpileFnSource} })()`)
+    if typeof fn !== "function"
+      throw new Error `@transpile must return a function but got ${typeof fn}`
+    options.transpileFn = fn as (code: string, filename?: string) => string
 
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
