@@ -20,7 +20,8 @@ esbuild.build({
   platform: 'node'
   outdir: 'dist/'
   plugins: [
-    heraPlugin()
+    heraPlugin
+      loader: 'ts'
     civetPlugin
       ts: "civet"
       emitDeclaration: true

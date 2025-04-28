@@ -32,11 +32,20 @@ compile := (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
 
 parse := parser.parse
 
-generate := <T extends HeraGrammar>(src: string) => {
-  return execMod(compile(parse(src))) as {
-    parse: (input: string, options?: ParserOptions<T>) => unknown
-  }
-}
+interface GenerateOptions
+  transpile: (src: string) => string
+
+defaultGenerateOptions: GenerateOptions :=
+  transpile: (src) => src
+
+generate := <T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {}) =>
+  { transpile } := { ...defaultGenerateOptions, ...options }
+
+  heraSrc
+    |> parse
+    |> compile
+    |> transpile
+    |> execMod(.) as { parse: (input: string, options?: ParserOptions<T>) => ??? }
 
 modImport := async <T extends HeraGrammar>(src: string) => {
   fs := await import('node:fs/promises')

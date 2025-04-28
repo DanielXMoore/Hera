@@ -5,6 +5,10 @@ assert from assert
 rules := JSON.parse readFile "source/rules.json"
 
 describe "util", ->
+  /*
+    If you've changed source/hera.hera run `yarn build:rules` to update
+    source/rules.json
+  */
   it "should parse decompiled rules", ->
     grammar .= decompile(rules)
 

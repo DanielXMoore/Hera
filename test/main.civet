@@ -1,11 +1,7 @@
 assert from assert
 { readFile } from ./helper.civet
-hera, { compile, generate, modImport } from ../source/main.civet
-
-describe "Build rules", ->
-  it.skip "should update rules file", ->
-    newRules := hera.parse readFile("source/hera.hera")
-    require('fs').writeFileSync("source/rules.json", JSON.stringify(newRules, null, 2))
+hera, { compile, generate, modImport, parse } from ../source/main.civet
+{ transpileTsToJs } from ../source/register/tsc/transpile.civet
 
 describe "Hera", ->
   it "should do math example", ->
@@ -91,9 +87,9 @@ describe "Hera", ->
 
   it "should recursively generate itself", ->
     heraSrc := readFile('source/hera.hera')
-    {parse} := generate heraSrc
+    { parse: newHeraParse } := generate heraSrc, transpile: transpileTsToJs
 
-    assert.deepEqual parse(heraSrc), parse(heraSrc)
+    assert.deepEqual newHeraParse(heraSrc), parse(heraSrc)
 
     grammar := """
       Grammar
@@ -103,7 +99,7 @@ describe "Hera", ->
         Name StringLiteral? EOS (Indent Choice)+
 
     """
-    assert.deepEqual(parse(grammar), parse(grammar))
+    assert.deepEqual(newHeraParse(grammar), parse(grammar))
 
   it "should sourcemap", ->
     {code, sourceMap} := compile 'Rule\n  "a"', sourceMap: true
@@ -203,9 +199,7 @@ describe "Hera", ->
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
   it "should parse bare character classes as regexes", ->
-    newHera := generate readFile("source/hera.hera")
-
-    rules := newHera.parse """
+    rules := parse """
       Rule
         [a-z]+[1-9]*
 
