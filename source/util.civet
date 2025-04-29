@@ -20,7 +20,6 @@ decompile := (rules: HeraRules) ->
 
     ```
 
-
   for [name, value] of Object.entries(rules)
     lines.push ```
       ${name}
