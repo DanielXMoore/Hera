@@ -5,7 +5,7 @@ import type {
   Handler,
   StructuralTerminal,
   StructuralObject,
-} from './hera-types.civet'
+} from './hera-types'
 ```
 
 Grammar
@@ -42,10 +42,10 @@ Choice
     return $1
 
 Sequence
-  Expression SequenceExpression+ ::SequenceNode ->
+  Expression SequenceExpression+ :: SequenceNode ->
     $2.unshift($1)
     return ["S", $2]
-  Expression ChoiceExpression+ ::SequenceNode ->
+  Expression ChoiceExpression+ :: SequenceNode ->
     $2.unshift($1)
     return ["/", $2]
   Expression
@@ -60,7 +60,7 @@ ParameterName
   ":" Name -> $2
 
 Expression
-  PrefixOperator? Suffix ParameterName? ::SequenceNode|NameNode ->
+  PrefixOperator? Suffix ParameterName? :: SequenceNode | NameNode ->
     var result = null
     if ($1) result = [$1, $2]
     else result = $2
@@ -103,7 +103,7 @@ HandlingExpression
   StructuralMapping EOS -> $1
 
 HandlingExpressionBody
-  HandlingExpressionLine+ ::Handler ->
+  HandlingExpressionLine+ :: Handler ->
     return {
       f: $1.join("").trimEnd(),
       $loc,
@@ -123,14 +123,14 @@ StructuralMapping
   JSObject
 
 JSArray
-  OpenBracket ArrayItem* CloseBracket ::StructuralTerminal[] ->
+  OpenBracket ArrayItem* CloseBracket :: StructuralTerminal[] ->
     return $2 as StructuralTerminal[]
 
 ArrayItem
   StructuralMapping /,\s*|\s*(?=\])/ -> $1
 
 JSObject
-  OpenBrace ObjectField* CloseBrace ::StructuralObject ->
+  OpenBrace ObjectField* CloseBrace :: StructuralObject ->
     return {
       o: Object.fromEntries($2)
     }

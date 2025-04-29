@@ -1,492 +1,388 @@
 {
-  "Grammar": [
-    "*",
-    "Statement",
-    {
-      "f": "const code = $1.filter(a => typeof a === \"string\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
-      "$loc": {
-        "pos": 156,
-        "length": 181
-      }
-    }
+  "code": [
+    "\nimport type {\n  SequenceNode,\n  NameNode,\n  Handler,\n  StructuralTerminal,\n  StructuralObject,\n} from './hera-types'\n"
   ],
-  "Statement": [
-    "/",
-    [
-      [
-        "S",
-        [
-          [
-            "?",
-            "EOS"
-          ],
-          "CodeBlock"
-        ],
-        {
-          "v": 2
-        }
-      ],
-      [
-        "S",
-        [
-          [
-            "?",
-            "EOS"
-          ],
-          "Rule"
-        ],
-        {
-          "v": 2
-        }
-      ]
-    ]
-  ],
-  "CodeBlock": [
-    "S",
-    [
-      "TripleBacktick",
-      "CodeBody",
-      "TripleBacktick"
-    ],
-    {
-      "v": 2
-    }
-  ],
-  "Rule": [
-    "S",
-    [
-      "Name",
-      "EOS",
-      "RuleBody"
-    ],
-    [
+  "rules": {
+    "Grammar": [
+      "*",
+      "Statement",
       {
-        "v": 1
-      },
-      {
-        "v": 3
+        "f": "const code = $1.filter(a => typeof a === \"string\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
+        "$loc": {
+          "pos": 150,
+          "length": 181
+        }
       }
-    ]
-  ],
-  "RuleBody": [
-    "+",
-    [
-      "S",
-      [
-        "Indent",
-        "Choice"
-      ]
     ],
-    {
-      "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
-      "$loc": {
-        "pos": 518,
-        "length": 90
-      }
-    }
-  ],
-  "Choice": [
-    "S",
-    [
-      "Sequence",
-      "Handling"
-    ],
-    {
-      "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
-      "$loc": {
-        "pos": 638,
-        "length": 129
-      }
-    }
-  ],
-  "Sequence": [
-    "/",
-    [
+    "Statement": [
+      "/",
       [
-        "S",
-        [
-          "Expression",
-          [
-            "+",
-            "SequenceExpression"
-          ]
-        ],
-        {
-          "f": "$2.unshift($1)\nreturn [\"S\", $2]",
-          "$loc": {
-            "pos": 827,
-            "length": 40
-          },
-          "t": "SequenceNode "
-        }
-      ],
-      [
-        "S",
-        [
-          "Expression",
-          [
-            "+",
-            "ChoiceExpression"
-          ]
-        ],
-        {
-          "f": "$2.unshift($1)\nreturn [\"/\", $2]",
-          "$loc": {
-            "pos": 916,
-            "length": 40
-          },
-          "t": "SequenceNode "
-        }
-      ],
-      "Expression"
-    ]
-  ],
-  "SequenceExpression": [
-    "S",
-    [
-      "Space",
-      "Expression"
-    ],
-    {
-      "v": 2
-    }
-  ],
-  "ChoiceExpression": [
-    "S",
-    [
-      "Space",
-      [
-        "L",
-        "/"
-      ],
-      "Space",
-      "Expression"
-    ],
-    {
-      "v": 4
-    }
-  ],
-  "ParameterName": [
-    "S",
-    [
-      [
-        "L",
-        ":"
-      ],
-      "Name"
-    ],
-    {
-      "v": 2
-    }
-  ],
-  "Expression": [
-    "S",
-    [
-      [
-        "?",
-        "PrefixOperator"
-      ],
-      "Suffix",
-      [
-        "?",
-        "ParameterName"
-      ]
-    ],
-    {
-      "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result] as NameNode\nreturn result as SequenceNode",
-      "$loc": {
-        "pos": 1178,
-        "length": 166
-      },
-      "t": "SequenceNode|NameNode "
-    }
-  ],
-  "PrefixOperator": [
-    "R",
-    "[$&!]"
-  ],
-  "Suffix": [
-    "S",
-    [
-      "Primary",
-      [
-        "?",
-        "SuffixOperator"
-      ]
-    ],
-    {
-      "f": "if ($2) return [$2, $1]\nelse return $1",
-      "$loc": {
-        "pos": 1404,
-        "length": 48
-      }
-    }
-  ],
-  "SuffixOperator": [
-    "R",
-    "[+?*]"
-  ],
-  "Primary": [
-    "/",
-    [
-      "Name",
-      "Literal",
-      [
-        "S",
-        [
-          "OpenParenthesis",
-          "Sequence",
-          "CloseParenthesis"
-        ],
-        {
-          "v": 2
-        }
-      ]
-    ]
-  ],
-  "Literal": [
-    "/",
-    [
-      "StringLiteral",
-      "RegExpLiteral"
-    ]
-  ],
-  "Handling": [
-    "/",
-    [
-      [
-        "S",
-        [
-          "EOS"
-        ],
-        {
-          "f": "return undefined",
-          "$loc": {
-            "pos": 1611,
-            "length": 21
-          }
-        }
-      ],
-      [
-        "S",
-        [
-          [
-            "*",
-            "Space"
-          ],
-          [
-            "?",
-            "TypeAnnotation"
-          ],
-          "Arrow",
-          "HandlingExpression"
-        ],
-        {
-          "f": "if ($2) {\n  if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n  else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n}\nreturn $4 as Handler",
-          "$loc": {
-            "pos": 1685,
-            "length": 239
-          }
-        }
-      ]
-    ]
-  ],
-  "HandlingExpression": [
-    "/",
-    [
-      [
-        "S",
-        [
-          "EOS",
-          "HandlingExpressionBody",
-          [
-            "?",
-            "EOS"
-          ]
-        ],
-        {
-          "v": 2
-        }
-      ],
-      [
-        "S",
-        [
-          "StructuralMapping",
-          "EOS"
-        ],
-        {
-          "v": 1
-        }
-      ]
-    ]
-  ],
-  "HandlingExpressionBody": [
-    "+",
-    "HandlingExpressionLine",
-    {
-      "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
-      "$loc": {
-        "pos": 2076,
-        "length": 64
-      },
-      "t": "Handler "
-    }
-  ],
-  "HandlingExpressionLine": [
-    "S",
-    [
-      "Indent",
-      "Indent",
-      [
-        "$",
         [
           "S",
           [
             [
-              "R",
-              "[^\\n\\r]*"
+              "?",
+              "EOS"
             ],
-            "NonCommentEOS"
-          ]
+            "CodeBlock"
+          ],
+          {
+            "v": 2
+          }
+        ],
+        [
+          "S",
+          [
+            [
+              "?",
+              "EOS"
+            ],
+            "Rule"
+          ],
+          {
+            "v": 2
+          }
         ]
       ]
     ],
-    {
-      "v": 3
-    }
-  ],
-  "StructuralMapping": [
-    "/",
-    [
+    "CodeBlock": [
+      "S",
       [
-        "S",
-        [
-          "StringValue"
-        ],
-        {
-          "f": "return JSON.parse(`\"${$1}\"`) as string",
-          "$loc": {
-            "pos": 2249,
-            "length": 43
-          }
-        }
+        "TripleBacktick",
+        "CodeBody",
+        "TripleBacktick"
       ],
-      "NumberValue",
-      "BooleanValue",
-      "NullValue",
-      [
-        "S",
-        [
-          "Variable"
-        ],
-        {
-          "o": {
-            "v": {
-              "v": 1
-            }
-          }
-        }
-      ],
-      "JSArray",
-      "JSObject"
-    ]
-  ],
-  "JSArray": [
-    "S",
-    [
-      "OpenBracket",
-      [
-        "*",
-        "ArrayItem"
-      ],
-      "CloseBracket"
+      {
+        "v": 2
+      }
     ],
-    {
-      "f": "return $2 as StructuralTerminal[]",
-      "$loc": {
-        "pos": 2449,
-        "length": 39
-      },
-      "t": "StructuralTerminal[] "
-    }
-  ],
-  "ArrayItem": [
-    "S",
-    [
-      "StructuralMapping",
+    "Rule": [
+      "S",
       [
-        "R",
-        ",\\s*|\\s*(?=\\])"
+        "Name",
+        "EOS",
+        "RuleBody"
+      ],
+      [
+        {
+          "v": 1
+        },
+        {
+          "v": 3
+        }
       ]
     ],
-    {
-      "v": 1
-    }
-  ],
-  "JSObject": [
-    "S",
-    [
-      "OpenBrace",
-      [
-        "*",
-        "ObjectField"
-      ],
-      "CloseBrace"
-    ],
-    {
-      "f": "return {\n  o: Object.fromEntries($2)\n}",
-      "$loc": {
-        "pos": 2609,
-        "length": 52
-      },
-      "t": "StructuralObject "
-    }
-  ],
-  "ObjectField": [
-    "/",
-    [
+    "RuleBody": [
+      "+",
       [
         "S",
         [
+          "Indent",
+          "Choice"
+        ]
+      ],
+      {
+        "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
+        "$loc": {
+          "pos": 512,
+          "length": 90
+        }
+      }
+    ],
+    "Choice": [
+      "S",
+      [
+        "Sequence",
+        "Handling"
+      ],
+      {
+        "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
+        "$loc": {
+          "pos": 632,
+          "length": 129
+        }
+      }
+    ],
+    "Sequence": [
+      "/",
+      [
+        [
+          "S",
           [
-            "/",
+            "Expression",
             [
-              "StringValue",
-              "Name"
+              "+",
+              "SequenceExpression"
             ]
           ],
-          [
-            "R",
-            ":[ \\t]*"
-          ],
-          "StructuralMapping",
-          [
-            "R",
-            ",\\s*|\\s*(?=\\})"
-          ]
+          {
+            "f": "$2.unshift($1)\nreturn [\"S\", $2]",
+            "$loc": {
+              "pos": 822,
+              "length": 40
+            },
+            "t": " SequenceNode "
+          }
         ],
         [
+          "S",
+          [
+            "Expression",
+            [
+              "+",
+              "ChoiceExpression"
+            ]
+          ],
           {
-            "v": 1
-          },
-          {
-            "v": 3
+            "f": "$2.unshift($1)\nreturn [\"/\", $2]",
+            "$loc": {
+              "pos": 912,
+              "length": 40
+            },
+            "t": " SequenceNode "
           }
+        ],
+        "Expression"
+      ]
+    ],
+    "SequenceExpression": [
+      "S",
+      [
+        "Space",
+        "Expression"
+      ],
+      {
+        "v": 2
+      }
+    ],
+    "ChoiceExpression": [
+      "S",
+      [
+        "Space",
+        [
+          "L",
+          "/"
+        ],
+        "Space",
+        "Expression"
+      ],
+      {
+        "v": 4
+      }
+    ],
+    "ParameterName": [
+      "S",
+      [
+        [
+          "L",
+          ":"
+        ],
+        "Name"
+      ],
+      {
+        "v": 2
+      }
+    ],
+    "Expression": [
+      "S",
+      [
+        [
+          "?",
+          "PrefixOperator"
+        ],
+        "Suffix",
+        [
+          "?",
+          "ParameterName"
         ]
       ],
+      {
+        "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result] as NameNode\nreturn result as SequenceNode",
+        "$loc": {
+          "pos": 1177,
+          "length": 166
+        },
+        "t": " SequenceNode | NameNode "
+      }
+    ],
+    "PrefixOperator": [
+      "R",
+      "[$&!]"
+    ],
+    "Suffix": [
+      "S",
       [
-        "S",
+        "Primary",
         [
-          "Name",
+          "?",
+          "SuffixOperator"
+        ]
+      ],
+      {
+        "f": "if ($2) return [$2, $1]\nelse return $1",
+        "$loc": {
+          "pos": 1403,
+          "length": 48
+        }
+      }
+    ],
+    "SuffixOperator": [
+      "R",
+      "[+?*]"
+    ],
+    "Primary": [
+      "/",
+      [
+        "Name",
+        "Literal",
+        [
+          "S",
           [
-            "R",
-            ",\\s*|\\s*(?=\\})"
-          ]
+            "OpenParenthesis",
+            "Sequence",
+            "CloseParenthesis"
+          ],
+          {
+            "v": 2
+          }
+        ]
+      ]
+    ],
+    "Literal": [
+      "/",
+      [
+        "StringLiteral",
+        "RegExpLiteral"
+      ]
+    ],
+    "Handling": [
+      "/",
+      [
+        [
+          "S",
+          [
+            "EOS"
+          ],
+          {
+            "f": "return undefined",
+            "$loc": {
+              "pos": 1610,
+              "length": 21
+            }
+          }
         ],
         [
+          "S",
+          [
+            [
+              "*",
+              "Space"
+            ],
+            [
+              "?",
+              "TypeAnnotation"
+            ],
+            "Arrow",
+            "HandlingExpression"
+          ],
+          {
+            "f": "if ($2) {\n  if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n  else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n}\nreturn $4 as Handler",
+            "$loc": {
+              "pos": 1684,
+              "length": 239
+            }
+          }
+        ]
+      ]
+    ],
+    "HandlingExpression": [
+      "/",
+      [
+        [
+          "S",
+          [
+            "EOS",
+            "HandlingExpressionBody",
+            [
+              "?",
+              "EOS"
+            ]
+          ],
+          {
+            "v": 2
+          }
+        ],
+        [
+          "S",
+          [
+            "StructuralMapping",
+            "EOS"
+          ],
           {
             "v": 1
-          },
+          }
+        ]
+      ]
+    ],
+    "HandlingExpressionBody": [
+      "+",
+      "HandlingExpressionLine",
+      {
+        "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
+        "$loc": {
+          "pos": 2076,
+          "length": 64
+        },
+        "t": " Handler "
+      }
+    ],
+    "HandlingExpressionLine": [
+      "S",
+      [
+        "Indent",
+        "Indent",
+        [
+          "$",
+          [
+            "S",
+            [
+              [
+                "R",
+                "[^\\n\\r]*"
+              ],
+              "NonCommentEOS"
+            ]
+          ]
+        ]
+      ],
+      {
+        "v": 3
+      }
+    ],
+    "StructuralMapping": [
+      "/",
+      [
+        [
+          "S",
+          [
+            "StringValue"
+          ],
+          {
+            "f": "return JSON.parse(`\"${$1}\"`) as string",
+            "$loc": {
+              "pos": 2249,
+              "length": 43
+            }
+          }
+        ],
+        "NumberValue",
+        "BooleanValue",
+        "NullValue",
+        [
+          "S",
+          [
+            "Variable"
+          ],
           {
             "o": {
               "v": {
@@ -494,347 +390,456 @@
               }
             }
           }
-        ]
-      ]
-    ]
-  ],
-  "Variable": [
-    "/",
-    [
-      [
-        "R",
-        "\\$(\\d)",
-        {
-          "f": "return parseInt($1, 10)",
-          "$loc": {
-            "pos": 2820,
-            "length": 28
-          }
-        }
-      ],
-      "Name"
-    ]
-  ],
-  "BooleanValue": [
-    "/",
-    [
-      [
-        "L",
-        "true",
-        true
-      ],
-      [
-        "L",
-        "false",
-        false
-      ]
-    ]
-  ],
-  "NullValue": [
-    "/",
-    [
-      [
-        "L",
-        "null",
-        {
-          "f": "return null",
-          "$loc": {
-            "pos": 2928,
-            "length": 16
-          }
-        }
-      ],
-      [
-        "L",
-        "undefined",
-        {
-          "f": "return {l: undefined}",
-          "$loc": {
-            "pos": 2961,
-            "length": 27
-          }
-        }
-      ]
-    ]
-  ],
-  "NumberValue": [
-    "/",
-    [
-      [
-        "R",
-        "0x[\\da-fA-F]+",
-        {
-          "f": "return parseInt($0, 16)",
-          "$loc": {
-            "pos": 3021,
-            "length": 28
-          }
-        }
-      ],
-      [
-        "R",
-        "[-+]?\\d+(\\.\\d+)?",
-        {
-          "f": "return parseFloat($0)",
-          "$loc": {
-            "pos": 3073,
-            "length": 27
-          }
-        }
-      ]
-    ]
-  ],
-  "StringValue": [
-    "S",
-    [
-      [
-        "L",
-        "\\\""
-      ],
-      [
-        "$",
-        [
-          "*",
-          "DoubleStringCharacter"
-        ]
-      ],
-      [
-        "L",
-        "\\\""
+        ],
+        "JSArray",
+        "JSObject"
       ]
     ],
-    {
-      "v": 2
-    }
-  ],
-  "DoubleStringCharacter": [
-    "/",
-    [
-      [
-        "R",
-        "[^\"\\\\]+"
-      ],
-      "EscapeSequence"
-    ]
-  ],
-  "EscapeSequence": [
-    "$",
-    [
+    "JSArray": [
       "S",
       [
-        "Backslash",
+        "OpenBracket",
+        [
+          "*",
+          "ArrayItem"
+        ],
+        "CloseBracket"
+      ],
+      {
+        "f": "return $2 as StructuralTerminal[]",
+        "$loc": {
+          "pos": 2450,
+          "length": 39
+        },
+        "t": " StructuralTerminal[] "
+      }
+    ],
+    "ArrayItem": [
+      "S",
+      [
+        "StructuralMapping",
         [
           "R",
-          "."
+          ",\\s*|\\s*(?=\\])"
         ]
-      ]
-    ]
-  ],
-  "StringLiteral": [
-    "S",
-    [
-      "StringValue"
-    ],
-    [
-      "L",
+      ],
       {
         "v": 1
       }
-    ]
-  ],
-  "RegExpLiteral": [
-    "/",
-    [
+    ],
+    "JSObject": [
+      "S",
       [
-        "S",
+        "OpenBrace",
         [
+          "*",
+          "ObjectField"
+        ],
+        "CloseBrace"
+      ],
+      {
+        "f": "return {\n  o: Object.fromEntries($2)\n}",
+        "$loc": {
+          "pos": 2611,
+          "length": 52
+        },
+        "t": " StructuralObject "
+      }
+    ],
+    "ObjectField": [
+      "/",
+      [
+        [
+          "S",
           [
-            "L",
-            "/"
-          ],
-          [
-            "!",
-            "Space"
-          ],
-          [
-            "$",
             [
-              "*",
-              "RegExpCharacter"
+              "/",
+              [
+                "StringValue",
+                "Name"
+              ]
+            ],
+            [
+              "R",
+              ":[ \\t]*"
+            ],
+            "StructuralMapping",
+            [
+              "R",
+              ",\\s*|\\s*(?=\\})"
             ]
           ],
           [
-            "L",
-            "/"
+            {
+              "v": 1
+            },
+            {
+              "v": 3
+            }
           ]
         ],
         [
-          "R",
-          {
-            "v": 3
-          }
-        ]
-      ],
-      [
-        "$",
-        "CharacterClassExpression",
-        [
-          "R",
-          {
-            "v": 1
-          }
-        ]
-      ],
-      [
-        "L",
-        ".",
-        [
-          "R",
-          {
-            "v": 1
-          }
-        ]
-      ]
-    ]
-  ],
-  "CharacterClassExpression": [
-    "+",
-    "CharacterClass"
-  ],
-  "RegExpCharacter": [
-    "/",
-    [
-      [
-        "R",
-        "[^\\/\\\\]+"
-      ],
-      "EscapeSequence"
-    ]
-  ],
-  "CharacterClass": [
-    "S",
-    [
-      [
-        "L",
-        "["
-      ],
-      [
-        "*",
-        "CharacterClassCharacter"
-      ],
-      [
-        "L",
-        "]"
-      ],
-      [
-        "?",
-        "Quantifier"
-      ]
-    ]
-  ],
-  "CharacterClassCharacter": [
-    "/",
-    [
-      [
-        "R",
-        "[^\\]\\\\]+"
-      ],
-      "EscapeSequence"
-    ]
-  ],
-  "Quantifier": [
-    "R",
-    "[?+*]|\\{\\d+(,\\d+)?\\}"
-  ],
-  "Name": [
-    "R",
-    "[_a-zA-Z][_a-zA-Z0-9]*"
-  ],
-  "Arrow": [
-    "S",
-    [
-      [
-        "L",
-        "->"
-      ],
-      [
-        "*",
-        "Space"
-      ]
-    ]
-  ],
-  "Backslash": [
-    "L",
-    "\\\\"
-  ],
-  "OpenBrace": [
-    "R",
-    "\\{\\s*"
-  ],
-  "CloseBrace": [
-    "R",
-    "\\}[ \\t]*"
-  ],
-  "OpenBracket": [
-    "R",
-    "\\[\\s*"
-  ],
-  "CloseBracket": [
-    "R",
-    "\\][ \\t]*"
-  ],
-  "OpenParenthesis": [
-    "R",
-    "\\([ \\t]*"
-  ],
-  "CloseParenthesis": [
-    "R",
-    "[ \\t]*\\)"
-  ],
-  "Indent": [
-    "L",
-    "  "
-  ],
-  "Space": [
-    "R",
-    "[ \\t]+"
-  ],
-  "NonCommentEOS": [
-    "R",
-    "([ \\t]*(\\n|\\r\\n|\\r|$))+"
-  ],
-  "EOS": [
-    "R",
-    "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+"
-  ],
-  "TripleBacktick": [
-    "L",
-    "```"
-  ],
-  "TypeAnnotation": [
-    "S",
-    [
-      [
-        "L",
-        "::"
-      ],
-      [
-        "$",
-        [
-          "R",
-          "(?:(?!->).)*"
+          "S",
+          [
+            "Name",
+            [
+              "R",
+              ",\\s*|\\s*(?=\\})"
+            ]
+          ],
+          [
+            {
+              "v": 1
+            },
+            {
+              "o": {
+                "v": {
+                  "v": 1
+                }
+              }
+            }
+          ]
         ]
       ]
     ],
-    {
-      "v": 2
-    }
-  ],
-  "CodeBody": [
-    "$",
-    [
+    "Variable": [
+      "/",
+      [
+        [
+          "R",
+          "\\$(\\d)",
+          {
+            "f": "return parseInt($1, 10)",
+            "$loc": {
+              "pos": 2822,
+              "length": 28
+            }
+          }
+        ],
+        "Name"
+      ]
+    ],
+    "BooleanValue": [
+      "/",
+      [
+        [
+          "L",
+          "true",
+          true
+        ],
+        [
+          "L",
+          "false",
+          false
+        ]
+      ]
+    ],
+    "NullValue": [
+      "/",
+      [
+        [
+          "L",
+          "null",
+          {
+            "f": "return null",
+            "$loc": {
+              "pos": 2930,
+              "length": 16
+            }
+          }
+        ],
+        [
+          "L",
+          "undefined",
+          {
+            "f": "return {l: undefined}",
+            "$loc": {
+              "pos": 2963,
+              "length": 27
+            }
+          }
+        ]
+      ]
+    ],
+    "NumberValue": [
+      "/",
+      [
+        [
+          "R",
+          "0x[\\da-fA-F]+",
+          {
+            "f": "return parseInt($0, 16)",
+            "$loc": {
+              "pos": 3023,
+              "length": 28
+            }
+          }
+        ],
+        [
+          "R",
+          "[-+]?\\d+(\\.\\d+)?",
+          {
+            "f": "return parseFloat($0)",
+            "$loc": {
+              "pos": 3075,
+              "length": 27
+            }
+          }
+        ]
+      ]
+    ],
+    "StringValue": [
+      "S",
+      [
+        [
+          "L",
+          "\\\""
+        ],
+        [
+          "$",
+          [
+            "*",
+            "DoubleStringCharacter"
+          ]
+        ],
+        [
+          "L",
+          "\\\""
+        ]
+      ],
+      {
+        "v": 2
+      }
+    ],
+    "DoubleStringCharacter": [
+      "/",
+      [
+        [
+          "R",
+          "[^\"\\\\]+"
+        ],
+        "EscapeSequence"
+      ]
+    ],
+    "EscapeSequence": [
+      "$",
+      [
+        "S",
+        [
+          "Backslash",
+          [
+            "R",
+            "."
+          ]
+        ]
+      ]
+    ],
+    "StringLiteral": [
+      "S",
+      [
+        "StringValue"
+      ],
+      [
+        "L",
+        {
+          "v": 1
+        }
+      ]
+    ],
+    "RegExpLiteral": [
+      "/",
+      [
+        [
+          "S",
+          [
+            [
+              "L",
+              "/"
+            ],
+            [
+              "!",
+              "Space"
+            ],
+            [
+              "$",
+              [
+                "*",
+                "RegExpCharacter"
+              ]
+            ],
+            [
+              "L",
+              "/"
+            ]
+          ],
+          [
+            "R",
+            {
+              "v": 3
+            }
+          ]
+        ],
+        [
+          "$",
+          "CharacterClassExpression",
+          [
+            "R",
+            {
+              "v": 1
+            }
+          ]
+        ],
+        [
+          "L",
+          ".",
+          [
+            "R",
+            {
+              "v": 1
+            }
+          ]
+        ]
+      ]
+    ],
+    "CharacterClassExpression": [
+      "+",
+      "CharacterClass"
+    ],
+    "RegExpCharacter": [
+      "/",
+      [
+        [
+          "R",
+          "[^\\/\\\\]+"
+        ],
+        "EscapeSequence"
+      ]
+    ],
+    "CharacterClass": [
+      "S",
+      [
+        [
+          "L",
+          "["
+        ],
+        [
+          "*",
+          "CharacterClassCharacter"
+        ],
+        [
+          "L",
+          "]"
+        ],
+        [
+          "?",
+          "Quantifier"
+        ]
+      ]
+    ],
+    "CharacterClassCharacter": [
+      "/",
+      [
+        [
+          "R",
+          "[^\\]\\\\]+"
+        ],
+        "EscapeSequence"
+      ]
+    ],
+    "Quantifier": [
       "R",
-      "(?:(?:`(?!``))|[^`])*"
+      "[?+*]|\\{\\d+(,\\d+)?\\}"
+    ],
+    "Name": [
+      "R",
+      "[_a-zA-Z][_a-zA-Z0-9]*"
+    ],
+    "Arrow": [
+      "S",
+      [
+        [
+          "L",
+          "->"
+        ],
+        [
+          "*",
+          "Space"
+        ]
+      ]
+    ],
+    "Backslash": [
+      "L",
+      "\\\\"
+    ],
+    "OpenBrace": [
+      "R",
+      "\\{\\s*"
+    ],
+    "CloseBrace": [
+      "R",
+      "\\}[ \\t]*"
+    ],
+    "OpenBracket": [
+      "R",
+      "\\[\\s*"
+    ],
+    "CloseBracket": [
+      "R",
+      "\\][ \\t]*"
+    ],
+    "OpenParenthesis": [
+      "R",
+      "\\([ \\t]*"
+    ],
+    "CloseParenthesis": [
+      "R",
+      "[ \\t]*\\)"
+    ],
+    "Indent": [
+      "L",
+      "  "
+    ],
+    "Space": [
+      "R",
+      "[ \\t]+"
+    ],
+    "NonCommentEOS": [
+      "R",
+      "([ \\t]*(\\n|\\r\\n|\\r|$))+"
+    ],
+    "EOS": [
+      "R",
+      "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+"
+    ],
+    "TripleBacktick": [
+      "L",
+      "```"
+    ],
+    "TypeAnnotation": [
+      "S",
+      [
+        [
+          "L",
+          "::"
+        ],
+        [
+          "$",
+          [
+            "R",
+            "(?:(?!->).)*"
+          ]
+        ]
+      ],
+      {
+        "v": 2
+      }
+    ],
+    "CodeBody": [
+      "$",
+      [
+        "R",
+        "(?:(?:`(?!``))|[^`])*"
+      ]
     ]
-  ]
+  }
 }

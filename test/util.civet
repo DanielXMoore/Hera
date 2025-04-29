@@ -2,7 +2,7 @@ assert from assert
 { decompile, grammarToEBNF } from ../source/util.civet
 {parse} from ../source/main.civet
 { readFile } from ./helper.civet
-rules := JSON.parse readFile "source/rules.json"
+heraGrammarAST := JSON.parse readFile "source/rules.json"
 
 describe "util", ->
   /*
@@ -10,14 +10,13 @@ describe "util", ->
     source/rules.json
   */
   it "should parse decompiled rules", ->
-    grammar .= decompile(rules)
+    grammar .= decompile({ ...heraGrammarAST.rules, [:code]: heraGrammarAST.code })
 
     // console.log grammar
     parsedRules := parse grammar
     // console.log parsedRules, rules
 
-    Object.keys(parsedRules).forEach (key) ->
-      assert.deepEqual(parsedRules[key], rules[key], `${key} rule doesn't match`)
+    assert.deepEqual parsedRules, heraGrammarAST.rules
 
     // strip trailing whitespace before compare
     grammar = grammar.replace(/[ ]+\n/g, '\n')
@@ -25,8 +24,8 @@ describe "util", ->
     src := readFile("source/hera.hera")
     assert.equal grammar, src
 
-  it "should convert to ebnf", ->
-    grammarToEBNF(rules)
+  it "should convert grammar rules to ebnf", ->
+    grammarToEBNF(heraGrammarAST.rules)
 
   it "should decompile nested choices", ->
     rules := parse """
