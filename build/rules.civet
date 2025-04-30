@@ -1,0 +1,9 @@
+{ parse } from ../source/main.civet
+fs from fs
+
+"source/hera.hera"
+  |> fs.readFileSync ., "utf8"
+  |> parse
+  |> (ast) => { code: ast[:code], rules: ast }
+  |> JSON.stringify ., null, 2
+  |> fs.writeFileSync "source/rules.json", ., encoding: "utf8"

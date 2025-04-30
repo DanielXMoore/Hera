@@ -1,20 +1,33 @@
 { parse } from ./main.civet
 
-import type {
-  Handler
-  HeraAST
-  HeraRules
-  StructuralHandling
+{
+  CodeSymbol
+  type Handler
+  type HeraAST
+  type HeraRules
+  type StructuralHandling
 } from ./hera-types.civet
 
 /**
 Convert HeraRules to a Hera source text
 */
 decompile := (rules: HeraRules) ->
-  Object.keys(rules).map (name) ->
-    value := toS rules[name]
-    `${name}\n  ${value}\n`
-  .join("\n")
+  lines := []
+
+  for codeBlock of [rules[CodeSymbol]].flat()
+    lines.push ```
+      \```${codeBlock}\```
+
+    ```
+
+  for [name, value] of Object.entries(rules)
+    lines.push ```
+      ${name}
+        ${toS value}
+
+    ```
+
+  lines.join("\n")
 
 structuralToSource := (mapping: StructuralHandling): string ->
   switch typeof mapping

@@ -25,7 +25,7 @@
       "civet"
     ],
     "require": [
-      "@danielx/hera-previous/register",
+      "@danielx/hera-previous/register/tsc",
       "@danielx/civet/register"
     ],
     "reporter": "dot",
@@ -55,8 +55,9 @@
   },
   "scripts": {
     "prepublishOnly": "yarn build && yarn test",
-    "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register' civet ./perf/benchmark.civet",
+    "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
+    "build:rules": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet build/rules.civet",
     "test": "c8 mocha && yarn test:typed-parser-samples && yarn test:esbuild-plugin && yarn test:loaders",
     "test:esbuild-plugin": "cd ./esbuild-example && node ./build-and-use-example.cjs && node ./test-import.mjs && node ./test-require.cjs",
     "test:loaders": "./loader-examples/test-examples",
