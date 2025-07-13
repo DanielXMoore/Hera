@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+
+c8 mocha "$@"
+yarn test:typed-parser-samples
+yarn test:esbuild-plugin
+yarn test:loaders
