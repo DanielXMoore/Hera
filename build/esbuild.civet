@@ -56,7 +56,7 @@ esbuild.build {
   ]
   footer: {
     // Rewrite default export as CJS exports object
-    // so require('esbuild-plugin') provides the plugin as the default export
+    // so require('@danielx/hera/esbuild') provides the plugin as the default export
     js: 'module.exports = module.exports.default;'
   }
 }
