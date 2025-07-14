@@ -769,7 +769,7 @@ describe "Hera", ->
         exit: (rule, state, result, data) ->
           eventLog.push [rule, state, result, data]
 
-      eventLog := []
+      eventLog: unknown[] := []
       parse "a", { events }
 
       assert.deepEqual eventLog, [

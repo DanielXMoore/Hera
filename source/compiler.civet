@@ -314,9 +314,9 @@ defaultOptions: CompilerOptions :=
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: SourceMap }
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
-export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: SourceMap }
   options := { ...defaultOptions, ...maybeOptions }
 
   strDefs.length = 0
@@ -338,15 +338,16 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   genOpts: GenerateOptions := {}
 
-  let sm: ReturnType<typeof SourceMap> | undefined
+  let sm: SourceMap | undefined
   if options.inlineMap or options.sourceMap
     /* c8 ignore next */
     unless options.source
       /* c8 ignore next */
       throw new Error "sourceMap requires source"
 
-    sm = SourceMap(options.source)
-    genOpts.updateSourceMap = sm.updateSourceMap
+    sm = new SourceMap(options.source)
+    //@ts-expect-error
+    genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
 
   head := (types ? tsHead : module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
   tail := types ? tsTail : jsTail
