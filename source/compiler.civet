@@ -314,9 +314,9 @@ defaultOptions: CompilerOptions :=
 
 { SourceMap, base64Encode } from ./sourcemap.civet
 
-export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: SourceMap }
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
-export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: ReturnType<typeof SourceMap> }
+export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: SourceMap }
   options := { ...defaultOptions, ...maybeOptions }
 
   strDefs.length = 0
