@@ -56,7 +56,7 @@ Use the Hera esbuild plugin to bundle:
 
 ```javascript
 import esbuild from "esbuild"
-import heraPlugin from "@danielx/hera/esbuild-plugin"
+import heraPlugin from "@danielx/hera/esbuild"
 
 await esbuild.build({
   entryPoints: ['index.mjs'],
@@ -248,7 +248,7 @@ Changelog
     require("@danielx/hera/register")
     const {parse} = require("./parser.hera")
     ```
-  - esbuild plugin `require("@danielx/hera/esbuild-plugin")`
+  - esbuild plugin `require("@danielx/hera/esbuild")`
   - `hera` CLI tool with experimental TypeScript output support `hera --types < cool-app.hera > parser.ts`
   - Added support for number literals in structural handlers.
   - Changed structural handling to use $1, etc. instead of 1 for positional variables.
