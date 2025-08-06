@@ -1,0 +1,8 @@
+```
+// this syntax will only work if the grammar is compiled as CJS
+exports.exportedValue = "ok"
+```
+
+Rule
+  "a" ->
+    return "ok"

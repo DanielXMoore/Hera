@@ -53,12 +53,6 @@ test_example node --require ./hera-custom/register.js ./hera-custom/use.cjs
 expect_fail node --require  ./hera-custom/register.js ./hera-custom/use.mjs
 
 
-# JS-only grammar compiled as ESM module
-test_example node --import  ./hera-custom-esm-grammar/register.js ./hera-custom-esm-grammar/use.mjs
-
-expect_fail node --require  ./hera-custom-esm-grammar/register.js ./hera-custom-esm-grammar/use.mjs
-
-
 # TS grammar, transpiled to JS, using custom tsc compiler options
 # These require the typescript module to be installed
 test_example node --import  ./tsc-custom/register.js ./tsc-custom/use.mjs

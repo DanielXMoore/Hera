@@ -355,6 +355,9 @@ Instead of using `--import @danielx/hera/register/tsc`, register the `register/e
 E.g.
 ```js
 // custom-loader.js
+const { register } = require("node:module")
+const { pathToFileURL } = require("node:url")
+
 register("@danielx/hera/register/esm", pathToFileURL(__filename), {
   data: heraOptions
 })

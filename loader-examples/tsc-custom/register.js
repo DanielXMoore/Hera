@@ -18,4 +18,8 @@ register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
 
 
 // CJS
-require("@danielx/hera/register/tsc/cjs").options.tsc = tscCompilerOptions;
+const heraCjs = require("@danielx/hera/register/tsc/cjs");
+heraCjs.options.tsc = {
+  ...tscCompilerOptions,
+  module: require("typescript").ModuleKind.CommonJS // have tsc compile to CommonJS so use.cjs can require it
+};

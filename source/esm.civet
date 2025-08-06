@@ -14,8 +14,15 @@ loaderTag := '#hera-esm-loader'
 // module-level state that is set via the initialize function
 let heraOptions: CompilerOptions
 
+defaultHeraOptions: CompilerOptions := {
+  module: true
+}
+
 export function initialize(data: CompilerOptions = {})
-  heraOptions = data
+  heraOptions = {
+    ...defaultHeraOptions
+    ...data
+  }
 
 
 export resolve: ResolveHook := (specifier, context, next) =>
@@ -50,8 +57,11 @@ export load: LoadHook := (url, context, next) =>
     `${url}#hera-esm-loader`
     {
       ...context
-      // without format set to 'module', Node.js tries to compile the .hera file
-      // as it were JavaScript instead of return it as a string
+
+      // Have Node.js return the contents of this file as a string.
+      //
+      // Without format set to 'module', Node.js assumes the .hera file contains
+      // JavaScript and tries to compile it to a CJS module.
       format: 'module'
     }
   )

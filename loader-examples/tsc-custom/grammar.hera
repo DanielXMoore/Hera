@@ -1,6 +1,6 @@
 ```
 // This import will only succeed if the custom tsc compiler options are applied
-import { helperValue }  from './helper.cts'
+import { helperValue } from './helper.cts'
 ```
 
 Rule
