@@ -3,14 +3,20 @@ typescript from typescript
 export CompilerOptions ::= typescript.TranspileOptions['compilerOptions']
 LogFn ::= (...args: any[]) => any
 
+defaultCompilerOptions: CompilerOptions := {
+  target: typescript.ScriptTarget.ES2022 // based on @tsconfig/node-lts
+  module: typescript.ModuleKind.Preserve
+}
+
 export function transpileTsToJs(
   tsSource: string,
   compilerOptions: CompilerOptions = {}
   log: LogFn = console.error
 )
-  compilerOptions = { ...compilerOptions }
-  compilerOptions.target ??= typescript.ScriptTarget.ES2022 // based on @tsconfig/node-lts
-  compilerOptions.module ??= typescript.ModuleKind.CommonJS // use CommonJS by default because it works with CJS and ESM contexts
+  compilerOptions = {
+    ...defaultCompilerOptions
+    ...compilerOptions
+  }
 
   { outputText, diagnostics } := typescript.transpileModule(tsSource, {
     reportDiagnostics: true

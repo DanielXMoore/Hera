@@ -1,0 +1,9 @@
+```
+exports.exportedValue = "ok"
+```
+
+Rule
+  "a" ->
+    // requiring this grammar will only succeed if `as string` is stripped or
+    // traspiled away
+    return "ok" as string
