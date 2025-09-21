@@ -461,34 +461,32 @@ cjsHead := """
 """
 
 jsTail := """
-  const parser = (function() {
-    const { fail, validate, reset } = Validator()
-    let ctx = { expectation: "", fail }
+  const parser = {
+    parse: (input, options = {}) => {
+      const { fail, validate, reset } = Validator()
+      let ctx = { expectation: "", fail }
 
-    return {
-      parse: (input, options = {}) => {
-        if (typeof input !== "string") throw new Error("Input must be a string")
+      if (typeof input !== "string") throw new Error("Input must be a string")
 
-        const parser = (options.startRule != null)
-          ? grammar[options.startRule]
-          : Object.values(grammar)[0]
+      const parser = (options.startRule != null)
+        ? grammar[options.startRule]
+        : Object.values(grammar)[0]
 
-        if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
+      if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 
-        const filename = options.filename || "<anonymous>";
+      const filename = options.filename || "<anonymous>";
 
-        reset()
-        Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+      reset()
+      Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
 
-        return validate(input, parser(ctx, {
-          input,
-          pos: 0,
-        }), {
-          filename: filename
-        })
-      }
+      return validate(input, parser(ctx, {
+        input,
+        pos: 0,
+      }), {
+        filename: filename
+      })
     }
-  }())
+  }
 """
 
 cjsExport := """
