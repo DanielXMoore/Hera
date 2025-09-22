@@ -6,9 +6,9 @@ Building
 
 ### Source files
 
-`source/main.civet`: wrapper for both parser and compiler
-`source/compiler.civet`: Transforms Hera rules into an executable JS file.
-`source/hera.hera`: Parser source file
+`source/main.civet`: wrapper for both parser and compiler\
+`source/compiler.civet`: Transforms Hera rules into an executable JS file.\
+`source/hera.hera`: Parser source file\
 `source/machine.ts`: PEG machinery included in parser
 
 ### Generated files
@@ -26,9 +26,10 @@ Building
 ./dist/hera --libPath ./machine.js < source/hera.hera > source/parser.js
 ```
 
-`--libPath` tells where the generated parser should look to find the PEG
-machinery. Default is `@danielx/hera/lib` but that won't work when building
-internally.
+`--libPath` tells where the generated parser should import the PEG machinery.
+Default is `@danielx/hera/lib` but that won't work when building internally.
+If you want to specify an absolute path name, be sure to wrap it in
+a `file://` URL via `pathToFileURL`.
 
 Tokenize Mode
 -------------
