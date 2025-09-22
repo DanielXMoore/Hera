@@ -58,10 +58,10 @@
     "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
     "build:rules": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet build/rules.civet",
-    "test": "./build/test",
+    "test": "bash ./build/test",
     "test:esbuild-plugin": "cd ./esbuild-example && node ./build-and-use-example.cjs && node ./test-import.mjs && node ./test-require.cjs",
-    "test:loaders": "./loader-examples/test-examples",
-    "test:typed-parser-samples": "build/typed-parser-samples && tsc -p tsconfig.parsers.json"
+    "test:loaders": "bash ./loader-examples/test-examples",
+    "test:typed-parser-samples": "bash build/typed-parser-samples && tsc -p tsconfig.parsers.json"
   },
   "bin": {
     "hera": "dist/hera"

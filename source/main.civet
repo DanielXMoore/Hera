@@ -47,17 +47,16 @@ generate := <T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOp
     |> transpile
     |> execMod(.) as { parse: (input: string, options?: ParserOptions<T>) => ??? }
 
-modImport := async <T extends HeraGrammar>(src: string) => {
+modImport := async <T extends HeraGrammar>(src: string) =>
   fs := await import('node:fs/promises')
   { fileURLToPath, pathToFileURL } := await import "node:url"
-  { dirname } := await import "node:path"
+  { dirname, join } := await import "node:path"
 
   __dirname := dirname fileURLToPath(import.meta.url)
 
-  js := compile(parse(src), {
-    module: true,
-    libPath: `${ __dirname }/machine.js`,
-  })
+  js := compile parse(src),
+    module: true
+    libPath: pathToFileURL(join __dirname, 'machine.js').href
 
   // random temp file
   tmpPath := `${ __dirname }/hera-tmp-${ Math.random().toString(36).slice(2) }.mjs`
@@ -69,7 +68,6 @@ modImport := async <T extends HeraGrammar>(src: string) => {
     }
   finally
     await fs.unlink(tmpPath)
-}
 
 export {
   parse
