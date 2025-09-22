@@ -56,7 +56,7 @@ modImport := async <T extends HeraGrammar>(src: string) => {
 
   js := compile(parse(src), {
     module: true,
-    libPath: `${ __dirname }/machine.js`,
+    libPath: `./machine.js`,
   })
 
   // random temp file
