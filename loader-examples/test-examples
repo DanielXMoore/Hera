@@ -61,3 +61,19 @@ test_example node --require ./tsc-custom/register.js ./tsc-custom/use.cjs
 expect_fail node --require  ./tsc-custom/register.js ./tsc-custom/use.mjs
 
 
+# Grammars that use Civet code; transpiled to JavaScript via the @danielx/civet npm module
+# These require the @danielx/civet module to be installed
+test_example node --import  @danielx/hera/register/civet ./civet-default/use.mjs
+test_example node --require @danielx/hera/register/civet ./civet-default/use.cjs
+
+expect_fail node --require  @danielx/hera/register/civet ./civet-default/use.mjs
+
+
+# Civet grammar compiled with custom Civet parseOptions (coffeeCompat)
+# These require the @danielx/civet module to be installed
+test_example node --import  ./civet-custom/register.js ./civet-custom/use.mjs
+test_example node --require ./civet-custom/register.js ./civet-custom/use.cjs
+
+expect_fail node --require  ./civet-custom/register.js ./civet-custom/use.mjs
+
+

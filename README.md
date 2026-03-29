@@ -316,6 +316,11 @@ Loads .hera files that compile to TypeScript.
 
 Attempts to load the `typescript` npm module to transpile TypeScript to JavaScript.
 
+### `--import/--require @danielx/hera/register/civet`
+Loads .hera files that compile to Civet.
+
+Attempts to load the `@danielx/civet` npm module to transpile Civet to JavaScript.
+
 ### Specifying Hera compiler options
 
 #### ESM
