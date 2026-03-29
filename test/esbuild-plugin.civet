@@ -104,3 +104,50 @@ describe "esbuild plugin", ->
           esbuildOptions: { logLevel: 'silent' }
 
       /Failed to parse/
+
+  it "should auto-set loader to 'ts' when language is 'typescript'", ->
+    { parse } := await buildAndImport 'ts-language-grammar.hera',
+      """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      pluginOptions: { language: 'typescript' }
+
+    assert.equal parse('a'), "ok"
+
+  it "should compile civet handlers when language is 'civet'", ->
+    { parse } := await buildAndImport 'civet-language-grammar.hera',
+      """
+        Rule
+          "a" ->
+            x := "ok"
+            return x
+      """
+      pluginOptions: { language: 'civet' }
+
+    assert.equal parse('a'), "ok"
+
+  it "should compile civet with TS syntax when language is 'civet'", ->
+    { parse } := await buildAndImport 'civet-ts-grammar.hera',
+      """
+        Rule
+          "a" ->
+            x: string := "ok"
+            return x
+      """
+      pluginOptions: { language: 'civet' }
+
+    assert.equal parse('a'), "ok"
+
+  it "should not override explicit loader option when language is set", ->
+    // If user explicitly passes loader, it wins over language-derived loader
+    { parse } := await buildAndImport 'explicit-loader-grammar.hera',
+      """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      pluginOptions: { language: 'typescript', loader: 'ts' }
+
+    assert.equal parse('a'), "ok"
