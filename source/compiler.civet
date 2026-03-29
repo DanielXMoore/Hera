@@ -492,11 +492,11 @@ jsTail := """
 
       if (typeof input !== "string") throw new Error("Input must be a string")
 
-        let parser
-        if (options.startRule !== null && options.startRule !== undefined)
-          parser = grammar[options.startRule]
-        else
-          parser = Object.values(grammar)[0]
+      let parser
+      if (options.startRule !== null && options.startRule !== undefined)
+        parser = grammar[options.startRule]
+      else
+        parser = Object.values(grammar)[0]
 
       if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 
