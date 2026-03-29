@@ -85,6 +85,9 @@ connection.onInitialized(() => {
       connection.console.log('Workspace folder change event received.');
     });
   }
+  getHeraLanguage().then(lang => {
+    connection.console.log(`[hera] language: ${lang}`);
+  });
 });
 
 // This handler provides the initial list of the completion items.
@@ -134,6 +137,52 @@ connection.onDocumentSymbol((params) => {
 // The example settings
 interface ExampleSettings {
   maxNumberOfProblems: number;
+}
+
+interface HeraSettings {
+  language: 'javascript' | 'typescript' | 'civet';
+}
+
+const defaultHeraSettings: HeraSettings = { language: 'javascript' };
+
+/**
+ * Read hera.language from the workspace package.json as a fallback
+ * when no VS Code setting is present.
+ */
+async function getLanguageFromPackageJson(): Promise<HeraSettings['language'] | undefined> {
+  try {
+    const workspaceFolders = await connection.workspace.getWorkspaceFolders();
+    if (!workspaceFolders?.length) return undefined;
+
+    const rootUri = workspaceFolders[0].uri;
+    const { fileURLToPath } = await import('node:url');
+    const pkgPath = fileURLToPath(rootUri) + '/package.json';
+
+    const { readFile } = await import('node:fs/promises');
+    const raw = await readFile(pkgPath, 'utf8');
+    const pkg = JSON.parse(raw);
+    const lang = pkg?.hera?.language;
+
+    if (lang === 'javascript' || lang === 'typescript' || lang === 'civet') {
+      return lang;
+    }
+  } catch {
+    // package.json missing or unreadable — not an error
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the effective hera.language for the workspace.
+ * Priority: VS Code setting > package.json#hera.language > default ('javascript')
+ */
+async function getHeraLanguage(): Promise<HeraSettings['language']> {
+  if (hasConfigurationCapability) {
+    const settings = await connection.workspace.getConfiguration({ section: 'hera' });
+    const lang = (settings as Partial<HeraSettings>).language;
+    if (lang === 'javascript' || lang === 'typescript' || lang === 'civet') return lang;
+  }
+  return (await getLanguageFromPackageJson()) ?? defaultHeraSettings.language;
 }
 
 // The global settings, used when the `workspace/configuration` request is not supported by the client.

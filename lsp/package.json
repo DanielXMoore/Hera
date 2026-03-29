@@ -50,7 +50,18 @@
           "meta.embedded.block.hera": "hera"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Hera",
+      "properties": {
+        "hera.language": {
+          "type": "string",
+          "enum": ["javascript", "typescript", "civet"],
+          "default": "javascript",
+          "description": "The language used for handlers and code blocks in .hera files."
+        }
+      }
+    }
   },
   "mocha": {
     "extension": [
