@@ -1,0 +1,21 @@
+// Module hook that compiles Civet to JavaScript
+
+type { LoadHook } from node:module
+assert from node:assert
+
+{ compileCivetToJs } from ./transpile.civet
+
+// module-level state set via initialize()
+let civetOptions: object = {}
+
+export function initialize(data: object = {})
+  civetOptions = data
+
+export load: LoadHook := async (url, context, next) =>
+  result := await next(url, context)
+  return result unless /\.hera$/.test(url)
+
+  assert result.source, `${url} file source was not loaded`
+  source := compileCivetToJs(result.source.toString(), url, civetOptions)
+
+  { ...result, source }

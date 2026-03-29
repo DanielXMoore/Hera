@@ -1,0 +1,27 @@
+{ createRequire } from 'module'
+
+// createRequire needs a base path for peer dep resolution.
+// process.cwd() is available in both ESM (tests) and CJS (production),
+// and anchors module resolution to the project root where peer deps live.
+_require := createRequire(`${process.cwd()}/package.json`)
+
+loadCivet := ->
+  /* c8 ignore next 7 */
+  try
+    _require('@danielx/civet')
+  catch
+    throw new Error [
+      "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
+      "Run: npm install @danielx/civet"
+    ].join '\n'
+
+/**
+ * Compile a Civet source string to JavaScript.
+ * Used by the Node CJS and ESM loaders.
+ * Uses { sync: true } so the result is returned synchronously (required for CJS require.extensions).
+ */
+export compileCivetToJs := (src: string, filename: string, civetOptions?: object): string ->
+  civet := loadCivet()
+  result := civet.compile(src, { js: true, sync: true, filename, ...civetOptions })
+  /* c8 ignore next */
+  if typeof result is 'string' then result else result.code
