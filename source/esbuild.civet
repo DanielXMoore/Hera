@@ -19,7 +19,7 @@ defaultLoaderForLanguage := (language: CompilerOptions['language']): Loader =>
 export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions = {}): Plugin
   name: 'hera'
   setup: (build) =>
-    build.onLoad { filter: /.\.hera$/ }, async ({ path }) =>
+    build.onLoad { filter: /.\.hera$/ }, ({ path }) =>
       filename := relative(process.cwd(), path)
 
       compiled := readFile(path, 'utf8')
