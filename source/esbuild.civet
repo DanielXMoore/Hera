@@ -7,15 +7,50 @@ type { Plugin, Loader } from esbuild
 export interface HeraPluginOptions < CompilerOptions
   loader?: Loader
 
+export runtime =
+  loadCivet: =>
+    (await import('@danielx/civet')).default
+
+// Derive the default esbuild loader from the language option.
+// An explicit loader option always wins.
+defaultLoaderForLanguage := (language: CompilerOptions['language']): Loader =>
+  switch language
+    when 'typescript', 'civet'
+      'ts'
+    else
+      'js'
+
 export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions = {}): Plugin
   name: 'hera'
   setup: (build) =>
     build.onLoad { filter: /.\.hera$/ }, ({ path }) =>
       filename := relative(process.cwd(), path)
 
-      readFile(path, 'utf8')
+      compiled := readFile(path, 'utf8')
         |> await
         |> compile ., { ...heraOptions, filename }
-        |> { contents: & }
-        // only set the loader if it's provided; don't set it to undefined
-        |> (load) => loader ? { ...load, loader } : load
+
+      let contents = compiled
+
+      if heraOptions.language is 'civet'
+        let civet: any
+        try
+          civet = await runtime.loadCivet()
+        catch
+          throw new Error [
+            "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
+            "Run: npm install -D @danielx/civet"
+          ].join '\n'
+
+        // No { js: true } here — Civet outputs TypeScript, then esbuild strips
+        // types with loader:'ts'. This preserves advanced TS features (const enum
+        // etc.) that Civet can't compile to JS itself. The Node loader path uses
+        // { js: true, sync: true } because require.extensions must be synchronous
+        // and there is no esbuild in the chain to strip types.
+        result := await civet.compile(compiled)
+        /* c8 ignore next */
+        contents = if typeof result is 'string' then result else result.code
+
+      resolvedLoader := loader ?? defaultLoaderForLanguage(heraOptions.language)
+
+      { contents, loader: resolvedLoader }

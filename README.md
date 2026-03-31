@@ -13,6 +13,7 @@ The mother of all parsers.
 - [Parsing Expression Grammars:
 A Recognition-Based Syntactic Foundation](https://bford.info/pub/lang/peg.pdf)
 - [Wikipedia](https://en.wikipedia.org/wiki/Parsing_expression_grammar)
+- [Developer Guide](docs/developer-guide.md)
 
 Quickstart
 ---
@@ -315,6 +316,11 @@ Loads .hera files that compile to JavaScript.
 Loads .hera files that compile to TypeScript.
 
 Attempts to load the `typescript` npm module to transpile TypeScript to JavaScript.
+
+### `--import/--require @danielx/hera/register/civet`
+Loads .hera files that compile to Civet.
+
+Attempts to load the `@danielx/civet` npm module to transpile Civet to JavaScript.
 
 ### Specifying Hera compiler options
 

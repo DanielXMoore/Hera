@@ -1,0 +1,43 @@
+assert from assert
+{ mock } from node:test
+{ compileCivetToJs, runtime } from ../../../source/register/civet/transpile.civet
+
+describe "compileCivetToJs", ->
+  it "should compile Civet const declaration to JavaScript", ->
+    result := compileCivetToJs "x := 42"
+    assert typeof result is 'string'
+    assert.match result, /const x = 42/
+
+  it "should strip TypeScript type annotations", ->
+    result := compileCivetToJs "f := (x: number): number => x + 1"
+    assert typeof result is 'string'
+    assert.doesNotMatch result, /: number/
+    assert.match result, /const f/
+
+  it "should return synchronously (not a Promise)", ->
+    result: unknown := compileCivetToJs "x := 1"
+    // If this were a Promise, instanceof check would catch it
+    assert !(result instanceof Promise)
+    assert typeof result is 'string'
+
+  it "should accept civetOptions and pass them to civet compiler", ->
+    // # is a comment in coffeeCompat syntax; invalid in standard Civet
+    result := compileCivetToJs "x := 42 # a comment", "test.civet", { parseOptions: { coffeeCompat: true } }
+    assert typeof result is 'string'
+    assert.match result, /const x = 42/
+
+  it "should compile with sourcemap option", ->
+    result := compileCivetToJs "x := 42", "test.civet", { sourceMap: true }
+    assert typeof result is 'string'
+    assert.match result, /const x = 42/
+
+  it "should throw a helpful error when @danielx/civet is missing", ->
+    restore := mock.method runtime, 'loadCivet', =>
+      throw new Error "Cannot find module '@danielx/civet'"
+
+    assert.throws(
+      => compileCivetToJs "x := 42"
+      /Civet support requires '@danielx\/civet' to be installed/
+    )
+
+    restore.mock.restore()

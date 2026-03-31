@@ -1,0 +1,34 @@
+{ createRequire } from 'module'
+type { CompileOptions } from '@danielx/civet'
+
+// createRequire needs a base path for peer dep resolution.
+// process.cwd() is available in both ESM (tests) and CJS (production),
+// and anchors module resolution to the project root where peer deps live.
+_require := createRequire(`${process.cwd()}/package.json`)
+
+export runtime =
+  loadCivet: ->
+    _require('@danielx/civet') as typeof import('@danielx/civet')
+
+/**
+ * Compile a Civet source string to JavaScript.
+ * Used by the Node CJS and ESM loaders.
+ * Uses { sync: true } so the result is returned synchronously (required for CJS require.extensions).
+ */
+export compileCivetToJs := (src: string, filename?: string, civetOptions?: CompileOptions): string ->
+  civet :=
+    try
+      runtime.loadCivet()
+    catch
+      throw new Error [
+        "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
+        "Run: npm install @danielx/civet"
+      ].join '\n'
+  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true }
+  result := civet.compile(src, options)
+
+  if result <? 'string'
+    result
+  else
+    // @ts-expect-error TODO: Figure out why it thinks result is a promise and not a string or object even though sync: true
+    result.code

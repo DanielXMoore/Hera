@@ -797,3 +797,71 @@ describe "Hera", ->
       """
 
       assert parse("a")
+
+  describe "CompilerOptions.language", ->
+    it "should default to JS scaffold when language is unset", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok"
+      """
+      result := compile(parse(grammar))
+      // JS scaffold does not contain ParseState type annotation
+      assert.doesNotMatch result, /: ParseState/
+
+    it "should use TS scaffold when language is 'typescript'", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      result := compile(parse(grammar), language: 'typescript')
+      // TS scaffold contains ParseState type annotation
+      assert.match result, /: ParseState/
+
+    it "should use TS scaffold when language is 'civet'", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      result := compile(parse(grammar), language: 'civet')
+      assert.match result, /: ParseState/
+
+    it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      result := compile(parse(grammar), language: 'civet')
+      assert.match result, /require\(/
+      assert.doesNotMatch result, /^import /
+
+    it "should use ESM import when language is 'civet' and module is true", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      result := compile(parse(grammar), language: 'civet', module: true)
+      assert.match result, /^import /m
+      assert.doesNotMatch result, /require\(/
+
+    it "should use JS scaffold when language is 'javascript'", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok"
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.doesNotMatch result, /: ParseState/
+
+    it "should respect existing types:true when language is unset", ->
+      grammar := """
+        Rule
+          "a" ->
+            return "ok" as string
+      """
+      result := compile(parse(grammar), types: true)
+      assert.match result, /: ParseState/

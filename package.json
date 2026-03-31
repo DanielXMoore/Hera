@@ -1,9 +1,9 @@
 {
   "name": "@danielx/hera",
-  "version": "0.8.18",
+  "version": "0.8.19-pre.0",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
-    "@danielx/civet": "0.10.2",
+    "@danielx/civet": "0.11.2",
     "@danielx/hera-previous": "npm:@danielx/hera@0.8.17",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.5.6",
@@ -18,7 +18,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DanielXMoore/hera.git"
+    "url": "git+https://github.com/DanielXMoore/hera.git"
   },
   "mocha": {
     "extension": [
@@ -81,6 +81,9 @@
     "./register/tsc": "./dist/register/tsc/index.js",
     "./register/tsc/esm": "./dist/register/tsc/esm.js",
     "./register/tsc/cjs": "./dist/register/tsc/cjs.js",
+    "./register/civet": "./dist/register/civet/index.js",
+    "./register/civet/cjs": "./dist/register/civet/cjs.js",
+    "./register/civet/esm": "./dist/register/civet/esm.js",
     "./esm": "./dist/esm.js",
     "./*": "./*",
     "./dist/*": "./dist/*",

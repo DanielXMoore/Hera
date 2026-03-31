@@ -1,0 +1,29 @@
+// CJS hook: Hera compile → Civet→JS → module._compile
+
+type { Module } from node:module
+{ readFileSync } from node:fs
+
+type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
+{ compile: heraCompile } from ../../main.civet
+{ compileCivetToJs } from ./transpile.civet
+
+export options := {
+  hera: {} as HeraCompilerOptions
+  civet: {} as object
+}
+
+if require.extensions
+  try
+    require "@cspotcode/source-map-support/register-hook-require"
+
+  require.extensions[".hera"] = (module: Module, filename: string) =>
+    filename
+      |> readFileSync(., "utf8")
+      |> heraCompile(., {
+          filename,
+          inlineMap: true
+          ...options.hera
+          language: 'civet'
+        })
+      |> compileCivetToJs(., filename, options.civet)
+      |> (module as any)._compile(., filename)

@@ -10,6 +10,7 @@ export type CompilerOptions = {
   types?: boolean
   libPath?: string | undefined
   module?: boolean
+  language?: 'javascript' | 'typescript' | 'civet'
 }
 
 strDefs: string[] := []
@@ -166,9 +167,10 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
     if h and typeof h is "object" and "f" in h // function mapping
       parser := compileOp(arg, name, false, options.types)
 
+      handlerToken := h.f.replace(/^|\n/g, "$&    ")
       handler :=
         $loc: h.$loc
-        token: h.f
+        token: handlerToken
         offset: 4
 
       /* c8 ignore next */
@@ -179,7 +181,7 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
         // Gather names from each element in arg[1]
         // Only handle top level names for now
         // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
-        namedParameters := arg[1].map (node, i) ->
+        namedParameters := "    " + arg[1].map (node, i) ->
           getParameterDeclaration(node, i+1)
         .join("")
 
@@ -203,7 +205,7 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
           "\n});"
         ]
       else
-        namedParameters := getParameterDeclaration(arg, 0)
+        namedParameters := "    " + getParameterDeclaration(arg, 0)
 
         return [
           `${variableName}${parserTypeAnnotation} = `
@@ -266,12 +268,10 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
-    `${name}: ${name}`
+    `  ${name}: ${name}`
   .join(",\n")
 
-  return `{
-    ${meat}
-  }`
+  return `{\n${meat}}`
 
 compileExports := (ruleNames: string[], module: boolean) ->
   if module
@@ -322,7 +322,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   strDefs.length = 0
   reDefs.length = 0
 
-  { types, module } := options
+  { language, module } := options
+  types := options.types || language === 'typescript' || language === 'civet'
+  options.types = types
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
@@ -349,7 +351,14 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     //@ts-expect-error
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
 
-  head := (types ? tsHead : module ? mjsHead : cjsHead).replace("\"./machine.js\"", JSON.stringify(libPath))
+  head := if types
+    if language is 'civet' and !module
+      cjsHead
+    else
+      tsHead
+  else
+    if module then mjsHead else cjsHead
+  .replace("\"./machine.js\"", JSON.stringify(libPath))
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
@@ -405,13 +414,11 @@ reTupleType := (types: boolean?, reSource: string) ->
     .join("|")
     |> `<[${&}]>`
 
-type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] } | undefined
+type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] }
 type GenerateOptions = {
   updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number) => void
 }
 generate := (node: ASTNode, options: GenerateOptions): string ->
-  if !node return ""
-
   if typeof node is "string"
     // increment output line/column
     options.updateSourceMap? node
@@ -468,9 +475,11 @@ jsTail := """
 
       if (typeof input !== "string") throw new Error("Input must be a string")
 
-      const parser = (options.startRule != null)
-        ? grammar[options.startRule]
-        : Object.values(grammar)[0]
+      let parser
+      if (options.startRule !== null && options.startRule !== undefined)
+        parser = grammar[options.startRule]
+      else
+        parser = Object.values(grammar)[0]
 
       if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 
@@ -492,7 +501,7 @@ jsTail := """
 cjsExport := """
   exports.default = parser
   const parse = exports.parse = parser.parse
-  void parse // make TS ok if we don't use this variable
+  void parse /* make TS ok if we don't use this variable */
 """
 
 mjsHead := """
@@ -547,11 +556,11 @@ tsTail := """
       ) => {
         if (typeof input !== "string") throw new Error("Input must be a string")
 
-        const parser = (
-          options.startRule != null
-            ? grammar[options.startRule]
-            : Object.values(grammar)[0]
-        )  as Parser<ParserResult<Grammar[K]>>
+        let parser
+        if (options.startRule !== null && options.startRule !== undefined)
+          parser = grammar[options.startRule] as Parser<ParserResult<Grammar[K]>>
+        else
+          parser = Object.values(grammar)[0] as Parser<ParserResult<Grammar[K]>>
 
         if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
 

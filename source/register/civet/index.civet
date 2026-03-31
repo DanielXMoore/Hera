@@ -1,0 +1,11 @@
+// ESM
+{ register } from node:module
+{ pathToFileURL } from node:url
+// register basic Hera ESM loader with language:'civet' so it indents handler
+// bodies and uses single-quoted strings for Civet parser compatibility
+register "../../esm.js", pathToFileURL(__filename), { data: { language: 'civet' } }
+// register the Civet post-processor hook
+register "./esm.js", pathToFileURL(__filename)
+
+// CJS
+import ./cjs.civet
