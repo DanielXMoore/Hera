@@ -13,6 +13,7 @@ The mother of all parsers.
 - [Parsing Expression Grammars:
 A Recognition-Based Syntactic Foundation](https://bford.info/pub/lang/peg.pdf)
 - [Wikipedia](https://en.wikipedia.org/wiki/Parsing_expression_grammar)
+- [Developer Guide](docs/developer-guide.md)
 
 Quickstart
 ---
