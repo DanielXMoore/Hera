@@ -59,23 +59,6 @@ prettyPrint := (name: string, terminal: string, re?: boolean) ->
   return `${name} ${pv}`
 
 /**
-Quote a string for JS output. Prefer single quotes when the string contains
-double quotes, to avoid backslash-escaped double quotes that Civet can't parse.
-Uses JSON.stringify as the base for all escaping (handles newlines, control
-chars, backslashes), then re-quotes as a single-quoted string when needed.
-*/
-jsString := (s: string): string ->
-  json := JSON.stringify(s)
-  if s.includes('"')
-    // Convert JSON's double-quoted representation to single-quoted:
-    // strip outer quotes, replace \" with ", escape any raw single quotes.
-    // JSON.stringify never emits \' so this is safe.
-    content := json.slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'")
-    "'" + content + "'"
-  else
-    json
-
-/**
 * Compile an operator to a JS or TS string.
 */
 compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boolean): string ->
@@ -85,12 +68,12 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
       when "L"
         {
           args := tuple[1]
-          `$EXPECT(${defineTerminal(args)}, ${jsString(prettyPrint(name, args))})`
+          `$EXPECT(${defineTerminal(args)}, ${JSON.stringify(prettyPrint(name, args))})`
         }
       when "R"
         {
           args := tuple[1]
-          let f = `$EXPECT(${defineRe(args)}, ${jsString(prettyPrint(name, args, true))})`
+          let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
           if defaultHandler
             f =`$R$0(${f})`
 
@@ -368,14 +351,14 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     //@ts-expect-error
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
 
-  head := (if types
+  head := if types
     if language is 'civet' and !module
       cjsHead
     else
       tsHead
   else
     if module then mjsHead else cjsHead
-  ).replace("\"./machine.js\"", JSON.stringify(libPath))
+  .replace("\"./machine.js\"", JSON.stringify(libPath))
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
