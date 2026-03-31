@@ -7,6 +7,10 @@ type { Plugin, Loader } from esbuild
 export interface HeraPluginOptions < CompilerOptions
   loader?: Loader
 
+export runtime =
+  loadCivet: =>
+    (await import('@danielx/civet')).default
+
 // Derive the default esbuild loader from the language option.
 // An explicit loader option always wins.
 defaultLoaderForLanguage := (language: CompilerOptions['language']): Loader =>
@@ -30,13 +34,12 @@ export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions
 
       if heraOptions.language is 'civet'
         let civet: any
-        /* c8 ignore next 7 */
         try
-          civet = (await import('@danielx/civet')).default ?? await import('@danielx/civet')
+          civet = await runtime.loadCivet()
         catch
           throw new Error [
             "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
-            "Run: npm install @danielx/civet"
+            "Run: npm install -D @danielx/civet"
           ].join '\n'
 
         // No { js: true } here — Civet outputs TypeScript, then esbuild strips

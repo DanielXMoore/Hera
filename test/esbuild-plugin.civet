@@ -1,8 +1,9 @@
 assert from assert
 { writeFileSync, mkdirSync, rmSync } from node:fs
+{ mock } from node:test
 path from node:path
 esbuild, { type BuildOptions } from esbuild
-heraPlugin from ../source/esbuild.civet
+heraPlugin, { runtime } from ../source/esbuild.civet
 type { HeraPluginOptions } from ../source/esbuild.civet
 
 describe "esbuild plugin", ->
@@ -139,6 +140,25 @@ describe "esbuild plugin", ->
       pluginOptions: { language: 'civet' }
 
     assert.equal parse('a'), "ok"
+
+  it "should throw a helpful error when @danielx/civet is missing", ->
+    restore := mock.method runtime, 'loadCivet', =>
+      throw new Error "Cannot find package '@danielx/civet'"
+
+    await assert.rejects
+      =>
+        await buildAndImport 'missing-civet-grammar.hera',
+          """
+            Rule
+              "a" ->
+                return "ok"
+          """
+          pluginOptions: { language: 'civet' }
+          esbuildOptions: { logLevel: 'silent' }
+
+      /Civet support requires '@danielx\/civet' to be installed/
+
+    restore.mock.restore()
 
   it "should not override explicit loader option when language is set", ->
     // If user explicitly passes loader, it wins over language-derived loader
