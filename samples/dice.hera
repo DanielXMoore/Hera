@@ -1,0 +1,25 @@
+# language: civet
+```
+type { Rng } from ./util.civet
+export type DiceExpression = (rng: Rng) => number
+
+```
+
+Expression
+  Dice
+  Value
+
+Value
+  Number:number ->
+    => number
+
+Dice
+  Number?:number "d" Number:sides ->
+    number ??= 1
+
+    (rng) =>
+      rng.roll(number, sides)
+
+Number
+  $/[0-9]+/:number ->
+    parseInt(number, 10)
