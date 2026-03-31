@@ -168,6 +168,6 @@ describe "esbuild plugin", ->
           "a" ->
             return "ok" as string
       """
-      pluginOptions: { language: 'typescript', loader: 'ts' }
+      pluginOptions: { language: 'javascript', loader: 'ts' }
 
     assert.equal parse('a'), "ok"
