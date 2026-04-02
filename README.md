@@ -50,17 +50,17 @@ parse("c") // throws error
 Run on the command line:
 
 ```bash
-node --require '@danielx/hera/register' index.mjs
+node --import '@danielx/hera/register' index.mjs
 ```
 
 The handler blocks in your grammar can also be written in
-[TypeScript](http://typescriptlang.org/) or [Civet](https://civet.dev) syntax.
+[TypeScript](https://www.typescriptlang.org/) or [Civet](https://civet.dev) syntax.
 In that case, use the appropriate loader:
 
 ```bash
-node --require '@danielx/hera/register/tsc' index.mjs
+node --import '@danielx/hera/register/tsc' index.mjs
 # or
-node --require '@danielx/hera/register/civet' index.mjs
+node --import '@danielx/hera/register/civet' index.mjs
 ```
 
 Use the Hera esbuild plugin to bundle:
@@ -419,7 +419,7 @@ const loader = require("@danielx/hera/register/tsc/cjs")
 loader.options.hera = heraOptions
 loader.options.tsc = tscCompilerOptions
 
-{ parse } = require("./typed-grammar.hera")
+const { parse } = require("./typed-grammar.hera")
 ```
 
 ```js
@@ -427,7 +427,7 @@ const loader = require("@danielx/hera/register/civet/cjs")
 loader.options.hera = heraOptions
 loader.options.civet = civetCompilerOptions
 
-{ parse } = require("./civet-grammar.hera")
+const { parse } = require("./civet-grammar.hera")
 ```
 
 See [`loader-examples/tsc-custom/register.js`](./loader-examples/tsc-custom/register.js)
