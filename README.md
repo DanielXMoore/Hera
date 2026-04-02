@@ -53,6 +53,16 @@ Run on the command line:
 node --require '@danielx/hera/register' index.mjs
 ```
 
+The handler blocks in your grammar can also be written in
+[TypeScript](http://typescriptlang.org/) or [Civet](https://civet.dev) syntax.
+In that case, use the appropriate loader:
+
+```bash
+node --require '@danielx/hera/register/tsc' index.mjs
+# or
+node --require '@danielx/hera/register/civet' index.mjs
+```
+
 Use the Hera esbuild plugin to bundle:
 
 ```javascript
@@ -67,10 +77,13 @@ await esbuild.build({
 })
 ```
 
+If your handler blocks use TypeScript or Civet syntax,
+pass `language: "typescript"` or `language: "civet"` into `heraPlugin(...)`.
+
 Overview
 ---
 
-Hera uses Parsing Expression grammars to create parsers for programatic
+Hera uses Parsing Expression grammars to create parsers for programmatic
 languages.
 
 Hera grammars are indentation based, with each rule consisting of a name,
@@ -142,7 +155,7 @@ and the matching string is available as `$0`.
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.
 Optionally, `->` can be preceded by a return type annotation of the form `::type`.
-The most general handler is JavaScript/TypeScript code indented
+The most general handler is JavaScript, TypeScript, or Civet code indented
 beneath the choice, which `return`s the desired value for the matched choice.
 This code can also refer to the default value (strings for terminals,
 arrays for sequences or repetitions) via `$0`,
@@ -154,20 +167,24 @@ If the expansion is a single regular expression,
 The `$n` notation can also be put on the same line as the `->` as a shorthand
 for `return $n` on a separate line; this also works for simple expressions
 like JavaScript literals.
-JavaScript code can return the special value `$skip` to indicate a failed match.
+JavaScript/TypeScript/Civet code can return the special value `$skip`
+to indicate a failed match.
 
-**Comment** (`#...`): Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments. Inside handlers, use JavaScript `//` or `/*...*/` comments.
+**Comment** (`#...`):
+Outside of handlers, lines starting with `#` (after possible indentation) are treated as comments.
+Inside handlers, use the handler language's comments, e.g., `//` or `/*...*/`.
 
 Code Blocks
 ---
 
-You can use three backticks to create a code block that is inserted directly into the compiled file. These are useful for
-creating utility functions or adding exports.
+You can use three backticks to create a code block that is inserted directly
+into the compiled file, using the same language as handlers.
+These are useful for creating utility functions or adding exports.
 
 ````
 ```
 function toInt(n) {
-  parseInt(n)
+  return parseInt(n)
 }
 ```
 
@@ -309,20 +326,28 @@ logic into the handler, but that seems crude.
 CJS/ESM loaders
 ---
 
+To enable direct `import` or `require` of `.hera` files,
+use the appropriate loader for your handler language:
+
 ### `--import/--require @danielx/hera/register`
 Loads .hera files that compile to JavaScript.
 
 ### `--import/--require @danielx/hera/register/tsc`
 Loads .hera files that compile to TypeScript.
 
-Attempts to load the `typescript` npm module to transpile TypeScript to JavaScript.
+Attempts to load the `typescript` npm module to transpile the resulting TypeScript to JavaScript.
 
 ### `--import/--require @danielx/hera/register/civet`
 Loads .hera files that compile to Civet.
 
-Attempts to load the `@danielx/civet` npm module to transpile Civet to JavaScript.
+Attempts to load the `@danielx/civet` npm module to transpile the resulting Civet to JavaScript.
 
 ### Specifying Hera compiler options
+
+See [`loader-examples/hera-custom`](./loader-examples/hera-custom)
+for examples of passing in options to the Hera compiler.
+
+Supported Hera compiler options are documented in [Options](#options).
 
 #### ESM
 Instead of using `--import @danielx/hera/register`, register the `@danielx/hera/register/esm` hooks and pass it the compiler options.
@@ -339,8 +364,6 @@ register("@danielx/hera/register/esm", pathToFileURL(__filename), { data: heraOp
 node --import ./loader.js my-script.mjs
 ```
 
-See `./loader-examples/hera-custom`.
-
 #### CJS
 Instead of using `--require @danielx/hera/register`, require and set options on the `@danielx/hera/register/cjs` module.
 
@@ -351,12 +374,18 @@ require("@danielx/hera/register/cjs").options.hera = { inlineMap: false }
 const { parse } = require("./my-typed-grammar.hera")
 ```
 
-See `./loader-examples/hera-custom`.
+See [`loader-examples/hera-custom/register.js`](./loader-examples/hera-custom/register.js)
+for an example of simultaneous registration of both ESM and CJS hooks with options.
 
-### Setting tsc compiler options
+### Setting TypeScript or Civet compiler options
+
+See [`loader-examples/tsc-custom`](./loader-examples/tsc-custom)
+or [`loader-examples/civet-custom`](./loader-examples/civet-custom)
+for examples of passing in options to the TypeScript or Civet compiler.
 
 #### ESM
-Instead of using `--import @danielx/hera/register/tsc`, register the `register/esm` and `register/tsc/esm` modules yourself and pass the options you want.
+Instead of using `--import @danielx/hera/register/tsc` or `--import @danielx/hera/register/civet`, register the `register/esm` and `register/tsc/esm` or `register/civet/esm` modules yourself and pass the options you want.
+(Note that you still need to register the base `register/esm` module, because the ESM loaders chain together.)
 
 E.g.
 ```js
@@ -371,16 +400,18 @@ register("@danielx/hera/register/esm", pathToFileURL(__filename), {
 register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
   data: tscCompilerOptions,
 })
+// OR
+register("@danielx/hera/register/civet/esm", pathToFileURL(__filename), {
+  data: civetCompilerOptions,
+})
 ```
 
 ```sh
 node --import ./custom-loader.js ./my-script.mjs
 ```
 
-See `./loader-examples/tsc-custom`.
-
 #### CJS
-Instead of using `--require @danielx/hera/register/tsc`, require and set options on the `@danielx/hera/register/tsc/cjs` module.
+Instead of using `--require @danielx/hera/register/tsc` or `--require @danielx/hera/register/civet`, require and set options on the `@danielx/hera/register/tsc/cjs` or `@danielx/hera/register/civet/cjs` module.
 
 E.g.
 ```js
@@ -391,4 +422,92 @@ loader.options.tsc = tscCompilerOptions
 { parse } = require("./typed-grammar.hera")
 ```
 
-See `./loader-examples/tsc-custom`
+```js
+const loader = require("@danielx/hera/register/civet/cjs")
+loader.options.hera = heraOptions
+loader.options.civet = civetCompilerOptions
+
+{ parse } = require("./civet-grammar.hera")
+```
+
+See [`loader-examples/tsc-custom/register.js`](./loader-examples/tsc-custom/register.js)
+and [`loader-examples/civet-custom/register.js`](./loader-examples/civet-custom/register.js)
+for examples of simultaneous registration of both ESM and CJS hooks with options.
+
+esbuild plugin
+---
+
+Use `heraPlugin()` to import `.hera` files in esbuild builds.
+
+If handler bodies or code blocks use TypeScript or Civet, set the plugin
+language explicitly:
+
+```js
+heraPlugin({ language: "typescript" })
+heraPlugin({ language: "civet" })
+```
+
+The plugin chooses the appropriate esbuild loader automatically,
+though you can override it with the `loader` option.
+
+Editor tooling
+---
+
+The VS Code extension and language server support `hera.language` to control
+how handler bodies are interpreted.
+
+In VS Code settings:
+
+```json
+{
+  "hera.language": "civet"
+}
+```
+
+Or in your workspace `package.json`:
+
+```json
+{
+  "hera": {
+    "language": "civet"
+  }
+}
+```
+
+See [`lsp/README.md`](./lsp/README.md).
+
+API
+---
+
+ESM:
+
+```js
+import { compile } from "@danielx/hera"
+```
+
+CJS:
+
+```js
+const { compile } = require("@danielx/hera")
+```
+
+### `compile(grammar, options?)`
+
+Compiles a Hera grammar into parser source code.
+
+- Pass in raw grammar source as a String.
+- Returns a code string by default.
+- Returns `{ code, sourceMap }` when `options.sourceMap` is `true`.
+
+### Options
+
+`compile()` accepts these options:
+
+- `language?: "javascript" | "typescript" | "civet"`: Language used for handler bodies and code blocks. Default: `"javascript"`.
+- `types?: boolean`: Generate TypeScript-flavored parser output. Default: `false` when `language` is unspecified or `"javascript"`, and `true` when `language` is `"typescript"` or `"civet"`.
+- `module?: boolean`: Emit ESM instead of CJS output. Default: `false`.
+- `filename?: string`: Filename used in generated source maps. Default: `"anonymous"`.
+- `source?: string`: Original grammar source text. Required when `inlineMap` or `sourceMap` is enabled.
+- `inlineMap?: boolean`: Append an inline source map comment to the generated output. Default: `false`.
+- `sourceMap?: boolean`: Return `{ code, sourceMap }` instead of a code string. Default: `false`.
+- `libPath?: string`: Import path for the Hera runtime library used by generated parsers. Default: `"@danielx/hera/lib"`.
