@@ -167,11 +167,9 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
     if h and typeof h is "object" and "f" in h // function mapping
       parser := compileOp(arg, name, false, options.types)
 
-      handlerToken := h.f.replace(/^|\n/g, "$&    ")
       handler :=
         $loc: h.$loc
-        token: handlerToken
-        offset: 4
+        token: h.f
 
       /* c8 ignore next */
       handlerType := options.types && h.t ? `: ${h.t}` : ""

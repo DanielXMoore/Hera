@@ -65,8 +65,7 @@ hToS := (h: Handler | undefined): string ->
   if typeof h is "object" and "f" in h // functional handler
     // Function handler type annotation
     t := "t" in h ? ` :: ${h.t.trim()}` : ""
-    // Restore indentation
-    `${t} ->\n${h.f.replace(/^|\n/g, "$&    ")}`
+    `${t} ->\n${h.f}`
   else // structural handler
     " -> " + structuralToSource(h)
 

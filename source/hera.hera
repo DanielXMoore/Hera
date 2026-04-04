@@ -110,7 +110,7 @@ HandlingExpressionBody
     }
 
 HandlingExpressionLine
-  Indent Indent $( [^\n\r]* NonCommentEOS ) -> $3
+  $( Indent Indent [^\n\r]* NonCommentEOS )
 
 StructuralMapping
   StringValue ->
