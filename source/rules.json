@@ -14,10 +14,10 @@
       "*",
       "Statement",
       {
-        "f": "const code = $1.filter(a => a?.type === \"CodeBlock\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
+        "f": "const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
         "$loc": {
           "pos": 167,
-          "length": 183
+          "length": 236
         }
       }
     ],
@@ -91,7 +91,7 @@
       {
         "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
         "$loc": {
-          "pos": 531,
+          "pos": 584,
           "length": 90
         }
       }
@@ -105,7 +105,7 @@
       {
         "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
         "$loc": {
-          "pos": 651,
+          "pos": 704,
           "length": 129
         }
       }
@@ -125,7 +125,7 @@
           {
             "f": "$2.unshift($1)\nreturn [\"S\", $2]",
             "$loc": {
-              "pos": 841,
+              "pos": 894,
               "length": 40
             },
             "t": " SequenceNode "
@@ -143,7 +143,7 @@
           {
             "f": "$2.unshift($1)\nreturn [\"/\", $2]",
             "$loc": {
-              "pos": 931,
+              "pos": 984,
               "length": 40
             },
             "t": " SequenceNode "
@@ -206,7 +206,7 @@
       {
         "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result] as NameNode\nreturn result as SequenceNode",
         "$loc": {
-          "pos": 1196,
+          "pos": 1249,
           "length": 166
         },
         "t": " SequenceNode | NameNode "
@@ -228,7 +228,7 @@
       {
         "f": "if ($2) return [$2, $1]\nelse return $1",
         "$loc": {
-          "pos": 1422,
+          "pos": 1475,
           "length": 48
         }
       }
@@ -273,7 +273,7 @@
           {
             "f": "return undefined",
             "$loc": {
-              "pos": 1629,
+              "pos": 1682,
               "length": 21
             }
           }
@@ -295,7 +295,7 @@
           {
             "f": "if ($2) {\n  if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n  else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n}\nreturn $4 as Handler",
             "$loc": {
-              "pos": 1703,
+              "pos": 1756,
               "length": 239
             }
           }
@@ -337,7 +337,7 @@
       {
         "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
         "$loc": {
-          "pos": 2095,
+          "pos": 2148,
           "length": 64
         },
         "t": " Handler "
@@ -377,7 +377,7 @@
           {
             "f": "return JSON.parse(`\"${$1}\"`) as string",
             "$loc": {
-              "pos": 2268,
+              "pos": 2321,
               "length": 43
             }
           }
@@ -415,7 +415,7 @@
       {
         "f": "return $2 as StructuralTerminal[]",
         "$loc": {
-          "pos": 2469,
+          "pos": 2522,
           "length": 39
         },
         "t": " StructuralTerminal[] "
@@ -447,7 +447,7 @@
       {
         "f": "return {\n  o: Object.fromEntries($2)\n}",
         "$loc": {
-          "pos": 2630,
+          "pos": 2683,
           "length": 52
         },
         "t": " StructuralObject "
@@ -518,7 +518,7 @@
           {
             "f": "return parseInt($1, 10)",
             "$loc": {
-              "pos": 2841,
+              "pos": 2894,
               "length": 28
             }
           }
@@ -550,7 +550,7 @@
           {
             "f": "return null",
             "$loc": {
-              "pos": 2949,
+              "pos": 3002,
               "length": 16
             }
           }
@@ -561,7 +561,7 @@
           {
             "f": "return {l: undefined}",
             "$loc": {
-              "pos": 2982,
+              "pos": 3035,
               "length": 27
             }
           }
@@ -577,7 +577,7 @@
           {
             "f": "return parseInt($0, 16)",
             "$loc": {
-              "pos": 3042,
+              "pos": 3095,
               "length": 28
             }
           }
@@ -588,7 +588,7 @@
           {
             "f": "return parseFloat($0)",
             "$loc": {
-              "pos": 3094,
+              "pos": 3147,
               "length": 27
             }
           }
@@ -850,7 +850,7 @@
       {
         "f": "return {\n  type: \"CodeBlock\",\n  token: $0,\n  $loc,\n}",
         "$loc": {
-          "pos": 4139,
+          "pos": 4192,
           "length": 73
         },
         "t": " CodeBlockNode "

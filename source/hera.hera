@@ -11,7 +11,7 @@ import type {
 
 Grammar
   Statement* ->
-    const code = $1.filter(a => a?.type === "CodeBlock")
+    const code = $1.filter(a => typeof a === "object" && a !== null && "type" in a && a.type === "CodeBlock")
     const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
     rules[Symbol.for("code")] = code
     return rules
