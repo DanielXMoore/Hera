@@ -21,7 +21,7 @@ Adapted from sample code for <https://code.visualstudio.com/api/language-extensi
 
 ## Running the Sample
 
-- Run `yarn` in this folder.
+- Run `pnpm install` from the repository root.
 - Open VS Code on this folder.
 - Press Ctrl+Shift+B to start compiling the client and server in [watch mode](https://code.visualstudio.com/docs/editor/tasks#:~:text=The%20first%20entry%20executes,the%20HelloWorld.js%20file.).
 - Switch to the Run and Debug View in the Sidebar (Ctrl+Shift+D).
@@ -36,14 +36,11 @@ Adapted from sample code for <https://code.visualstudio.com/api/language-extensi
 
 <https://code.visualstudio.com/api/working-with-extensions/publishing-extension>
 
-`yarn --ignore-engines package`
-
-`--ignore-engines` suppresses the unnecessary yarn warning about vscode engine
-field in package.json.
+`pnpm run package`
 
 this then runs:
 
-`node .esbuild.mjs && vsce package --yarn`
+`node .esbuild.mjs && vsce package --no-dependencies`
 
 Esbuild compiles the client and server each into their own entry point,
 minifying and tree shaking.
@@ -74,7 +71,7 @@ dev env. To see the logs: `Ctrl+Shift+P` -> Search Show Logs -> Extension Host
 
 You can also view the files at `C:\Users\duder\.vscode\extensions\danielx.hera-lsp-0.0.1`
 
-ProTip:tm: Using `yarn link` for development will break the extension so make
+ProTip:tm: Using `pnpm link` for development will break the extension so make
 sure to unlink before publishing.
 
 ### How to highlight source code?
