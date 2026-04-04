@@ -14,6 +14,7 @@ The mother of all parsers.
 A Recognition-Based Syntactic Foundation](https://bford.info/pub/lang/peg.pdf)
 - [Wikipedia](https://en.wikipedia.org/wiki/Parsing_expression_grammar)
 - [Developer Guide](docs/developer-guide.md)
+- [CHANGELOG.md](CHANGELOG.md)
 
 Quickstart
 ---
@@ -254,30 +255,6 @@ Regex Groups
 >
 >     Punctuation
 >       "."
-
-Changelog
----
-
-- 0.7.3
-  - Using compiled parser instead of VM for performance boost.
-  - Publishing TypeScript types with package.
-  - cjs loader
-    ```javascript
-    require("@danielx/hera/register")
-    const {parse} = require("./parser.hera")
-    ```
-  - esbuild plugin `require("@danielx/hera/esbuild")`
-  - `hera` CLI tool with experimental TypeScript output support `hera --types < cool-app.hera > parser.ts`
-  - Added support for number literals in structural handlers.
-  - Changed structural handling to use $1, etc. instead of 1 for positional variables.
-  - Added prefix `$` text operator.
-  - Added `.` any character matcher.
-  - Fixed structural mapping bug where in `["R", $1]` the `$1` would take the
-  first element of the result rather than the whole result on non-sequence
-  handlers.
-- 0.7.2
-  - VSCode Extension <https://marketplace.visualstudio.com/items?itemName=DanielX.hera>
-  - Bare character class
 
 Experiments
 ---
