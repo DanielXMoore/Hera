@@ -100,13 +100,13 @@
     "build": "node .esbuild.mjs",
     "e2e": "sh ./scripts/e2e.sh",
     "lint": "eslint ./src --ext .ts,.tsx",
-    "package": "node .esbuild.mjs && vsce package --yarn",
-    "vsce-publish": "node .esbuild.mjs && vsce publish",
+    "package": "node .esbuild.mjs && vsce package --no-dependencies",
+    "vsce-publish": "node .esbuild.mjs && vsce publish --no-dependencies",
     "test": "nyc mocha",
     "watch": "node .esbuild.mjs --watch"
   },
   "devDependencies": {
-    "@danielx/hera": "^0.8.12",
+    "@danielx/hera": "workspace:*",
     "@types/mocha": "^9.1.0",
     "@types/node": "^14.17.0",
     "@types/vscode": "^1.63.0",

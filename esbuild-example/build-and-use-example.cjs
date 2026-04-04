@@ -1,5 +1,5 @@
 // A smoke test to make sure the built esbuild plugin works and is exported correctly.
-// This script requires the project to be built (i.e. `yarn build`).
+// This script requires the project to be built (i.e. `pnpm build`).
 
 // Import the built plugin
 const heraPlugin = require("@danielx/hera/esbuild-plugin");

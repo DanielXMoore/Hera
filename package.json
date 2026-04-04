@@ -54,7 +54,7 @@
     ]
   },
   "scripts": {
-    "prepublishOnly": "yarn build && yarn test",
+    "prepublishOnly": "pnpm build && pnpm test",
     "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet ./perf/benchmark.civet",
     "build": "bash build/compile",
     "build:rules": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet build/rules.civet",
@@ -89,5 +89,6 @@
     "./dist/*": "./dist/*",
     "./hera-types": "./dist/hera-types.js"
   },
-  "types": "dist/main.d.ts"
+  "types": "dist/main.d.ts",
+  "packageManager": "pnpm@10.33.0"
 }

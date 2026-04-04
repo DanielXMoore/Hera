@@ -2,6 +2,6 @@
 set -euo pipefail
 
 c8 mocha "$@"
-yarn test:typed-parser-samples
-yarn test:esbuild-plugin
-yarn test:loaders
+pnpm test:typed-parser-samples
+pnpm test:esbuild-plugin
+pnpm test:loaders

@@ -10,15 +10,15 @@ The repo is self-hosted: the Hera parser in `source/hera.hera` is parsed and com
 
 ## The Bootstrap Problem
 
-The build and test suite use `@danielx/hera-previous` (an npm alias pointing at the currently published version of this package) to process `.hera` source files, not the in-development version. This is because the in-development version does not exist as a built artifact until after `yarn build`.
+The build and test suite use `@danielx/hera-previous` (an npm alias pointing at the currently published version of this package) to process `.hera` source files, not the in-development version. This is because the in-development version does not exist as a built artifact until after `pnpm build`.
 
 Consequences:
 
 - `build/esbuild.civet` imports `heraPlugin` from `@danielx/hera-previous/esbuild`
 - `package.json#mocha.require` uses `@danielx/hera-previous/register/tsc` to load `.civet` and `.hera` test files
-- When you add a new compiler feature, tests that exercise it through `.hera` files can only run after `yarn build`
+- When you add a new compiler feature, tests that exercise it through `.hera` files can only run after `pnpm build`
 
-`yarn build` runs `bash build/compile`, which deletes `dist/`, runs `node build/esbuild.civet`, then post-processes `.d.ts` files by renaming `.civet.d.ts` to `.d.ts`.
+`pnpm build` runs `bash build/compile`, which deletes `dist/`, runs `node build/esbuild.civet`, then post-processes `.d.ts` files by renaming `.civet.d.ts` to `.d.ts`.
 
 ## Source Layout
 
@@ -110,8 +110,8 @@ The Node loader uses `{ js: true, sync: true }` because `require.extensions` mus
 ## Testing
 
 ```bash
-yarn build
-yarn test
+pnpm build
+pnpm test
 ```
 
 Notes:
