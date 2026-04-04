@@ -122,6 +122,18 @@ describe "Hera", ->
     assert.deepEqual sourceMap.lines[returnLine].find((entry) => entry.length > 1), [0, 0, 2, 0]
     assert.deepEqual sourceMap.lines[callLine].find((entry) => entry.length > 1), [0, 0, 3, 0]
 
+  it "should sourcemap fenced code blocks", ->
+    heraSrc := "```\nconst injectedCodeBlockValue = 12345;\n```\n\nRule\n  \"a\""
+    {code, sourceMap} := compile heraSrc, sourceMap: true
+
+    outputLine := code
+      .split("\n")
+      .findIndex (line) -> line.includes "const injectedCodeBlockValue = 12345;"
+
+    assert.notEqual outputLine, -1
+    assert sourceMap.lines[outputLine].some (entry) ->
+      entry.length is 4 and entry[2] is 1 and entry[3] is 0
+
   it "should compile to ts", ->
     heraSrc := readFile('source/hera.hera')
     tsSrc := compile heraSrc, types: true

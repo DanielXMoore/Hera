@@ -3,6 +3,7 @@ import type {
   SequenceNode,
   NameNode,
   Handler,
+  CodeBlockNode,
   StructuralTerminal,
   StructuralObject,
 } from './hera-types'
@@ -10,7 +11,7 @@ import type {
 
 Grammar
   Statement* ->
-    const code = $1.filter(a => typeof a === "string")
+    const code = $1.filter(a => typeof a === "object" && a !== null && "type" in a && a.type === "CodeBlock")
     const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
     rules[Symbol.for("code")] = code
     return rules
@@ -241,4 +242,9 @@ TypeAnnotation
   "::" $/(?:(?!->).)*/ -> $2
 
 CodeBody
-  $/(?:(?:`(?!``))|[^`])*/
+  $/(?:(?:`(?!``))|[^`])*/ :: CodeBlockNode ->
+    return {
+      type: "CodeBlock",
+      token: $0,
+      $loc,
+    }
