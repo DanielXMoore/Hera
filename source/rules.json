@@ -14,7 +14,7 @@
       "*",
       "Statement",
       {
-        "f": "const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\nconst rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\nrules[Symbol.for(\"code\")] = code\nreturn rules",
+        "f": "    const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\n    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\n    rules[Symbol.for(\"code\")] = code\n    return rules",
         "$loc": {
           "pos": 167,
           "length": 236
@@ -89,7 +89,7 @@
         ]
       ],
       {
-        "f": "var r = $1.map((a) => a[1])\nif (r.length === 1) return r[0];\nreturn [\"/\", r]",
+        "f": "    var r = $1.map((a) => a[1])\n    if (r.length === 1) return r[0];\n    return [\"/\", r]",
         "$loc": {
           "pos": 584,
           "length": 90
@@ -103,7 +103,7 @@
         "Handling"
       ],
       {
-        "f": "if ($2 !== undefined) {\n  if (!$1.push)\n    $1 = [\"S\", [$1], $2]\n  else\n    $1.push($2)\n}\nreturn $1",
+        "f": "    if ($2 !== undefined) {\n      if (!$1.push)\n        $1 = [\"S\", [$1], $2]\n      else\n        $1.push($2)\n    }\n    return $1",
         "$loc": {
           "pos": 704,
           "length": 129
@@ -123,7 +123,7 @@
             ]
           ],
           {
-            "f": "$2.unshift($1)\nreturn [\"S\", $2]",
+            "f": "    $2.unshift($1)\n    return [\"S\", $2]",
             "$loc": {
               "pos": 894,
               "length": 40
@@ -141,7 +141,7 @@
             ]
           ],
           {
-            "f": "$2.unshift($1)\nreturn [\"/\", $2]",
+            "f": "    $2.unshift($1)\n    return [\"/\", $2]",
             "$loc": {
               "pos": 984,
               "length": 40
@@ -204,7 +204,7 @@
         ]
       ],
       {
-        "f": "var result = null\nif ($1) result = [$1, $2]\nelse result = $2\nif ($3)\n  return [{name: $3}, result] as NameNode\nreturn result as SequenceNode",
+        "f": "    var result = null\n    if ($1) result = [$1, $2]\n    else result = $2\n    if ($3)\n      return [{name: $3}, result] as NameNode\n    return result as SequenceNode",
         "$loc": {
           "pos": 1249,
           "length": 166
@@ -226,7 +226,7 @@
         ]
       ],
       {
-        "f": "if ($2) return [$2, $1]\nelse return $1",
+        "f": "    if ($2) return [$2, $1]\n    else return $1",
         "$loc": {
           "pos": 1475,
           "length": 48
@@ -271,7 +271,7 @@
             "EOS"
           ],
           {
-            "f": "return undefined",
+            "f": "    return undefined",
             "$loc": {
               "pos": 1682,
               "length": 21
@@ -293,7 +293,7 @@
             "HandlingExpression"
           ],
           {
-            "f": "if ($2) {\n  if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n  else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n}\nreturn $4 as Handler",
+            "f": "    if ($2) {\n      if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n      else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n    }\n    return $4 as Handler",
             "$loc": {
               "pos": 1756,
               "length": 239
@@ -335,7 +335,7 @@
       "+",
       "HandlingExpressionLine",
       {
-        "f": "return {\n  f: $1.join(\"\").trimEnd(),\n  $loc,\n}",
+        "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
           "pos": 2148,
           "length": 64
@@ -344,27 +344,19 @@
       }
     ],
     "HandlingExpressionLine": [
-      "S",
+      "$",
       [
-        "Indent",
-        "Indent",
+        "S",
         [
-          "$",
+          "Indent",
+          "Indent",
           [
-            "S",
-            [
-              [
-                "R",
-                "[^\\n\\r]*"
-              ],
-              "NonCommentEOS"
-            ]
-          ]
+            "R",
+            "[^\\n\\r]*"
+          ],
+          "NonCommentEOS"
         ]
-      ],
-      {
-        "v": 3
-      }
+      ]
     ],
     "StructuralMapping": [
       "/",
@@ -375,9 +367,9 @@
             "StringValue"
           ],
           {
-            "f": "return JSON.parse(`\"${$1}\"`) as string",
+            "f": "    return JSON.parse(`\"${$1}\"`) as string",
             "$loc": {
-              "pos": 2321,
+              "pos": 2315,
               "length": 43
             }
           }
@@ -413,9 +405,9 @@
         "CloseBracket"
       ],
       {
-        "f": "return $2 as StructuralTerminal[]",
+        "f": "    return $2 as StructuralTerminal[]",
         "$loc": {
-          "pos": 2522,
+          "pos": 2516,
           "length": 39
         },
         "t": " StructuralTerminal[] "
@@ -445,9 +437,9 @@
         "CloseBrace"
       ],
       {
-        "f": "return {\n  o: Object.fromEntries($2)\n}",
+        "f": "    return {\n      o: Object.fromEntries($2)\n    }",
         "$loc": {
-          "pos": 2683,
+          "pos": 2677,
           "length": 52
         },
         "t": " StructuralObject "
@@ -516,9 +508,9 @@
           "R",
           "\\$(\\d)",
           {
-            "f": "return parseInt($1, 10)",
+            "f": "    return parseInt($1, 10)",
             "$loc": {
-              "pos": 2894,
+              "pos": 2888,
               "length": 28
             }
           }
@@ -548,9 +540,9 @@
           "L",
           "null",
           {
-            "f": "return null",
+            "f": "    return null",
             "$loc": {
-              "pos": 3002,
+              "pos": 2996,
               "length": 16
             }
           }
@@ -559,9 +551,9 @@
           "L",
           "undefined",
           {
-            "f": "return {l: undefined}",
+            "f": "    return {l: undefined}",
             "$loc": {
-              "pos": 3035,
+              "pos": 3029,
               "length": 27
             }
           }
@@ -575,9 +567,9 @@
           "R",
           "0x[\\da-fA-F]+",
           {
-            "f": "return parseInt($0, 16)",
+            "f": "    return parseInt($0, 16)",
             "$loc": {
-              "pos": 3095,
+              "pos": 3089,
               "length": 28
             }
           }
@@ -586,9 +578,9 @@
           "R",
           "[-+]?\\d+(\\.\\d+)?",
           {
-            "f": "return parseFloat($0)",
+            "f": "    return parseFloat($0)",
             "$loc": {
-              "pos": 3147,
+              "pos": 3141,
               "length": 27
             }
           }
@@ -848,9 +840,9 @@
         "(?:(?:`(?!``))|[^`])*"
       ],
       {
-        "f": "return {\n  type: \"CodeBlock\",\n  token: $0,\n  $loc,\n}",
+        "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 4192,
+          "pos": 4186,
           "length": 73
         },
         "t": " CodeBlockNode "

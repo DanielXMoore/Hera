@@ -107,6 +107,24 @@ describe "Hera", ->
     assert code
     assert sourceMap
 
+  it "should source map rule block handlers from the preserved line start", ->
+    grammar := """
+      Rule
+        "abc" ->
+          return 1
+          x()
+    """
+    {code, sourceMap} := compile grammar, sourceMap: true
+    lines := code.split("\n")
+    returnLine := lines.findIndex((line) => line.includes("return 1"))
+    callLine := lines.findIndex((line) => line.includes("x()"))
+
+    assert returnLine >= 0, "compiled output should contain 'return 1'"
+    assert callLine >= 0, "compiled output should contain 'x()'"
+
+    assert.deepEqual sourceMap.lines[returnLine].find((entry) => entry.length > 1), [0, 0, 2, 0]
+    assert.deepEqual sourceMap.lines[callLine].find((entry) => entry.length > 1), [0, 0, 3, 0]
+
   it "should sourcemap fenced code blocks", ->
     heraSrc := "```\nconst injectedCodeBlockValue = 12345;\n```\n\nRule\n  \"a\""
     {code, sourceMap} := compile heraSrc, sourceMap: true
