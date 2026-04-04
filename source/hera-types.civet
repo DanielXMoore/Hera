@@ -21,6 +21,7 @@ export type StructuralTerminal =
 export type StructuralObject = { [key: string]: StructuralHandling }
 export type StructuralHandling = StructuralTerminal | StructuralHandling[]
 export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandling
+export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
 export type TerminalOp = "L" | "R"
 export type SequenceOp = "S" | "/"
 export type PrefixOp = "&" | "!" | "$"
@@ -38,5 +39,5 @@ export const CodeSymbol = Symbol.for("code")
 
 export type HeraRules = {
   [key: string]: HeraAST,
-  [CodeSymbol]?: string | string[]
+  [CodeSymbol]?: CodeBlockNode[]
 }
