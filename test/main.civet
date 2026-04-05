@@ -148,7 +148,7 @@ describe "Hera", ->
     assert sourceMap.lines[outputLine].some (entry) ->
       entry.length is 4 and entry[2] is 1 and entry[3] is 0
 
-  it "should source map structural handlers", ->
+  it "should source map one-line handlers", ->
     grammar := """
       Start
         \"a\":left \"b\":right -> [left, right]
@@ -159,12 +159,12 @@ describe "Hera", ->
     {code, sourceMap} := compile grammar, sourceMap: true
     lines := code.split("\n")
     sequenceLine := lines.findIndex (line) -> line.includes "return [left, right]"
-    regexLine := lines.findIndex (line) -> line.includes "return [value[1], value[2]]"
+    regexLine := lines.findIndex (line) -> line.includes "return [$1, $2]"
     trueLine := lines.findIndex (line) -> line.includes "return true"
     nullLine := lines.findIndex (line) -> line.includes "return null"
 
     assert sequenceLine >= 0, "compiled output should contain 'return [left, right]'"
-    assert regexLine >= 0, "compiled output should contain 'return [value[1], value[2]]'"
+    assert regexLine >= 0, "compiled output should contain 'return [$1, $2]'"
     assert trueLine >= 0, "compiled output should contain 'return true'"
     assert nullLine >= 0, "compiled output should contain 'return null'"
 
@@ -419,6 +419,17 @@ describe "Hera", ->
 
       assert.deepEqual [[1, 2], 3], parse ""
 
+    it "should allow postfix after multi-line array inline handlers", ->
+      {parse} := generate """
+        Rule
+          "" -> [
+            "a",
+            "b"
+          ].join("")
+      """
+
+      assert.equal "ab", parse ""
+
     it "should map object structures", ->
       {parse} := generate """
         Rule
@@ -459,6 +470,17 @@ describe "Hera", ->
       """
 
       assert.deepEqual {b: [{x: 2, y: [{z: -1.3}]}, [{}]], c: 1}, parse "a"
+
+    it "should allow postfix after multi-line object inline handlers", ->
+      {parse} := generate """
+        Rule
+          "" -> {
+            a: 1,
+            b: 2
+          }.a
+      """
+
+      assert.equal 1, parse ""
 
   describe "$ Prefix Operator: result text", ->
     it "should return the whole text of the match", ->
@@ -638,51 +660,49 @@ describe "Hera", ->
       parse "aaa"
     , /Rule "aaaa"/
 
-  it "should compile object mappings", ->
+  it "should compile object literal handlers", ->
     rules := hera.parse """
       Rule
-        "a"
+        "a" -> {a: [true, "b", $0]}
     """
-
-    // TODO: hacked in object mapping
-    rules.Rule[2] = {
-      type: "StructuralHandler"
-      $loc: pos: 0, length: 0
-      value:
-        o:
-          a: [{o: true}, "b", {v: 0}]
-    }
 
     assert compile rules
 
-  it "should throw an error when mapping to an unknown mapping object", ->
+  it "should reuse duplicated regexp literals", ->
+    code := compile hera.parse("""
+      Rule
+        /a+/
+        /a+/
+    """)
+
+    assert code.includes('const $R0 = $R(')
+    assert !code.includes('const $R1 = $R(')
+
+  it "should throw an error when encountering an invalid handler", ->
     rules := hera.parse """
       Rule
         "a"
     """
 
-    // Hack in a non-array object for the mapping value
     rules.Rule[2] = {
-      type: "StructuralHandler"
-      $loc: pos: 0, length: 0
-      value: {}
+      f: 0
     }
 
     assert.throws ->
       compile(rules)
-    , /unknown object mapping/
+    , /unknown handler format/
 
-  it "should throw an error when structural handlers are not wrapped", ->
+  it "should throw an error when handlers are malformed", ->
     rules := hera.parse """
       Rule
         "a"
     """
 
-    rules.Rule[2] = { o: { a: 1 } }
+    rules.Rule[2] = { yo: "wat" }
 
     assert.throws ->
       compile(rules)
-    , /unknown structural handler/
+    , /unknown handler format/
 
   it "throw an error when encountering an unknown operator", ->
     rules := hera.parse """
@@ -822,7 +842,7 @@ describe "Hera", ->
 
       assert.equal parse("aa"), "aa"
 
-    it "should allow named parameters in structural mappings", ->
+    it "should allow named parameters in one-line handlers", ->
       {parse} .= generate """
         A
           "a":a -> [a, a]
