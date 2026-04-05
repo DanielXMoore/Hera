@@ -8,7 +8,7 @@ export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
 
-export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | string
 export type StructuralTerminal =
   boolean |
   null |
@@ -18,9 +18,14 @@ export type StructuralTerminal =
   { v: PositionalVariable } |
   { o: StructuralObject } |
   { l: any }
-export type StructuralObject = { [key: string]: StructuralHandling }
-export type StructuralHandling = StructuralTerminal | StructuralHandling[]
-export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandling
+export type StructuralObject = { [key: string]: StructuralValue }
+export type StructuralValue = StructuralTerminal | StructuralValue[]
+export type StructuralHandler = {
+  type: "StructuralHandler"
+  $loc: Loc
+  value: StructuralValue
+}
+export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandler
 export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
 export type TerminalOp = "L" | "R"
 export type SequenceOp = "S" | "/"

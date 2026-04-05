@@ -4,6 +4,24 @@ assert from assert
 { readFile } from ./helper.civet
 heraGrammarAST := JSON.parse readFile "source/rules.json"
 
+// Decompile/parse round trips can preserve the structural shape while shifting
+// source offsets, so these comparisons intentionally ignore StructuralHandler locs.
+normalizeStructuralMappingLocs := (value) ->
+  if Array.isArray(value)
+    return value.map normalizeStructuralMappingLocs
+
+  if value and typeof value is "object"
+    if value.type is "StructuralHandler"
+      return {
+        type: value.type
+        value: normalizeStructuralMappingLocs(value.value)
+      }
+
+    return Object.fromEntries Object.entries(value).map ([key, entry]) ->
+      [key, normalizeStructuralMappingLocs(entry)]
+
+  return value
+
 describe "util", ->
   /*
     If you've changed source/hera.hera run `pnpm build:rules` to update
@@ -36,7 +54,7 @@ describe "util", ->
     """
 
     decompiled := decompile rules
-    assert.deepEqual parse(decompiled), rules
+    assert.deepEqual normalizeStructuralMappingLocs(parse(decompiled)), normalizeStructuralMappingLocs(rules)
 
   it "should decompile literal undefined", ->
     grammar := """
@@ -103,7 +121,7 @@ describe "util", ->
 
     assert.throws ->
       decompile rules
-    , /Unknown/
+    , /Unknown handler format/
 
   it "should throw an error when decompiling an unknown object", ->
     rules := parse """
@@ -111,7 +129,27 @@ describe "util", ->
         "X" -> 0
     """
 
-    rules.Rule[2] = ->
+    rules.Rule[2] = {
+      type: "StructuralHandler"
+      $loc: pos: 0, length: 0
+      value: yo: "wat"
+    }
+
+    assert.throws ->
+      decompile rules
+    , /Unknown/
+
+  it "should throw an error when decompiling an unknown mapping type", ->
+    rules := parse """
+      Rule
+        "X" -> 0
+    """
+
+    rules.Rule[2] = {
+      type: "StructuralHandler"
+      $loc: pos: 0, length: 0
+      value: ->
+    }
 
     assert.throws ->
       decompile rules

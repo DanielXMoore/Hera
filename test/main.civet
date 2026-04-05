@@ -137,6 +137,35 @@ describe "Hera", ->
     assert sourceMap.lines[outputLine].some (entry) ->
       entry.length is 4 and entry[2] is 1 and entry[3] is 0
 
+  it "should source map structural handlers", ->
+    grammar := """
+      Start
+        \"a\":left \"b\":right -> [left, right]
+        /(c+)(d+)/ -> [$1, $2]
+        \"t\" -> true
+        \"n\" -> null
+    """
+    {code, sourceMap} := compile grammar, sourceMap: true
+    lines := code.split("\n")
+    sequenceLine := lines.findIndex (line) -> line.includes "return [left, right]"
+    regexLine := lines.findIndex (line) -> line.includes "return [value[1], value[2]]"
+    trueLine := lines.findIndex (line) -> line.includes "return true"
+    nullLine := lines.findIndex (line) -> line.includes "return null"
+
+    assert sequenceLine >= 0, "compiled output should contain 'return [left, right]'"
+    assert regexLine >= 0, "compiled output should contain 'return [value[1], value[2]]'"
+    assert trueLine >= 0, "compiled output should contain 'return true'"
+    assert nullLine >= 0, "compiled output should contain 'return null'"
+
+    assert sourceMap.lines[sequenceLine].some (entry) ->
+      entry.length is 4 and entry[2] is 1 and entry[3] is 24
+    assert sourceMap.lines[regexLine].some (entry) ->
+      entry.length is 4 and entry[2] is 2 and entry[3] is 16
+    assert sourceMap.lines[trueLine].some (entry) ->
+      entry.length is 4 and entry[2] is 3 and entry[3] is 9
+    assert sourceMap.lines[nullLine].some (entry) ->
+      entry.length is 4 and entry[2] is 4 and entry[3] is 9
+
   it "should compile to ts", ->
     heraSrc := readFile('source/hera.hera')
     tsSrc := compile heraSrc, types: true
@@ -606,9 +635,11 @@ describe "Hera", ->
 
     // TODO: hacked in object mapping
     rules.Rule[2] = {
-      o: {
-        a: [{o: true}, "b", {v: 0}]
-      }
+      type: "StructuralHandler"
+      $loc: pos: 0, length: 0
+      value:
+        o:
+          a: [{o: true}, "b", {v: 0}]
     }
 
     assert compile rules
@@ -620,11 +651,27 @@ describe "Hera", ->
     """
 
     // Hack in a non-array object for the mapping value
-    rules.Rule[2] = {}
+    rules.Rule[2] = {
+      type: "StructuralHandler"
+      $loc: pos: 0, length: 0
+      value: {}
+    }
 
     assert.throws ->
       compile(rules)
     , /unknown object mapping/
+
+  it "should throw an error when structural handlers are not wrapped", ->
+    rules := hera.parse """
+      Rule
+        "a"
+    """
+
+    rules.Rule[2] = { o: { a: 1 } }
+
+    assert.throws ->
+      compile(rules)
+    , /unknown structural handler/
 
   it "throw an error when encountering an unknown operator", ->
     rules := hera.parse """
