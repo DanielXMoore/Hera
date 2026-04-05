@@ -70,6 +70,17 @@ describe "Hera", ->
     parser := generate(grammar)
     assert parser.parse("a")
 
+  it "should preserve hash-prefixed handler lines", ->
+    rules := hera.parse """
+      Rule
+        "a" ->
+          # comment
+          return 1
+    """
+
+    assert typeof rules.Rule[2] is "object" and "f" in rules.Rule[2]
+    assert.equal rules.Rule[2].f, "    # comment\n    return 1"
+
   it "should handle rules that are aliases", ->
     grammar := """
       Grammar

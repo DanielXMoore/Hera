@@ -101,7 +101,7 @@ Handling
     return $4 as Handler
 
 HandlingExpression
-  EOS HandlingExpressionBody EOS? -> $2
+  NonCommentEOS HandlingExpressionBody EOS? -> $2
   StructuralValue EOS :: StructuralHandler ->
     return {
       type: "StructuralHandler",

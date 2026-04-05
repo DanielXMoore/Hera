@@ -364,7 +364,7 @@
         [
           "S",
           [
-            "EOS",
+            "NonCommentEOS",
             "HandlingExpressionBody",
             [
               "?",
@@ -374,7 +374,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 2074,
+              "pos": 2084,
               "length": 3
             },
             "value": {
@@ -391,7 +391,7 @@
           {
             "f": "    return {\n      type: \"StructuralHandler\",\n      $loc,\n      value: $1,\n    }",
             "$loc": {
-              "pos": 2123,
+              "pos": 2133,
               "length": 82
             },
             "t": " StructuralHandler "
@@ -405,7 +405,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 2268,
+          "pos": 2278,
           "length": 64
         },
         "t": " Handler "
@@ -437,7 +437,7 @@
           {
             "f": "    return JSON.parse(`\"${$1}\"`) as string",
             "$loc": {
-              "pos": 2433,
+              "pos": 2443,
               "length": 43
             }
           }
@@ -453,7 +453,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 2531,
+              "pos": 2541,
               "length": 8
             },
             "value": {
@@ -482,7 +482,7 @@
       {
         "f": "    return $2 as StructuralTerminal[]",
         "$loc": {
-          "pos": 2634,
+          "pos": 2644,
           "length": 39
         },
         "t": " StructuralTerminal[] "
@@ -500,7 +500,7 @@
       {
         "type": "StructuralHandler",
         "$loc": {
-          "pos": 2721,
+          "pos": 2731,
           "length": 4
         },
         "value": {
@@ -521,7 +521,7 @@
       {
         "f": "    return {\n      o: Object.fromEntries($2)\n    }",
         "$loc": {
-          "pos": 2795,
+          "pos": 2805,
           "length": 52
         },
         "t": " StructuralTerminal "
@@ -553,7 +553,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 2930,
+              "pos": 2940,
               "length": 9
             },
             "value": [
@@ -578,7 +578,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 2966,
+              "pos": 2976,
               "length": 15
             },
             "value": [
@@ -606,7 +606,7 @@
           {
             "f": "    return parseInt($1, 10) as PositionalVariable",
             "$loc": {
-              "pos": 3004,
+              "pos": 3014,
               "length": 50
             }
           }
@@ -623,7 +623,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 3087,
+              "pos": 3097,
               "length": 5
             },
             "value": true
@@ -635,7 +635,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 3105,
+              "pos": 3115,
               "length": 7
             },
             "value": false
@@ -652,7 +652,7 @@
           {
             "f": "    return null",
             "$loc": {
-              "pos": 3134,
+              "pos": 3144,
               "length": 16
             }
           }
@@ -663,7 +663,7 @@
           {
             "f": "    return {l: undefined}",
             "$loc": {
-              "pos": 3167,
+              "pos": 3177,
               "length": 27
             }
           }
@@ -679,7 +679,7 @@
           {
             "f": "    return parseInt($0, 16)",
             "$loc": {
-              "pos": 3227,
+              "pos": 3237,
               "length": 28
             }
           }
@@ -690,7 +690,7 @@
           {
             "f": "    return parseFloat($0)",
             "$loc": {
-              "pos": 3279,
+              "pos": 3289,
               "length": 27
             }
           }
@@ -719,7 +719,7 @@
       {
         "type": "StructuralHandler",
         "$loc": {
-          "pos": 3357,
+          "pos": 3367,
           "length": 4
         },
         "value": {
@@ -758,7 +758,7 @@
       {
         "type": "StructuralHandler",
         "$loc": {
-          "pos": 3477,
+          "pos": 3487,
           "length": 11
         },
         "value": [
@@ -798,7 +798,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 3540,
+              "pos": 3550,
               "length": 10
             },
             "value": [
@@ -815,7 +815,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 3581,
+              "pos": 3591,
               "length": 10
             },
             "value": [
@@ -832,7 +832,7 @@
           {
             "type": "StructuralHandler",
             "$loc": {
-              "pos": 3600,
+              "pos": 3610,
               "length": 11
             },
             "value": [
@@ -977,7 +977,7 @@
       {
         "type": "StructuralHandler",
         "$loc": {
-          "pos": 4264,
+          "pos": 4274,
           "length": 4
         },
         "value": {
@@ -994,7 +994,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 4324,
+          "pos": 4334,
           "length": 73
         },
         "t": " CodeBlockNode "
