@@ -380,7 +380,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   code := generate [
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
-    `\n\const grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
+    `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
     strDefSource
     "\n\n"
     reDefSource
