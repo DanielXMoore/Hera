@@ -4,8 +4,9 @@ import type {
   NameNode,
   Handler,
   CodeBlockNode,
+  PositionalVariable,
+  StructuralHandler,
   StructuralTerminal,
-  StructuralObject,
 } from './hera-types'
 ```
 
@@ -101,7 +102,12 @@ Handling
 
 HandlingExpression
   EOS HandlingExpressionBody EOS? -> $2
-  StructuralMapping EOS -> $1
+  StructuralValue EOS :: StructuralHandler ->
+    return {
+      type: "StructuralHandler",
+      $loc,
+      value: $1,
+    }
 
 HandlingExpressionBody
   HandlingExpressionLine+ :: Handler ->
@@ -113,7 +119,7 @@ HandlingExpressionBody
 HandlingExpressionLine
   $( Indent Indent [^\n\r]* NonCommentEOS )
 
-StructuralMapping
+StructuralValue
   StringValue ->
     return JSON.parse(`"${$1}"`) as string
   NumberValue
@@ -128,21 +134,21 @@ JSArray
     return $2 as StructuralTerminal[]
 
 ArrayItem
-  StructuralMapping /,\s*|\s*(?=\])/ -> $1
+  StructuralValue /,\s*|\s*(?=\])/ -> $1
 
 JSObject
-  OpenBrace ObjectField* CloseBrace :: StructuralObject ->
+  OpenBrace ObjectField* CloseBrace :: StructuralTerminal ->
     return {
       o: Object.fromEntries($2)
     }
 
 ObjectField
-  ( StringValue / Name ) /:[ \t]*/ StructuralMapping /,\s*|\s*(?=\})/ -> [$1, $3]
+  ( StringValue / Name ) /:[ \t]*/ StructuralValue /,\s*|\s*(?=\})/ -> [$1, $3]
   Name /,\s*|\s*(?=\})/ -> [$1, {v: $1}]
 
 Variable
   /\$(\d)/ ->
-    return parseInt($1, 10)
+    return parseInt($1, 10) as PositionalVariable
   Name
 
 BooleanValue

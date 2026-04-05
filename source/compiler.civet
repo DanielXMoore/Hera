@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, StructuralHandling } from ./hera-types.civet
+import type { HeraAST, HeraRules, StructuralHandler, StructuralValue } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -125,41 +125,43 @@ regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 // and regexps start at the second because the first is the entire match
 // TODO: is 0 valid to select the entire sequence result?
 // TODO: remove offset and unify handlings
-compileStructuralHandler := (mapping: StructuralHandling, source: any, single=false, offset=-1): string ->
-  switch typeof mapping
-    when "string"
-      JSON.stringify(mapping)
-    when "object"
-      if Array.isArray mapping
-        `[${mapping.map((m) => compileStructuralHandler(m, source, single, offset)).join(', ')}]`
-      else if mapping is null
-        "null"
-      else if "l" in mapping
-        String(mapping.l)
-      else if "v" in mapping
-        if single
-          source
-        else
-          if typeof mapping.v is 'number'
-            n := mapping.v+offset
-            if n is -1 // Handle $0
-              source
-            else // Handle $1, $2, etc.
-              `${source}[${n}]`
-          else
-            mapping.v
-      else if "o" in mapping
-        o := mapping.o
-        "{" + Object.keys(o).map (key) ->
-          `${JSON.stringify(key)}: ${compileStructuralHandler(o[key], source, single, offset)}`
-        .join(", ") + "}"
+compileStructuralValue := (value: StructuralValue, source: string, single=false, offset=-1): string ->
+  switch value
+    <? "string"
+      JSON.stringify value
+    null, undefined, <? "number", <? "boolean"
+      String value
+    [...items]
+      `[${items.map((item) => compileStructuralValue(item, source, single, offset)).join(', ')}]`
+    {l}
+      String l
+    {v}
+      if single
+        source
       else
-        throw new Error "unknown object mapping"
-    default // number, boolean, undefined
-      String(mapping)
+        if v <? "number"
+          n := v+offset
+          if n is -1 // Handle $0
+            source
+          else // Handle $1, $2, etc.
+            `${source}[${n}]`
+        else
+          v
+    {o}
+      "{" + Object.keys(o).map (key) ->
+        `${JSON.stringify(key)}: ${compileStructuralValue(o[key], source, single, offset)}`
+      .join(", ") + "}"
+    else
+      throw new Error "unknown object mapping"
+
+compileStructuralHandler := (mapping: StructuralHandler, source: string, single=false, offset=-1) ->
+  {
+    mapping.$loc
+    token: compileStructuralValue(mapping.value, source, single, offset)
+  }
 
 compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, name: string) ->
-  if typeof arg is "string"
+  if arg <? "string"
     return `${variableName} = ${arg}` // reference to other named parser function
 
   if arg.length is 3
@@ -215,6 +217,9 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
         ]
 
     else // structural mapping
+      unless h is like { type: "StructuralHandler" }
+        throw new Error "unknown structural handler"
+
       parser := compileOp(arg, name, false, options.types)
       if arg[0] is "S"
         namedParameters := arg[1].map (node, i) ->
@@ -224,12 +229,24 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
           else
             ""
         .join("")
-        return `${variableName} = $T(${parser}, function(value) {${namedParameters}return ${compileStructuralHandler(h, "value")} });`
+        return [
+          `${variableName} = $T(${parser}, function(value) {${namedParameters}return `
+          compileStructuralHandler(h, "value")
+          " });"
+        ]
       else if arg[0] is "R"
-        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", false, 0)} });`
+        return [
+          `${variableName} = $T(${parser}, function(value) { return `
+          compileStructuralHandler(h, "value", false, 0)
+          " });"
+        ]
       else
         // This is 'single' so if there is a named variable it comes out as 'value'
-        return `${variableName} = $T(${parser}, function(value) { return ${compileStructuralHandler(h, "value", true)} });`
+        return [
+          `${variableName} = $T(${parser}, function(value) { return `
+          compileStructuralHandler(h, "value", true)
+          " });"
+        ]
 
   return `${variableName} = ${compileOp(arg, name, true, options.types)}`
 

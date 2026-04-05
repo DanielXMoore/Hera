@@ -5,7 +5,7 @@
   type Handler
   type HeraAST
   type HeraRules
-  type StructuralHandling
+  type StructuralValue
 } from ./hera-types.civet
 
 /**
@@ -29,32 +29,28 @@ decompile := (rules: HeraRules) ->
 
   lines.join("\n")
 
-structuralToSource := (mapping: StructuralHandling): string ->
-  switch typeof mapping
-    when "number"
-      mapping.toString()
-    when "string", "undefined", "boolean"
-      JSON.stringify(mapping)
-    when "object"
-      if mapping is null
-        JSON.stringify(mapping)
-      else if Array.isArray(mapping)
-        "[" + mapping.map (m) ->
-          structuralToSource(m)
-        .join(", ") + "]"
-      else if "v" in mapping
-        `$${mapping.v}`
-      else if "o" in mapping
-        "{" + Object.keys(mapping.o).map (key) ->
-          value := mapping.o[key]
-          `${key}: ${structuralToSource(value)}`
-        .join(", ") + "}"
-      else if "l" in mapping
-        JSON.stringify(mapping.l)
-      else
-        throw new Error "Unknown mapping object"
+structuralValueToSource := (value: StructuralValue): string ->
+  switch value
+    <? "number"
+      value.toString()
+    <? "string"
+      JSON.stringify(value)
+    null, undefined, <? "boolean"
+      String(value)
+    [...items]
+      "[" + items.map (item) ->
+        structuralValueToSource(item)
+      .join(", ") + "]"
+    {v}
+      `$${v}`
+    {o}
+      "{" + Object.keys(o).map (key) ->
+        `${key}: ${structuralValueToSource(o[key])}`
+      .join(", ") + "}"
+    {l}
+      JSON.stringify(l)
     else
-      throw new Error "Unknown mapping type"
+      throw new Error "Unknown mapping object"
 
 /**
 handler to source
@@ -67,7 +63,10 @@ hToS := (h: Handler | undefined): string ->
     t := "t" in h ? ` :: ${h.t.trim()}` : ""
     `${t} ->\n${h.f}`
   else // structural handler
-    " -> " + structuralToSource(h)
+    unless h is like { type: "StructuralHandler" }
+      throw new Error "Unknown handler format"
+
+    " -> " + structuralValueToSource(h.value)
 
 /**
 Generate a source document from the rules AST
