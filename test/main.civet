@@ -577,6 +577,15 @@ describe "Hera", ->
 
     assert.equal parse("AAAAAA").length, 6
 
+  it "assertions should return true as success value", ->
+    {parse} := generate """
+      Rule
+        &"A":a "A"+ ->
+          return $1
+    """
+
+    assert.equal parse("AAAAAA"), true
+
   it "should have string handlers", ->
     {parse} := generate """
       Rule
