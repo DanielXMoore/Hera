@@ -586,6 +586,19 @@ describe "Hera", ->
 
     assert.equal parse("AAAAAA"), true
 
+  it "optional assertion returns true when present, undefined when not", ->
+    {parse} := generate """
+      Rule
+        (&A)?:b A? "B" ->
+          return b
+
+      A
+        "A"
+    """
+
+    assert.equal parse("AB"), true
+    assert.equal parse("B"), undefined
+
   it "should have string handlers", ->
     {parse} := generate """
       Rule

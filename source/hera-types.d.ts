@@ -1,0 +1,26 @@
+/**
+ * These are types specific to the Hera parser and not grammars in general.
+ * This file mirrors source/hera-types.civet for TypeScript consumers.
+ */
+import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine"
+export type { ParserContext, HeraGrammar, ParserOptions }
+export type Terminal = string | RegExp
+export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean }
+export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
+export type TerminalOp = "L" | "R"
+export type SequenceOp = "S" | "/"
+export type PrefixOp = "&" | "!" | "$"
+export type SuffixOp = "+" | "*" | "?"
+export type Literal = [TerminalOp, string]
+export type TerminalNode = [TerminalOp, string, Handler?]
+export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
+export type PrefixNode = [PrefixOp, HeraAST, Handler?]
+export type SuffixNode = [SuffixOp, HeraAST, Handler?]
+export type NameNode = [{ name: string }, HeraAST, Handler?]
+export type PrimaryNode = TerminalNode | SequenceNode | NameNode
+export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
+export declare const CodeSymbol: unique symbol
+export type HeraRules = {
+  [key: string]: HeraAST
+  [CodeSymbol]?: CodeBlockNode[]
+}
