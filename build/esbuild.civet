@@ -23,6 +23,7 @@ esbuild.build({
       loader: 'ts'
     civetPlugin
       ts: "civet"
+      declarationExtension: ".d.ts"
       emitDeclaration: true
   ]
 }).catch -> process.exit 1
@@ -52,7 +53,6 @@ esbuild.build {
   plugins: [
     civetPlugin
       ts: "civet"
-      emitDeclaration: true
   ]
   footer: {
     // Rewrite default export as CJS exports object
@@ -84,6 +84,5 @@ esbuild.build {
   plugins: [
     civetPlugin
       ts: "civet"
-      emitDeclaration: true
   ]
 }
