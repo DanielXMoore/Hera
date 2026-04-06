@@ -586,6 +586,15 @@ describe "Hera", ->
 
     assert.equal parse("AAAAAA"), true
 
+  it "negative assertions should return true as success value", ->
+    {parse} := generate """
+      Rule
+        !"B":a "A"+ ->
+          return $1
+    """
+
+    assert.equal parse("AAAAAA"), true
+
   it "optional assertion returns true when present, undefined when not", ->
     {parse} := generate """
       Rule

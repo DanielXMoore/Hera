@@ -157,7 +157,7 @@ BasicTypesOfOps
     expectType<string>($1)
 
   !Numeric ->
-    expectType<undefined>($1)
+    expectType<true>($1)
 
   Numeric? ->
     expectType<number|undefined>($1)
@@ -175,12 +175,12 @@ BasicTypesOfOps
     expectType<string>($1)
 
   Numeric !Alpha Numeric* ->
-    // `!Alpha` is passed as a parameter that is undefined (as opposed to being omitted from the parameter list)
+    // `!Alpha` is passed as a parameter that is true (as opposed to being omitted from the parameter list)
 
-    expectType<[number, undefined, number[]]>($0)
+    expectType<[number, true, number[]]>($0)
 
     expectType<number>($1)
-    expectType<undefined>($2)
+    expectType<true>($2)
     expectType<number[]>($3)
 
 
