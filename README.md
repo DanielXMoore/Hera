@@ -149,6 +149,8 @@ and the matching string is available as `$0`.
 
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
+**Optional** (`?`): `...?` means "zero or one expansion of `...`". If `...` matches, `...?` returns that value directly. Otherwise it succeeds without consuming input and returns `undefined`. Unlike `*` and `+`, `?` does not wrap its result in an array.
+
 **Lookahead predicates** (`&`, `!`): `&...` and `!...` assert the existence or non-existence, respectively, of a match of `...`, without advancing the position or consuming any input. For example, `&/\s/` is like the look-ahead regular expression `/(?=\s)/`.
 
 **Stringify** (`$`): `$...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
@@ -225,7 +227,7 @@ Token location example
 >     #! hera
 >     Grammar
 >       Punctuation? A+ Punctuation? ->
->         return [].concat($1, $2, $3)
+>         return [$1, ...$2, $3].filter((token) => token !== undefined)
 >
 >     A
 >       ("a" / "A") ->
