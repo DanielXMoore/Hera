@@ -151,7 +151,7 @@ BasicTypesOfOps
     expectType<number>($1)
 
   &Numeric ->
-    expectType<undefined>($1)
+    expectType<true>($1)
 
   $Numeric ->
     expectType<string>($1)
