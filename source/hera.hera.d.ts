@@ -1,4 +1,4 @@
-import type { HeraRules, ParserOptions } from "./hera-types"
+import type { HeraRules, ParserOptions } from "./hera-types.civet"
 import type { HeraGrammar } from "./machine"
 
 declare const parser: {
