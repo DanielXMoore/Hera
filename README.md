@@ -152,6 +152,7 @@ and the matching string is available as `$0`.
 **Optional** (`?`): `...?` means "zero or one expansion of `...`". If `...` matches, `...?` returns that value directly. Otherwise it succeeds without consuming input and returns `undefined`. Unlike `*` and `+`, `?` does not wrap its result in an array.
 
 **Lookahead predicates** (`&`, `!`): `&...` and `!...` assert the existence or non-existence, respectively, of a match of `...`, without advancing the position or consuming any input. For example, `&/\s/` is like the look-ahead regular expression `/(?=\s)/`.
+`&` returns `true` (so that it can be distinguished from failing when marked optional), while `!` returns `undefined`.
 
 **Stringify** (`$`): `$...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
 
