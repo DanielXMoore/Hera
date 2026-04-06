@@ -158,17 +158,17 @@ Handlers are attached to rule choices by adding `->` after the choice.
 Optionally, `->` can be preceded by a return type annotation of the form `::type`.
 The most general handler is JavaScript, TypeScript, or Civet code indented
 beneath the choice, which `return`s the desired value for the matched choice.
-This code can also refer to the default value (strings for terminals,
-arrays for sequences or repetitions) via `$0`,
-or to the `n`th matching item in the topmost sequence via `$n`.
-Each item in the topmost sequence can also be named via a `:name` suffix
+Alternatively, a single expression can start on the same line as `->`, and it will be implicitly `return`ed.
+In either case, the handler code can refer to the default value
+(strings for terminals, arrays for sequences or repetitions) via `$0`,
+which is what the choice returns if you don't provide a handler.
+The `n`th matching item in the topmost sequence can be accessed via `$n`;
+each item in the topmost sequence can also be named via a `:name` suffix
 (for example, `Block:name`), and then the code can also refer to it as `name`.
 If the expansion is a single regular expression,
-`$n` instead refers to the `n`th group in the regex.
-The `$n` notation can also be put on the same line as the `->` as a shorthand
-for `return $n` on a separate line; this also works for simple expressions
-like JavaScript literals.
-JavaScript/TypeScript/Civet code can return the special value `$skip`
+`$n` instead refers to the `n`th group in the regex
+(and `$0` is the full matching string).
+The handler code can return the special value `$skip`
 to indicate a failed match.
 
 **Comment** (`#...`):
@@ -242,7 +242,7 @@ Regex Groups
 
 >     #! hera
 >     Phone
->       /1-(\d{3})-(\d{3})-(\d{4})/ -> [1, 2, 3]
+>       /1-(\d{3})-(\d{3})-(\d{4})/ -> [$1, $2, $3]
 
 ---
 
@@ -251,7 +251,7 @@ Regex Groups
 >       NamedMapping NamedMapping
 >
 >     NamedMapping
->       Punctuation -> ["P", 0]
+>       Punctuation -> ["P", $0]
 >
 >     Punctuation
 >       "."

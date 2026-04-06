@@ -4,23 +4,36 @@ assert from assert
 { readFile } from ./helper.civet
 heraGrammarAST := JSON.parse readFile "source/rules.json"
 
-// Decompile/parse round trips can preserve the structural shape while shifting
-// source offsets, so these comparisons intentionally ignore StructuralHandler locs.
-normalizeStructuralMappingLocs := (value) ->
+// Decompile/parse round trips can preserve handler text while shifting source
+// offsets, so these comparisons intentionally ignore handler locs.
+normalizeHandlerLocs := (value) ->
   if Array.isArray(value)
-    return value.map normalizeStructuralMappingLocs
+    return value.map normalizeHandlerLocs
 
   if value and typeof value is "object"
-    if value.type is "StructuralHandler"
-      return {
-        type: value.type
-        value: normalizeStructuralMappingLocs(value.value)
-      }
+    if "f" in value and "$loc" in value
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter ([key]) ->
+            key != "$loc"
+          .map ([key, entry]) ->
+            [key, normalizeHandlerLocs(entry)]
+      )
 
-    return Object.fromEntries Object.entries(value).map ([key, entry]) ->
-      [key, normalizeStructuralMappingLocs(entry)]
+    return Object.fromEntries(
+      Object.entries(value)
+        .map ([key, entry]) ->
+          [key, normalizeHandlerLocs(entry)]
+    )
 
   return value
+
+// AST doesn't store comments, so we can't reproduce them in decompilation
+normalizeGrammarSource := (source: string) ->
+  source
+    .replace(/^[ \t]*#.*(?:\r?\n|\r)?/gm, "")
+    .replace(/[ ]+\n/g, '\n')
+    .replace(/(?:\r?\n|\r){3,}/g, '\n\n')
 
 describe "util", ->
   /*
@@ -34,13 +47,10 @@ describe "util", ->
     parsedRules := parse grammar
     // console.log parsedRules, rules
 
-    assert.deepEqual parsedRules, heraGrammarAST.rules
-
-    // strip trailing whitespace before compare
-    grammar = grammar.replace(/[ ]+\n/g, '\n')
+    assert.deepEqual normalizeHandlerLocs(parsedRules), normalizeHandlerLocs(heraGrammarAST.rules)
 
     src := readFile("source/hera.hera")
-    assert.equal grammar, src
+    assert.equal normalizeGrammarSource(grammar), normalizeGrammarSource(src)
 
   it "should convert grammar rules to ebnf", ->
     grammarToEBNF(heraGrammarAST.rules)
@@ -54,7 +64,7 @@ describe "util", ->
     """
 
     decompiled := decompile rules
-    assert.deepEqual normalizeStructuralMappingLocs(parse(decompiled)), normalizeStructuralMappingLocs(rules)
+    assert.deepEqual normalizeHandlerLocs(parse(decompiled)), normalizeHandlerLocs(rules)
 
   it "should decompile literal undefined", ->
     grammar := """
@@ -123,37 +133,19 @@ describe "util", ->
       decompile rules
     , /Unknown handler format/
 
-  it "should throw an error when decompiling an unknown object", ->
+  it "should throw an error when decompiling an invalid handler", ->
     rules := parse """
       Rule
         "X" -> 0
     """
 
     rules.Rule[2] = {
-      type: "StructuralHandler"
-      $loc: pos: 0, length: 0
-      value: yo: "wat"
+      f: 0
     }
 
     assert.throws ->
       decompile rules
-    , /Unknown/
-
-  it "should throw an error when decompiling an unknown mapping type", ->
-    rules := parse """
-      Rule
-        "X" -> 0
-    """
-
-    rules.Rule[2] = {
-      type: "StructuralHandler"
-      $loc: pos: 0, length: 0
-      value: ->
-    }
-
-    assert.throws ->
-      decompile rules
-    , /Unknown/
+    , /Unknown handler format/
 
   it "should throw an error when decompiling an unknown rule type", ->
     rules := parse """

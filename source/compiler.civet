@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, StructuralHandler, StructuralValue } from ./hera-types.civet
+import type { HeraAST, HeraRules } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -121,132 +121,73 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
 regExpHandlerParams := ["$skip", "$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"]
 regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 
-// Offset is so sequences start at the first item in the array
-// and regexps start at the second because the first is the entire match
-// TODO: is 0 valid to select the entire sequence result?
-// TODO: remove offset and unify handlings
-compileStructuralValue := (value: StructuralValue, source: string, single=false, offset=-1): string ->
-  switch value
-    <? "string"
-      JSON.stringify value
-    null, undefined, <? "number", <? "boolean"
-      String value
-    [...items]
-      `[${items.map((item) => compileStructuralValue(item, source, single, offset)).join(', ')}]`
-    {l}
-      String l
-    {v}
-      if single
-        source
-      else
-        if v <? "number"
-          n := v+offset
-          if n is -1 // Handle $0
-            source
-          else // Handle $1, $2, etc.
-            `${source}[${n}]`
-        else
-          v
-    {o}
-      "{" + Object.keys(o).map (key) ->
-        `${JSON.stringify(key)}: ${compileStructuralValue(o[key], source, single, offset)}`
-      .join(", ") + "}"
-    else
-      throw new Error "unknown object mapping"
-
-compileStructuralHandler := (mapping: StructuralHandler, source: string, single=false, offset=-1) ->
-  {
-    mapping.$loc
-    token: compileStructuralValue(mapping.value, source, single, offset)
-  }
-
 compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, name: string) ->
   if arg <? "string"
     return `${variableName} = ${arg}` // reference to other named parser function
 
   if arg.length is 3
     h := arg[2]
-    if h and typeof h is "object" and "f" in h // function mapping
-      parser := compileOp(arg, name, false, options.types)
+    unless h is like { f } and h.f <? "string"
+      throw new Error "unknown handler format"
 
-      handler :=
-        $loc: h.$loc
-        token: h.f
+    parser := compileOp(arg, name, false, options.types)
 
-      /* c8 ignore next */
-      handlerType := options.types && h.t ? `: ${h.t}` : ""
-      parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t.trim()}>` : ""
+    handlerToken :=
+      $loc: h.$loc
+      token: h.f
 
-      if arg[0] is "S"
-        // Gather names from each element in arg[1]
-        // Only handle top level names for now
-        // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
-        namedParameters := "    " + arg[1].map (node, i) ->
-          getParameterDeclaration(node, i+1)
-        .join("")
+    // Inline handlers may have a closing line that is indented by two spaces,
+    // so we start at an indent of 2 so that we don't get underindentation
+    // errors from Civet. Otherwise, we indent 4 to match the source input.
+    indent := h.inline ? "  " : "    "
 
-        parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
+    handler := if h.inline
+      [`${indent}return `, handlerToken]
+    else
+      handlerToken
 
-        return [
-          `${variableName}${parserTypeAnnotation} = `
-          `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
-          namedParameters
-          "\n"
-          handler
-          "\n});"
-        ]
+    /* c8 ignore next */
+    handlerType := options.types && h.t ? `: ${h.t}` : ""
+    parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t.trim()}>` : ""
 
-      else if arg[0] is "R"
-        // NOTE: RegExp named groups may go here later
-        return [
-          `${variableName}${parserTypeAnnotation} = `
-          `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
-          handler
-          "\n});"
-        ]
-      else
-        namedParameters := "    " + getParameterDeclaration(arg, 0)
+    if arg[0] is "S"
+      // Gather names from each element in arg[1]
+      // Only handle top level names for now
+      // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
+      namedParameters := indent + arg[1].map (node, i) ->
+        getParameterDeclaration(node, i+1)
+      .join("")
 
-        return [
-          `${variableName}${parserTypeAnnotation} = `
-          `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
-          namedParameters
-          "\n"
-          handler
-          "\n});"
-        ]
+      parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
 
-    else // structural mapping
-      unless h is like { type: "StructuralHandler" }
-        throw new Error "unknown structural handler"
+      return [
+        `${variableName}${parserTypeAnnotation} = `
+        `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
+        namedParameters
+        "\n"
+        handler
+        "\n});"
+      ]
 
-      parser := compileOp(arg, name, false, options.types)
-      if arg[0] is "S"
-        namedParameters := arg[1].map (node, i) ->
-          varName := getNamedVariable(node[0])
-          if varName
-            `var ${varName} = value[${i}];`
-          else
-            ""
-        .join("")
-        return [
-          `${variableName} = $T(${parser}, function(value) {${namedParameters}return `
-          compileStructuralHandler(h, "value")
-          " });"
-        ]
-      else if arg[0] is "R"
-        return [
-          `${variableName} = $T(${parser}, function(value) { return `
-          compileStructuralHandler(h, "value", false, 0)
-          " });"
-        ]
-      else
-        // This is 'single' so if there is a named variable it comes out as 'value'
-        return [
-          `${variableName} = $T(${parser}, function(value) { return `
-          compileStructuralHandler(h, "value", true)
-          " });"
-        ]
+    else if arg[0] is "R"
+      // NOTE: RegExp named groups may go here later
+      return [
+        `${variableName}${parserTypeAnnotation} = `
+        `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
+        handler
+        "\n});"
+      ]
+    else
+      namedParameters := indent + getParameterDeclaration(arg, 0)
+
+      return [
+        `${variableName}${parserTypeAnnotation} = `
+        `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
+        namedParameters
+        "\n"
+        handler
+        "\n});"
+      ]
 
   return `${variableName} = ${compileOp(arg, name, true, options.types)}`
 

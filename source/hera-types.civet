@@ -7,25 +7,7 @@ import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine"
 export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
-
-export type PositionalVariable = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | string
-export type StructuralTerminal =
-  boolean |
-  null |
-  number |
-  string |
-  undefined |
-  { v: PositionalVariable } |
-  { o: StructuralObject } |
-  { l: any }
-export type StructuralObject = { [key: string]: StructuralValue }
-export type StructuralValue = StructuralTerminal | StructuralValue[]
-export type StructuralHandler = {
-  type: "StructuralHandler"
-  $loc: Loc
-  value: StructuralValue
-}
-export type Handler = { $loc: Loc, f: string, t?: string } | StructuralHandler
+export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean }
 export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
 export type TerminalOp = "L" | "R"
 export type SequenceOp = "S" | "/"

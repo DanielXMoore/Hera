@@ -4,9 +4,6 @@ import type {
   NameNode,
   Handler,
   CodeBlockNode,
-  PositionalVariable,
-  StructuralHandler,
-  StructuralTerminal,
 } from './hera-types'
 ```
 
@@ -93,20 +90,19 @@ Literal
 Handling
   EOS ->
     return undefined
-  Space* TypeAnnotation? Arrow HandlingExpression ->
-    if ($2) {
-      if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2
-      else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)
-    }
-    return $4 as Handler
+  Space* TypeAnnotation?:t Arrow HandlingExpression:handler ->
+    if (t) handler = { ...handler, t }
+    return handler as Handler
 
 HandlingExpression
-  EOS HandlingExpressionBody EOS? -> $2
-  StructuralValue EOS :: StructuralHandler ->
+  # Try to parse properly indented first
+  NonCommentEOS HandlingExpressionBody EOS? -> $2
+  # Otherwise, allow content on the same line
+  HandlingExpressionInline :: Handler ->
     return {
-      type: "StructuralHandler",
+      f: $1.trimEnd(),
       $loc,
-      value: $1,
+      inline: true,
     }
 
 HandlingExpressionBody
@@ -119,53 +115,20 @@ HandlingExpressionBody
 HandlingExpressionLine
   $( Indent Indent [^\n\r]* NonCommentEOS )
 
-StructuralValue
-  StringValue ->
-    return JSON.parse(`"${$1}"`) as string
-  NumberValue
-  BooleanValue
-  NullValue
-  Variable -> {v: $1}
-  JSArray
-  JSObject
+# Handler that starts with some content on the same line as the arrow
+HandlingExpressionInline
+  # Require some non-space content on the first line,
+  # then take all doubly indented lines, then allow a single-indented finale,
+  # then allow normal Hera comments/blank lines after the inline handler.
+  $( /[ \t]*\S[^\n\r]*/ NonCommentEOS ) HandlingExpressionLine* HandlingExpressionInlineFinale? EOS? :: string ->
+    return $1 + $2.join("") + ($3 ?? "")
 
-JSArray
-  OpenBracket ArrayItem* CloseBracket :: StructuralTerminal[] ->
-    return $2 as StructuralTerminal[]
-
-ArrayItem
-  StructuralValue /,\s*|\s*(?=\])/ -> $1
-
-JSObject
-  OpenBrace ObjectField* CloseBrace :: StructuralTerminal ->
-    return {
-      o: Object.fromEntries($2)
-    }
-
-ObjectField
-  ( StringValue / Name ) /:[ \t]*/ StructuralValue /,\s*|\s*(?=\})/ -> [$1, $3]
-  Name /,\s*|\s*(?=\})/ -> [$1, {v: $1}]
-
-Variable
-  /\$(\d)/ ->
-    return parseInt($1, 10) as PositionalVariable
-  Name
-
-BooleanValue
-  "true" -> true
-  "false" -> false
-
-NullValue
-  "null" ->
-    return null
-  "undefined" ->
-    return {l: undefined}
-
-NumberValue
-  /0x[\da-fA-F]+/ ->
-    return parseInt($0, 16)
-  /[-+]?\d+(\.\d+)?/ ->
-    return parseFloat($0)
+# Inline content allows closing bracket on single-indented line to allow e.g.:
+#   ... -> [
+#     ...double indented...
+#   ].join(",")
+HandlingExpressionInlineFinale
+  $( Indent [\]\}\)][^\n\r]* NonCommentEOS )
 
 StringValue
   "\"" $DoubleStringCharacter* "\"" -> $2

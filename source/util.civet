@@ -5,7 +5,6 @@
   type Handler
   type HeraAST
   type HeraRules
-  type StructuralValue
 } from ./hera-types.civet
 
 /**
@@ -29,44 +28,21 @@ decompile := (rules: HeraRules) ->
 
   lines.join("\n")
 
-structuralValueToSource := (value: StructuralValue): string ->
-  switch value
-    <? "number"
-      value.toString()
-    <? "string"
-      JSON.stringify(value)
-    null, undefined, <? "boolean"
-      String(value)
-    [...items]
-      "[" + items.map (item) ->
-        structuralValueToSource(item)
-      .join(", ") + "]"
-    {v}
-      `$${v}`
-    {o}
-      "{" + Object.keys(o).map (key) ->
-        `${key}: ${structuralValueToSource(o[key])}`
-      .join(", ") + "}"
-    {l}
-      JSON.stringify(l)
-    else
-      throw new Error "Unknown mapping object"
-
 /**
 handler to source
 */
 hToS := (h: Handler | undefined): string ->
   return "" unless h?
 
-  if typeof h is "object" and "f" in h // functional handler
-    // Function handler type annotation
-    t := "t" in h ? ` :: ${h.t.trim()}` : ""
-    `${t} ->\n${h.f}`
-  else // structural handler
-    unless h is like { type: "StructuralHandler" }
-      throw new Error "Unknown handler format"
+  unless h is like { f } and h.f <? "string"
+    throw new Error "Unknown handler format"
 
-    " -> " + structuralValueToSource(h.value)
+  // Function handler type annotation
+  t := "t" in h ? ` :: ${h.t.trim()}` : ""
+  if h.inline
+    `${t} -> ${h.f}`
+  else
+    `${t} ->\n${h.f}`
 
 /**
 Generate a source document from the rules AST

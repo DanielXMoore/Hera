@@ -2,10 +2,10 @@
   "code": [
     {
       "type": "CodeBlock",
-      "token": "\nimport type {\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n  PositionalVariable,\n  StructuralHandler,\n  StructuralTerminal,\n} from './hera-types'\n",
+      "token": "\nimport type {\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n} from './hera-types'\n",
       "$loc": {
         "pos": 3,
-        "length": 158
+        "length": 93
       }
     }
   ],
@@ -16,7 +16,7 @@
       {
         "f": "    const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\n    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\n    rules[Symbol.for(\"code\")] = code\n    return rules",
         "$loc": {
-          "pos": 190,
+          "pos": 125,
           "length": 236
         }
       }
@@ -34,14 +34,12 @@
             "CodeBlock"
           ],
           {
-            "type": "StructuralHandler",
+            "f": "$2",
             "$loc": {
-              "pos": 456,
+              "pos": 391,
               "length": 3
             },
-            "value": {
-              "v": 2
-            }
+            "inline": true
           }
         ],
         [
@@ -54,14 +52,12 @@
             "Rule"
           ],
           {
-            "type": "StructuralHandler",
+            "f": "$2",
             "$loc": {
-              "pos": 474,
+              "pos": 409,
               "length": 4
             },
-            "value": {
-              "v": 2
-            }
+            "inline": true
           }
         ]
       ]
@@ -74,14 +70,12 @@
         "TripleBacktick"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$2",
         "$loc": {
-          "pos": 532,
+          "pos": 467,
           "length": 4
         },
-        "value": {
-          "v": 2
-        }
+        "inline": true
       }
     ],
     "Rule": [
@@ -92,19 +86,12 @@
         "RuleBody"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "[$1, $3]",
         "$loc": {
-          "pos": 564,
+          "pos": 499,
           "length": 10
         },
-        "value": [
-          {
-            "v": 1
-          },
-          {
-            "v": 3
-          }
-        ]
+        "inline": true
       }
     ],
     "RuleBody": [
@@ -119,7 +106,7 @@
       {
         "f": "    var r = $1.map((a) => a[1])\n    if (r.length === 1) return r[0];\n    return [\"/\", r]",
         "$loc": {
-          "pos": 607,
+          "pos": 542,
           "length": 90
         }
       }
@@ -133,7 +120,7 @@
       {
         "f": "    if ($2 !== undefined) {\n      if (!$1.push)\n        $1 = [\"S\", [$1], $2]\n      else\n        $1.push($2)\n    }\n    return $1",
         "$loc": {
-          "pos": 727,
+          "pos": 662,
           "length": 129
         }
       }
@@ -153,7 +140,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"S\", $2]",
             "$loc": {
-              "pos": 917,
+              "pos": 852,
               "length": 40
             },
             "t": " SequenceNode "
@@ -171,7 +158,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"/\", $2]",
             "$loc": {
-              "pos": 1007,
+              "pos": 942,
               "length": 40
             },
             "t": " SequenceNode "
@@ -187,14 +174,12 @@
         "Expression"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$2",
         "$loc": {
-          "pos": 1102,
+          "pos": 1037,
           "length": 4
         },
-        "value": {
-          "v": 2
-        }
+        "inline": true
       }
     ],
     "ChoiceExpression": [
@@ -209,14 +194,12 @@
         "Expression"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$4",
         "$loc": {
-          "pos": 1155,
+          "pos": 1090,
           "length": 4
         },
-        "value": {
-          "v": 4
-        }
+        "inline": true
       }
     ],
     "ParameterName": [
@@ -229,14 +212,12 @@
         "Name"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$2",
         "$loc": {
-          "pos": 1187,
+          "pos": 1122,
           "length": 4
         },
-        "value": {
-          "v": 2
-        }
+        "inline": true
       }
     ],
     "Expression": [
@@ -255,7 +236,7 @@
       {
         "f": "    var result = null\n    if ($1) result = [$1, $2]\n    else result = $2\n    if ($3)\n      return [{name: $3}, result] as NameNode\n    return result as SequenceNode",
         "$loc": {
-          "pos": 1272,
+          "pos": 1207,
           "length": 166
         },
         "t": " SequenceNode | NameNode "
@@ -277,7 +258,7 @@
       {
         "f": "    if ($2) return [$2, $1]\n    else return $1",
         "$loc": {
-          "pos": 1498,
+          "pos": 1433,
           "length": 48
         }
       }
@@ -299,14 +280,12 @@
             "CloseParenthesis"
           ],
           {
-            "type": "StructuralHandler",
+            "f": "$2",
             "$loc": {
-              "pos": 1642,
+              "pos": 1577,
               "length": 4
             },
-            "value": {
-              "v": 2
-            }
+            "inline": true
           }
         ]
       ]
@@ -329,7 +308,7 @@
           {
             "f": "    return undefined",
             "$loc": {
-              "pos": 1705,
+              "pos": 1640,
               "length": 21
             }
           }
@@ -342,17 +321,27 @@
               "Space"
             ],
             [
-              "?",
-              "TypeAnnotation"
+              {
+                "name": "t"
+              },
+              [
+                "?",
+                "TypeAnnotation"
+              ]
             ],
             "Arrow",
-            "HandlingExpression"
+            [
+              {
+                "name": "handler"
+              },
+              "HandlingExpression"
+            ]
           ],
           {
-            "f": "    if ($2) {\n      if ($4 && typeof $4 === 'object' && 'f' in $4) $4.t = $2\n      else throw new Error(`TypeAnnotation is current only supported for handler functions but you passed ${JSON.stringify($4)}`)\n    }\n    return $4 as Handler",
+            "f": "    if (t) handler = { ...handler, t }\n    return handler as Handler",
             "$loc": {
-              "pos": 1779,
-              "length": 239
+              "pos": 1724,
+              "length": 70
             }
           }
         ]
@@ -364,7 +353,7 @@
         [
           "S",
           [
-            "EOS",
+            "NonCommentEOS",
             "HandlingExpressionBody",
             [
               "?",
@@ -372,29 +361,26 @@
             ]
           ],
           {
-            "type": "StructuralHandler",
+            "f": "$2",
             "$loc": {
-              "pos": 2074,
-              "length": 3
+              "pos": 1901,
+              "length": 49
             },
-            "value": {
-              "v": 2
-            }
+            "inline": true
           }
         ],
         [
           "S",
           [
-            "StructuralValue",
-            "EOS"
+            "HandlingExpressionInline"
           ],
           {
-            "f": "    return {\n      type: \"StructuralHandler\",\n      $loc,\n      value: $1,\n    }",
+            "f": "    return {\n      f: $1.trimEnd(),\n      $loc,\n      inline: true,\n    }",
             "$loc": {
-              "pos": 2123,
-              "length": 82
+              "pos": 1991,
+              "length": 75
             },
-            "t": " StructuralHandler "
+            "t": " Handler "
           }
         ]
       ]
@@ -405,7 +391,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 2268,
+          "pos": 2129,
           "length": 64
         },
         "t": " Handler "
@@ -426,274 +412,55 @@
         ]
       ]
     ],
-    "StructuralValue": [
-      "/",
-      [
-        [
-          "S",
-          [
-            "StringValue"
-          ],
-          {
-            "f": "    return JSON.parse(`\"${$1}\"`) as string",
-            "$loc": {
-              "pos": 2433,
-              "length": 43
-            }
-          }
-        ],
-        "NumberValue",
-        "BooleanValue",
-        "NullValue",
-        [
-          "S",
-          [
-            "Variable"
-          ],
-          {
-            "type": "StructuralHandler",
-            "$loc": {
-              "pos": 2531,
-              "length": 8
-            },
-            "value": {
-              "o": {
-                "v": {
-                  "v": 1
-                }
-              }
-            }
-          }
-        ],
-        "JSArray",
-        "JSObject"
-      ]
-    ],
-    "JSArray": [
+    "HandlingExpressionInline": [
       "S",
       [
-        "OpenBracket",
         [
-          "*",
-          "ArrayItem"
-        ],
-        "CloseBracket"
-      ],
-      {
-        "f": "    return $2 as StructuralTerminal[]",
-        "$loc": {
-          "pos": 2634,
-          "length": 39
-        },
-        "t": " StructuralTerminal[] "
-      }
-    ],
-    "ArrayItem": [
-      "S",
-      [
-        "StructuralValue",
-        [
-          "R",
-          ",\\s*|\\s*(?=\\])"
-        ]
-      ],
-      {
-        "type": "StructuralHandler",
-        "$loc": {
-          "pos": 2721,
-          "length": 4
-        },
-        "value": {
-          "v": 1
-        }
-      }
-    ],
-    "JSObject": [
-      "S",
-      [
-        "OpenBrace",
-        [
-          "*",
-          "ObjectField"
-        ],
-        "CloseBrace"
-      ],
-      {
-        "f": "    return {\n      o: Object.fromEntries($2)\n    }",
-        "$loc": {
-          "pos": 2795,
-          "length": 52
-        },
-        "t": " StructuralTerminal "
-      }
-    ],
-    "ObjectField": [
-      "/",
-      [
-        [
-          "S",
+          "$",
           [
+            "S",
             [
-              "/",
               [
-                "StringValue",
-                "Name"
-              ]
-            ],
-            [
-              "R",
-              ":[ \\t]*"
-            ],
-            "StructuralValue",
-            [
-              "R",
-              ",\\s*|\\s*(?=\\})"
+                "R",
+                "[ \\t]*\\S[^\\n\\r]*"
+              ],
+              "NonCommentEOS"
             ]
-          ],
-          {
-            "type": "StructuralHandler",
-            "$loc": {
-              "pos": 2930,
-              "length": 9
-            },
-            "value": [
-              {
-                "v": 1
-              },
-              {
-                "v": 3
-              }
-            ]
-          }
+          ]
         ],
         [
-          "S",
+          "*",
+          "HandlingExpressionLine"
+        ],
+        [
+          "?",
+          "HandlingExpressionInlineFinale"
+        ],
+        [
+          "?",
+          "EOS"
+        ]
+      ],
+      {
+        "f": "    return $1 + $2.join(\"\") + ($3 ?? \"\")",
+        "$loc": {
+          "pos": 2676,
+          "length": 42
+        },
+        "t": " string "
+      }
+    ],
+    "HandlingExpressionInlineFinale": [
+      "$",
+      [
+        "S",
+        [
+          "Indent",
           [
-            "Name",
-            [
-              "R",
-              ",\\s*|\\s*(?=\\})"
-            ]
+            "R",
+            "[\\]\\}\\)][^\\n\\r]*"
           ],
-          {
-            "type": "StructuralHandler",
-            "$loc": {
-              "pos": 2966,
-              "length": 15
-            },
-            "value": [
-              {
-                "v": 1
-              },
-              {
-                "o": {
-                  "v": {
-                    "v": 1
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      ]
-    ],
-    "Variable": [
-      "/",
-      [
-        [
-          "R",
-          "\\$(\\d)",
-          {
-            "f": "    return parseInt($1, 10) as PositionalVariable",
-            "$loc": {
-              "pos": 3004,
-              "length": 50
-            }
-          }
-        ],
-        "Name"
-      ]
-    ],
-    "BooleanValue": [
-      "/",
-      [
-        [
-          "L",
-          "true",
-          {
-            "type": "StructuralHandler",
-            "$loc": {
-              "pos": 3087,
-              "length": 5
-            },
-            "value": true
-          }
-        ],
-        [
-          "L",
-          "false",
-          {
-            "type": "StructuralHandler",
-            "$loc": {
-              "pos": 3105,
-              "length": 7
-            },
-            "value": false
-          }
-        ]
-      ]
-    ],
-    "NullValue": [
-      "/",
-      [
-        [
-          "L",
-          "null",
-          {
-            "f": "    return null",
-            "$loc": {
-              "pos": 3134,
-              "length": 16
-            }
-          }
-        ],
-        [
-          "L",
-          "undefined",
-          {
-            "f": "    return {l: undefined}",
-            "$loc": {
-              "pos": 3167,
-              "length": 27
-            }
-          }
-        ]
-      ]
-    ],
-    "NumberValue": [
-      "/",
-      [
-        [
-          "R",
-          "0x[\\da-fA-F]+",
-          {
-            "f": "    return parseInt($0, 16)",
-            "$loc": {
-              "pos": 3227,
-              "length": 28
-            }
-          }
-        ],
-        [
-          "R",
-          "[-+]?\\d+(\\.\\d+)?",
-          {
-            "f": "    return parseFloat($0)",
-            "$loc": {
-              "pos": 3279,
-              "length": 27
-            }
-          }
+          "NonCommentEOS"
         ]
       ]
     ],
@@ -717,14 +484,12 @@
         ]
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$2",
         "$loc": {
-          "pos": 3357,
+          "pos": 2982,
           "length": 4
         },
-        "value": {
-          "v": 2
-        }
+        "inline": true
       }
     ],
     "DoubleStringCharacter": [
@@ -756,17 +521,12 @@
         "StringValue"
       ],
       {
-        "type": "StructuralHandler",
+        "f": "[\"L\", $1]",
         "$loc": {
-          "pos": 3477,
+          "pos": 3102,
           "length": 11
         },
-        "value": [
-          "L",
-          {
-            "v": 1
-          }
-        ]
+        "inline": true
       }
     ],
     "RegExpLiteral": [
@@ -796,51 +556,36 @@
             ]
           ],
           {
-            "type": "StructuralHandler",
+            "f": "[\"R\", $3]",
             "$loc": {
-              "pos": 3540,
+              "pos": 3165,
               "length": 10
             },
-            "value": [
-              "R",
-              {
-                "v": 3
-              }
-            ]
+            "inline": true
           }
         ],
         [
           "$",
           "CharacterClassExpression",
           {
-            "type": "StructuralHandler",
+            "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3581,
+              "pos": 3206,
               "length": 10
             },
-            "value": [
-              "R",
-              {
-                "v": 1
-              }
-            ]
+            "inline": true
           }
         ],
         [
           "L",
           ".",
           {
-            "type": "StructuralHandler",
+            "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3600,
+              "pos": 3225,
               "length": 11
             },
-            "value": [
-              "R",
-              {
-                "v": 1
-              }
-            ]
+            "inline": true
           }
         ]
       ]
@@ -975,14 +720,12 @@
         ]
       ],
       {
-        "type": "StructuralHandler",
+        "f": "$2",
         "$loc": {
-          "pos": 4264,
+          "pos": 3889,
           "length": 4
         },
-        "value": {
-          "v": 2
-        }
+        "inline": true
       }
     ],
     "CodeBody": [
@@ -994,7 +737,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 4324,
+          "pos": 3949,
           "length": 73
         },
         "t": " CodeBlockNode "
