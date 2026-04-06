@@ -76,10 +76,24 @@ describe "Hera", ->
         "a" ->
           # comment
           return 1
+          # comment 2
     """
 
     assert typeof rules.Rule[2] is "object" and "f" in rules.Rule[2]
-    assert.equal rules.Rule[2].f, "    # comment\n    return 1"
+    assert.equal rules.Rule[2].f, "    # comment\n    return 1\n    # comment 2"
+
+  it "should preserve hash-prefixed inline handler lines", ->
+    rules := hera.parse """
+      Rule
+        "a" -> {
+          # comment 1
+          value: 1,
+          # comment 2
+        }.value
+    """
+
+    assert typeof rules.Rule[2] is "object" and "f" in rules.Rule[2]
+    assert.equal rules.Rule[2].f, "{\n    # comment 1\n    value: 1,\n    # comment 2\n  }.value"
 
   it "should handle rules that are aliases", ->
     grammar := """
