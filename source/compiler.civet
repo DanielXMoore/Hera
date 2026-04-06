@@ -136,8 +136,13 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
       $loc: h.$loc
       token: h.f
 
+    // Inline handlers may have a closing line that is indented by two spaces,
+    // so we start at an indent of 2 so that we don't get underindentation
+    // errors from Civet. Otherwise, we indent 4 to match the source input.
+    indent := h.inline ? "  " : "    "
+
     handler := if h.inline
-      ["    return ", handlerToken]
+      [`${indent}return `, handlerToken]
     else
       handlerToken
 
@@ -149,7 +154,7 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
       // Gather names from each element in arg[1]
       // Only handle top level names for now
       // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
-      namedParameters := "    " + arg[1].map (node, i) ->
+      namedParameters := indent + arg[1].map (node, i) ->
         getParameterDeclaration(node, i+1)
       .join("")
 
@@ -173,7 +178,7 @@ compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, 
         "\n});"
       ]
     else
-      namedParameters := "    " + getParameterDeclaration(arg, 0)
+      namedParameters := indent + getParameterDeclaration(arg, 0)
 
       return [
         `${variableName}${parserTypeAnnotation} = `

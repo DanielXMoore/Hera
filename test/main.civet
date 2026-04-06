@@ -936,6 +936,19 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'civet')
       assert.match result, /: ParseState/
 
+    it "should indent inline civet handlers by two spaces", ->
+      grammar := """
+        Rule
+          MaybeNestedTypePrimary:t :: TypeSuffix -> {
+            type: "TypeSuffix",
+            ts: true,
+            t,
+          }
+      """
+      result := compile(parse(grammar), language: 'civet')
+      assert.match result, /\n  var t = \$0;\n  return \{\n    type: "TypeSuffix",/m
+      assert.match result, /\n  \}\n\}\);/m
+
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
       grammar := """
         Rule
