@@ -341,7 +341,7 @@ export function $TEXT(fn: Parser<unknown>): Parser<string> {
 }
 
 // ! prefix operator
-export function $N(fn: Parser<unknown>): Parser<undefined> {
+export function $N(fn: Parser<unknown>): Parser<true> {
   return (ctx, state) => {
     const newState = fn(ctx, state)
 
@@ -353,7 +353,7 @@ export function $N(fn: Parser<unknown>): Parser<undefined> {
         pos: state.pos,
         length: 0,
       },
-      value: undefined,
+      value: true,
       pos: state.pos,
     }
   }
