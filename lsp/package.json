@@ -3,7 +3,7 @@
   "displayName": "Hera",
   "description": "Hera Language Server",
   "icon": "images/hera.png",
-  "version": "0.1.6",
+  "version": "0.1.7-pre.0",
   "publisher": "DanielX",
   "repository": {
     "type": "git",
@@ -56,7 +56,11 @@
       "properties": {
         "hera.language": {
           "type": "string",
-          "enum": ["javascript", "typescript", "civet"],
+          "enum": [
+            "javascript",
+            "typescript",
+            "civet"
+          ],
           "default": "javascript",
           "description": "The language used for handlers and code blocks in .hera files."
         }
@@ -102,21 +106,22 @@
     "lint": "eslint ./src --ext .ts,.tsx",
     "package": "node .esbuild.mjs && vsce package --no-dependencies",
     "vsce-publish": "node .esbuild.mjs && vsce publish --no-dependencies",
-    "test": "nyc mocha",
+    "test": "c8 mocha",
     "watch": "node .esbuild.mjs --watch"
   },
   "devDependencies": {
     "@danielx/hera": "workspace:*",
+    "@danielx/civet": "0.11.6",
     "@types/mocha": "^9.1.0",
     "@types/node": "^14.17.0",
     "@types/vscode": "^1.63.0",
     "@typescript-eslint/eslint-plugin": "^5.13.0",
     "@typescript-eslint/parser": "^5.13.0",
     "@vscode/test-electron": "^2.1.2",
-    "esbuild": "^0.14.25",
+    "c8": "^11.0.0",
+    "esbuild": "^0.28.0",
     "eslint": "^8.10.0",
     "mocha": "^9.2.1",
-    "nyc": "^15.1.0",
     "source-map-support": "^0.5.21",
     "ts-node": "^10.6.0",
     "typescript": "^5.3.3",

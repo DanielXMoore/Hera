@@ -1,4 +1,4 @@
-import { build } from 'esbuild';
+import * as esbuild from 'esbuild';
 import { copyFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,35 +7,44 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const watch = process.argv.includes('--watch');
-const minify = false // !watch || process.argv.includes('--minify');
+const minify = false; // !watch || process.argv.includes('--minify');
 
-build({
-  entryPoints: ['src/extension.ts'],
-  tsconfig: "./tsconfig.json",
+const options = {
+  entryPoints: {
+    extension: 'src/extension.ts',
+    server: 'src/server.ts',
+  },
+  outdir: 'dist',
+  tsconfig: './tsconfig.json',
   bundle: true,
   external: ['vscode'],
-  format: "cjs",
+  format: 'cjs',
   sourcemap: watch,
   minify,
-  watch,
   platform: 'node',
-  outfile: 'dist/extension.js',
-}).catch(() => process.exit(1))
+};
 
-build({
-  entryPoints: ['src/server.ts'],
-  tsconfig: "./tsconfig.json",
-  bundle: true,
-  external: ['vscode'],
-  sourcemap: watch,
-  minify,
-  watch,
-  platform: 'node',
-  outfile: 'dist/server.js',
-}).catch(() => process.exit(1))
+async function copyMachine() {
+  await copyFile(
+    __dirname + '/node_modules/@danielx/hera/dist/machine.ts',
+    __dirname + '/dist/machine.ts'
+  );
+  await copyFile(
+    __dirname + '/node_modules/@danielx/hera/dist/machine.js',
+    __dirname + '/dist/machine.js'
+  );
+}
 
-// Copy over hera machinery
-// TODO: Fix this in hera build step
+async function main() {
+  if (watch) {
+    const ctx = await esbuild.context(options);
+    await ctx.rebuild();
+    await copyMachine();
+    await ctx.watch();
+  } else {
+    await esbuild.build(options);
+    await copyMachine();
+  }
+}
 
-copyFile(__dirname + "/node_modules/@danielx/hera/dist/machine.ts", __dirname + "/dist/machine.ts")
-copyFile(__dirname + "/node_modules/@danielx/hera/dist/machine.js", __dirname + "/dist/machine.js")
+main().catch(() => process.exit(1));
