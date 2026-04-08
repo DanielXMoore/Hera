@@ -30,33 +30,30 @@ function* traverse(node: Token): Iterable<Token>
       yield node
 
 export function declarations(statements: Token[]): Map<string, Loc>
-  return new Map(statements.flatMap<Token>(({ children }) => {
+  new Map statements.flatMap<Token>(({ children }) =>
     if children?.[1]?.type is "Rule"
-      return children[1].children[0] as Token
+      children[1].children[0] as Token
+    else
+      []
+  ).map<DeclEntry>(({ token, loc }) => [token as string, loc])
 
-    return []
-  }).map<DeclEntry>(({ token, loc }) => [token as string, loc]))
 
-
-function partitionMap<T, K, V>(iterable: Iterable<T>, keyFn: (item: T) => K, valueFn: (item: T) => V | undefined) {
+function partitionMap<T, K, V>(iterable: Iterable<T>, keyFn: (item: T) => K, valueFn: (item: T) => V?)
   m := new Map<K, V[]>()
 
   for item of iterable
     v := valueFn(item)
-    if (v) {
+    if v
       key := keyFn(item)
-      let q = m.get(key)
-      if (!q) {
+      q .= m.get(key)
+      unless q
         q = []
         m.set(key, q)
-      }
       q.push(v)
-    }
 
-  return m
-}
+  m
 
-function* filterMap<T, V>(iterable: Iterable<T>, fn: (item: T) => V | undefined): Iterable<V>
+function* filterMap<T, V>(iterable: Iterable<T>, fn: (item: T) => V?): Iterable<V>
   for item of iterable
     v := fn(item)
     yield v unless v is undefined
@@ -101,30 +98,17 @@ function* ruleSymbolChildren(doc: TextDocument, node: Token)
     { type, children, loc } := child
 
     // TODO: Identifier children as well
-    if type is "StringValue" and Array.isArray(children)
-      location := locToLocation(doc, loc)
-      yield {
-        name: stringValue(child),
-        kind: SymbolKind.String,
-        range: location.range,
-        selectionRange: location.range,
-      }
-    else if type is "RegExpLiteral"
-      location := locToLocation(doc, loc)
-      yield {
-        name: stringValue(child),
-        kind: SymbolKind.String,
-        range: location.range,
-        selectionRange: location.range,
-      }
-    else if type is "Name"
-      location := locToLocation(doc, loc)
-      yield {
-        name: stringValue(child),
-        kind: SymbolKind.Variable,
-        range: location.range
-        selectionRange: location.range
-      }
+    switch type
+      when "StringValue"
+        if Array.isArray(children)
+          { range } := locToLocation(doc, loc)
+          yield { name: stringValue(child), kind: SymbolKind.String, range, selectionRange: range }
+      when "RegExpLiteral"
+        { range } := locToLocation(doc, loc)
+        yield { name: stringValue(child), kind: SymbolKind.String, range, selectionRange: range }
+      when "Name"
+        { range } := locToLocation(doc, loc)
+        yield { name: stringValue(child), kind: SymbolKind.Variable, range, selectionRange: range }
 
 function* symbols(doc: TextDocument, grammar: Token): Iterable<DocumentSymbol>
   for node of traverse(grammar)
@@ -177,10 +161,10 @@ export function wordAt(document: TextDocument, position: Position): string
   match := text.match(identifier)
 
   // need the beginning of the word too
-  if (match)
-    let i = character
+  if match
+    i .= character
     //@ts-ignore
-    while (i >= 0 && text[i].match(alphaNumeric))
+    while i >= 0 and text[i].match(alphaNumeric)
       i--
     return text.slice(i + 1, character) + match[0]
 
@@ -214,20 +198,13 @@ export function getDocumentSymbols(doc: TextDocument): DocumentSymbol[]?
   symbolsCache.get(doc.uri)
 
 export function getCompletionsFor(doc: TextDocument, _pos: Position): CompletionItem[]?
-  // The pass parameter contains the position of the text document in
-  // which code complete got requested. For the example we ignore this
-  // info and always provide the same completion items.
   { uri } := doc
   keys := declarationsCache.get(uri)?.keys()
-
-  if keys
-    return Array.from(keys).map((s, _i) => ({
-      label: s,
-      kind: CompletionItemKind.Variable,
-      data: uri
-    }))
-
-  return
+  return unless keys
+  Array.from keys, (s) =>
+    label: s
+    kind: CompletionItemKind.Variable
+    data: uri
 
 export function onCompletionResolve(item: CompletionItem): CompletionItem
   { label, data } := item

@@ -114,7 +114,7 @@ defaultHeraSettings: HeraSettings := { language: 'javascript' }
  * Read hera.language from the workspace package.json as a fallback
  * when no VS Code setting is present.
  */
-async function getLanguageFromPackageJson(): Promise<HeraSettings['language'] | undefined>
+async function getLanguageFromPackageJson(): Promise<HeraSettings['language']?>
   try
     workspaceFolders := await connection.workspace.getWorkspaceFolders()
     return unless workspaceFolders?#
