@@ -21,8 +21,8 @@ minify := false // !watch || process.argv.includes('--minify')
 
 options :=
   entryPoints:
-    extension: 'src/extension.civet'
-    server: 'src/server.civet'
+    extension: 'source/extension.civet'
+    server: 'source/server.civet'
   outdir: 'dist'
   tsconfig: './tsconfig.json'
   bundle: true

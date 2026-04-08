@@ -80,24 +80,18 @@
       "test"
     ]
   },
-  "nyc": {
-    "check-coverage": false,
-    "branches": 100,
-    "lines": 100,
-    "functions": 100,
-    "statements": 100,
+  "c8": {
+    "all": true,
     "reporter": [
       "lcov",
       "text"
     ],
     "extension": [
-      ".ts"
+      ".civet"
     ],
-    "exclude": [
-      "test/"
-    ],
-    "sourceMap": true,
-    "instrument": true
+    "include": [
+      "source/"
+    ]
   },
   "scripts": {
     "build": "civet .esbuild.civet",

@@ -3,7 +3,7 @@ assert from assert
 { fileURLToPath } from url
 path from path
 
-{ parse, declarations, getDocumentSymbols, parseDocument } from ../src/util.civet
+{ parse, declarations, getDocumentSymbols, parseDocument } from ../source/util.civet
 
 __dirname := path.dirname fileURLToPath
   //@ts-expect-error this file gets run as a module, but the extension is built as commonjs
