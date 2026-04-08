@@ -4,6 +4,7 @@
   "description": "Hera Language Server",
   "icon": "images/hera.png",
   "version": "0.1.7-pre.1",
+  "license": "MIT",
   "publisher": "DanielX",
   "repository": {
     "type": "git",
