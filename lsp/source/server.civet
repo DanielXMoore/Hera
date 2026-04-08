@@ -169,7 +169,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void>
             character: character - 1
           end:
             line: line - 1,
-            character: character
+            character: +character
         severity: DiagnosticSeverity.Error,
         message: message,
         source: "hera"
