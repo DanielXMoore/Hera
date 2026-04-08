@@ -2,6 +2,11 @@ import * as esbuild from 'esbuild';
 import { copyFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import CivetPlugin from '@danielx/civet/esbuild';
+
+const civetPlugin = CivetPlugin({
+  ts: "civet"
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,8 +16,8 @@ const minify = false; // !watch || process.argv.includes('--minify');
 
 const options = {
   entryPoints: {
-    extension: 'src/extension.ts',
-    server: 'src/server.ts',
+    extension: 'src/extension.civet',
+    server: 'src/server.civet',
   },
   outdir: 'dist',
   tsconfig: './tsconfig.json',
@@ -22,6 +27,23 @@ const options = {
   sourcemap: watch,
   minify,
   platform: 'node',
+  plugins: [civetPlugin],
+};
+
+const e2eOptions = {
+  entryPoints: [
+    'e2e/runTest.civet',
+    'e2e/index.civet',
+    'e2e/helper.civet',
+    'e2e/completion.test.civet',
+    'e2e/diagnostics.test.civet',
+  ],
+  outdir: 'e2e/dist',
+  bundle: false,
+  format: 'cjs',
+  sourcemap: true,
+  platform: 'node',
+  plugins: [civetPlugin],
 };
 
 async function copyMachine() {
@@ -42,7 +64,10 @@ async function main() {
     await copyMachine();
     await ctx.watch();
   } else {
-    await esbuild.build(options);
+    await Promise.all([
+      esbuild.build(options),
+      esbuild.build(e2eOptions),
+    ]);
     await copyMachine();
   }
 }

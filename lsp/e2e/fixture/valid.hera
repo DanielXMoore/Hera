@@ -1,0 +1,5 @@
+Greeting
+  "hello" / "hi"
+
+Name
+  /[A-Za-z]+/

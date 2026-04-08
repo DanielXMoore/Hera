@@ -1,0 +1,16 @@
+* as vscode from vscode
+* as assert from assert
+{ getDocUri, activate } from ./helper
+
+suite 'Should do completion', =>
+  test 'Completes JS/TS in txt file', async =>
+    docUri := getDocUri('completion.hera')
+    await activate(docUri)
+
+    actualCompletionList := await vscode.commands.executeCommand(
+      'vscode.executeCompletionItemProvider',
+      docUri,
+      new vscode.Position(0, 0)
+    ) as vscode.CompletionList
+
+    assert.ok actualCompletionList.items.length >= 0

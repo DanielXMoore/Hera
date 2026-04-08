@@ -3,7 +3,7 @@
   "displayName": "Hera",
   "description": "Hera Language Server",
   "icon": "images/hera.png",
-  "version": "0.1.7-pre.0",
+  "version": "0.1.7-pre.1",
   "publisher": "DanielX",
   "repository": {
     "type": "git",

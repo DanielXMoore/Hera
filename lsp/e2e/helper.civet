@@ -1,0 +1,33 @@
+* as vscode from vscode
+* as path from path
+
+export var doc: vscode.TextDocument
+export var editor: vscode.TextEditor
+
+// Activates the hera.lsp extension
+export async function activate(docUri: vscode.Uri)
+  // The extensionId is `publisher.name` from package.json
+  ext := vscode.extensions.getExtension('DanielX.hera')!
+  await ext.activate()
+  try
+    doc = await vscode.workspace.openTextDocument(docUri)
+    editor = await vscode.window.showTextDocument(doc)
+    await sleep(2000) // Wait for server activation
+  catch e
+    console.error(e)
+
+function sleep(ms: number)
+  new Promise (resolve) => setTimeout(resolve, ms)
+
+export getDocPath := (p: string) =>
+  path.resolve(__dirname, '../fixture', p)
+
+export getDocUri := (p: string) =>
+  vscode.Uri.file(getDocPath(p))
+
+export async function setTestContent(content: string): Promise<boolean>
+  all := new vscode.Range(
+    doc.positionAt(0),
+    doc.positionAt(doc.getText().length)
+  )
+  editor.edit (eb) => eb.replace(all, content)
