@@ -5,7 +5,14 @@ import { fileURLToPath } from 'url';
 import CivetPlugin from '@danielx/civet/esbuild';
 
 const civetPlugin = CivetPlugin({
-  ts: "civet"
+  ts: "civet",
+});
+
+const civetPluginE2e = CivetPlugin({
+  ts: "civet",
+  parseOptions: {
+    rewriteCivetImports: ".js",
+  },
 });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,7 +50,7 @@ const e2eOptions = {
   format: 'cjs',
   sourcemap: true,
   platform: 'node',
-  plugins: [civetPlugin],
+  plugins: [civetPluginE2e],
 };
 
 async function copyMachine() {

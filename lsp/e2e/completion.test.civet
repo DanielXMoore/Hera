@@ -1,9 +1,9 @@
 * as vscode from vscode
 * as assert from assert
-{ getDocUri, activate } from ./helper
+{ getDocUri, activate } from ./helper.civet
 
-suite 'Should do completion', =>
-  test 'Completes JS/TS in txt file', async =>
+suite 'Completion', =>
+  test 'Returns rule names as completion items', async =>
     docUri := getDocUri('completion.hera')
     await activate(docUri)
 
@@ -13,4 +13,8 @@ suite 'Should do completion', =>
       new vscode.Position(0, 0)
     ) as vscode.CompletionList
 
-    assert.ok actualCompletionList.items.length >= 0
+    labels := actualCompletionList.items.map (item) => item.label
+
+    assert.ok labels.includes('Greeting'), `Expected 'Greeting' in completions, got: ${labels.join(', ')}`
+    assert.ok labels.includes('Hello'), `Expected 'Hello' in completions, got: ${labels.join(', ')}`
+    assert.ok labels.includes('Goodbye'), `Expected 'Goodbye' in completions, got: ${labels.join(', ')}`

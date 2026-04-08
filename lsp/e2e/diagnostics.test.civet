@@ -1,6 +1,6 @@
 * as vscode from vscode
 * as assert from assert
-{ getDocUri, activate } from ./helper
+{ getDocUri, activate } from ./helper.civet
 
 suite 'Diagnostics', =>
   test 'Reports a parse error for invalid Hera grammar', async =>
