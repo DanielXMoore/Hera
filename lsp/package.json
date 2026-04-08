@@ -69,11 +69,10 @@
   },
   "mocha": {
     "extension": [
-      "ts"
+      "civet"
     ],
     "require": [
-      "source-map-support",
-      "ts-node/register"
+      "@danielx/civet/register"
     ],
     "reporter": "spec",
     "recursive": true,
@@ -101,13 +100,13 @@
     "instrument": true
   },
   "scripts": {
-    "build": "node .esbuild.mjs",
+    "build": "civet .esbuild.civet",
     "e2e": "sh ./scripts/e2e.sh",
     "lint": "eslint ./src --ext .ts,.tsx",
-    "package": "node .esbuild.mjs && vsce package --no-dependencies",
-    "vsce-publish": "node .esbuild.mjs && vsce publish --no-dependencies",
+    "package": "civet .esbuild.civet && vsce package --no-dependencies",
+    "vsce-publish": "civet .esbuild.civet && vsce publish --no-dependencies",
     "test": "c8 mocha",
-    "watch": "node .esbuild.mjs --watch"
+    "watch": "civet .esbuild.civet --watch"
   },
   "devDependencies": {
     "@danielx/hera": "workspace:*",

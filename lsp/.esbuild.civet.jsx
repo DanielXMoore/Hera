@@ -1,25 +1,25 @@
-import * as esbuild from 'esbuild';
-import { copyFile } from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import CivetPlugin from '@danielx/civet/esbuild';
+import * as esbuild from "esbuild"
+import { copyFile } from "fs/promises"
+import path from "path"
+import { fileURLToPath } from "url"
+import CivetPlugin from "@danielx/civet/esbuild"
 
 const civetPlugin = CivetPlugin({
   ts: "civet",
-});
+})
 
 const civetPluginE2e = CivetPlugin({
   ts: "civet",
   parseOptions: {
     rewriteCivetImports: ".js",
   },
-});
+})
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-const watch = process.argv.includes('--watch');
-const minify = false; // !watch || process.argv.includes('--minify');
+const watch = process.argv.includes('--watch')
+const minify = false // !watch || process.argv.includes('--minify')
 
 const options = {
   entryPoints: {
@@ -32,10 +32,11 @@ const options = {
   external: ['vscode'],
   format: 'cjs',
   sourcemap: watch,
-  minify,
+}(
+  minify, {
   platform: 'node',
   plugins: [civetPlugin],
-};
+})
 
 const e2eOptions = {
   entryPoints: [
@@ -43,7 +44,7 @@ const e2eOptions = {
     'e2e/index.civet',
     'e2e/helper.civet',
     'e2e/completion.test.civet',
-    'e2e/diagnostics.test.civet',
+    'e2e/diagnostics.test.civet'
   ],
   outdir: 'e2e/dist',
   bundle: false,
@@ -51,32 +52,33 @@ const e2eOptions = {
   sourcemap: true,
   platform: 'node',
   plugins: [civetPluginE2e],
-};
+}
 
 async function copyMachine() {
   await copyFile(
     __dirname + '/node_modules/@danielx/hera/dist/machine.ts',
     __dirname + '/dist/machine.ts'
-  );
-  await copyFile(
+  )
+  return await copyFile(
     __dirname + '/node_modules/@danielx/hera/dist/machine.js',
     __dirname + '/dist/machine.js'
-  );
+  )
 }
 
 async function main() {
   if (watch) {
-    const ctx = await esbuild.context(options);
-    await ctx.rebuild();
-    await copyMachine();
-    await ctx.watch();
-  } else {
+    const ctx = await esbuild.context(options)
+    await ctx.rebuild()
+    await copyMachine()
+    return await ctx.watch()
+  }
+  else {
     await Promise.all([
       esbuild.build(options),
-      esbuild.build(e2eOptions),
-    ]);
-    await copyMachine();
+      esbuild.build(e2eOptions)
+    ])
+    return await copyMachine()
   }
 }
 
-main().catch(() => process.exit(1));
+main().catch(() => process.exit(1))

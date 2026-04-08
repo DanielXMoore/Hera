@@ -1,10 +1,7 @@
 { type Position, TextDocument } from vscode-languageserver-textdocument
-{ CompletionItem, CompletionItemKind, DocumentLink, DocumentSymbol, Location, SymbolKind, URI } from vscode-languageserver
+{ CompletionItem, CompletionItemKind, DocumentLink, DocumentSymbol, Location, SymbolKind, type URI } from vscode-languageserver
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-// @type Hera
-{ HeraAST, Loc, parse, Token } from @danielx/hera
+{ type HeraAST, type Loc, parse, type Token } from @danielx/hera
 
 export { parse }
 
@@ -189,16 +186,14 @@ export function wordAt(document: TextDocument, position: Position): string
 
   return ""
 
-function locToLocation(doc: TextDocument, loc: Loc) {
-  const { pos, length } = loc
-  return {
-    uri: doc.uri,
-    range: {
-      start: doc.positionAt(pos),
-      end: doc.positionAt(pos + length)
-    }
+function locToLocation(doc: TextDocument, loc: Loc)
+  { pos, length } := loc
+
+  uri: doc.uri,
+  range: {
+    start: doc.positionAt(pos),
+    end: doc.positionAt(pos + length)
   }
-}
 
 export function getDeclarationFor(doc: TextDocument, pos: Position): Location?
   lookup := declarationsCache.get(doc.uri)

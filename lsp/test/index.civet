@@ -1,0 +1,40 @@
+assert from assert
+{ readFileSync } from fs
+{ fileURLToPath } from url
+path from path
+
+{ parse, declarations, getDocumentSymbols, parseDocument } from ../src/util.civet
+
+__dirname := path.dirname fileURLToPath
+  //@ts-expect-error this file gets run as a module, but the extension is built as commonjs
+  import.meta.url
+sampleText := readFileSync(__dirname + "/../../source/hera.hera", "utf8")
+
+sampleDocument :=
+  uri: "test"
+  languageId: "hera"
+  version: 0
+  positionAt: () => ({ line: 0, character: 0 })
+  offsetAt: () => 0
+  lineCount: 0
+  getText: () => sampleText
+
+sampleTokens := parse(sampleText, { tokenize: true })
+
+describe "utils", =>
+  it "tranducers", =>
+    assert(true)
+    assert(getDocumentSymbols)
+
+  it "should parse hera document tokens", =>
+    parseDocument(sampleDocument)
+
+  it "should gather declarations", =>
+    decs := declarations(sampleTokens.children)
+
+    // Check that core, stable rule names are present
+    for name of ['Grammar', 'Rule', 'Name', 'Expression', 'Literal', 'EOS']
+      assert.ok decs.has(name), `Expected declaration for '${name}'`
+
+    // Sanity-check the total count is in a reasonable range
+    assert.ok decs.size >= 40, `Expected at least 40 declarations, got ${decs.size}`
