@@ -161,25 +161,21 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void>
   try
     parseDocument(textDocument)
   catch (e: any)
-    [_, line, character, message] := e.message.match(/^[^:]*:(\d+):(\d+)\s*(.*)$/s)
-    diagnostics.push {
-      range: {
-        start: {
-          line: line - 1,
-          character: character - 1
-        },
-        end: {
-          line: line - 1,
-          character: character
-        }
-      },
-      severity: DiagnosticSeverity.Error,
-      message: message,
-      source: "hera"
-    }
+    if [_, line, character, message] := e.message.match(/^[^:]*:(\d+):(\d+)\s*(.*)$/s)
+      diagnostics.push
+        range:
+          start:
+            line: line - 1,
+            character: character - 1
+          end:
+            line: line - 1,
+            character: character
+        severity: DiagnosticSeverity.Error,
+        message: message,
+        source: "hera"
 
   // Send the computed diagnostics to VSCode.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics })
+  connection.sendDiagnostics { textDocument.uri, diagnostics }
 
 connection.onDidChangeWatchedFiles (_change) =>
   // Monitored files have change in VSCode
