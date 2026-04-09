@@ -9,7 +9,7 @@
       "runtimeExecutable": "${execPath}",
       "args": ["--extensionDevelopmentPath=${workspaceRoot}"],
       "outFiles": ["${workspaceRoot}/dist/**/*.js"],
-      "preLaunchTask": "npm: watch"
+      "preLaunchTask": "pnpm: watch"
     },
     {
       "type": "node",

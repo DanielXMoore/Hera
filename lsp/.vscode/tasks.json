@@ -2,10 +2,22 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "watch",
+      "label": "pnpm: watch",
+      "type": "shell",
+      "command": "pnpm run watch",
       "isBackground": true,
-      "problemMatcher": []
+      "problemMatcher": {
+        "owner": "esbuild",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
+        }
+      }
     }
   ]
 }

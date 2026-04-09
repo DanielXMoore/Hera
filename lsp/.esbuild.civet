@@ -13,7 +13,9 @@ civetPluginE2e := CivetPlugin({
   },
 })
 
-__filename := fileURLToPath(import.meta.url)
+__filename := fileURLToPath
+  //@ts-expect-error this file gets run as a module, but the extension is built as commonjs
+  import.meta.url
 __dirname := path.dirname(__filename)
 
 watch := process.argv.includes('--watch')
@@ -28,7 +30,7 @@ options :=
   bundle: true
   external: ['vscode']
   format: 'cjs' as const
-  sourcemap: watch
+  sourcemap: true
   minify: minify
   platform: 'node' as const
   plugins: [civetPlugin]
@@ -60,7 +62,18 @@ async function copyMachine()
 
 async function main()
   if watch
-    ctx := await esbuild.context(options)
+    ctx := await esbuild.context({
+      ...options,
+      plugins: [
+        ...options.plugins
+        {
+          name: 'watch-logger'
+          setup(build)
+            build.onStart => void process.stderr.write('[watch] build started\n')
+            build.onEnd => void process.stderr.write('[watch] build finished\n')
+        }
+      ]
+    })
     await ctx.rebuild()
     await copyMachine()
     await ctx.watch()
