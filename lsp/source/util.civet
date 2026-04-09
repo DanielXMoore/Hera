@@ -129,7 +129,7 @@ function* symbols(doc: TextDocument, grammar: Token): Iterable<DocumentSymbol>
         c.range.start.line != location.range.start.line
     }
 
-export function parseDocument(textDocument: TextDocument)
+export function parseDocument(textDocument: TextDocument): void
   text := textDocument.getText()
   tokens := parse(text, { tokenize: true })
 

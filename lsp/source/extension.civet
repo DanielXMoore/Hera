@@ -49,7 +49,7 @@ export function activate(context: ExtensionContext)
   // Start the client. This will also launch the server
   client.start()
 
-export function deactivate()
+export function deactivate(): void
   return unless client
 
   client.stop()
