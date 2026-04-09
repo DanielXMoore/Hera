@@ -1,0 +1,20 @@
+* as vscode from vscode
+* as assert from assert
+{ getDocUri, activate } from ./helper.civet
+
+suite 'Completion', =>
+  test 'Returns rule names as completion items', async =>
+    docUri := getDocUri('completion.hera')
+    await activate(docUri)
+
+    actualCompletionList := await vscode.commands.executeCommand(
+      'vscode.executeCompletionItemProvider',
+      docUri,
+      new vscode.Position(0, 0)
+    ) as vscode.CompletionList
+
+    labels := actualCompletionList.items.map (item) => item.label
+
+    assert.ok labels.includes('Greeting'), `Expected 'Greeting' in completions, got: ${labels.join(', ')}`
+    assert.ok labels.includes('Hello'), `Expected 'Hello' in completions, got: ${labels.join(', ')}`
+    assert.ok labels.includes('Goodbye'), `Expected 'Goodbye' in completions, got: ${labels.join(', ')}`

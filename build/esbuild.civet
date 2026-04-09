@@ -7,7 +7,13 @@ watch := process.argv.includes '--watch'
 minify := process.argv.includes '--minify'
 sourcemap := false
 
-esbuild.build({
+buildOrWatch := (options: object) ->
+  if watch
+    esbuild.context(options).then (ctx) -> ctx.watch()
+  else
+    esbuild.build(options)
+
+buildOrWatch({
   entryPoints: ['source/main.civet']
   bundle: true
   keepNames: true
@@ -15,7 +21,6 @@ esbuild.build({
   format: "cjs"
   sourcemap
   minify
-  watch
   platform: 'node'
   outdir: 'dist/'
   plugins: [
@@ -28,13 +33,12 @@ esbuild.build({
   ]
 }).catch -> process.exit 1
 
-esbuild.build({
+buildOrWatch({
   entryPoints: ['source/cli.civet']
   bundle: false
   format: "cjs"
   sourcemap
   minify
-  watch
   platform: 'node'
   outfile: 'dist/hera'
   plugins: [

@@ -6,6 +6,8 @@ LogFn ::= (...args: any[]) => any
 defaultCompilerOptions: CompilerOptions := {
   target: typescript.ScriptTarget.ES2022 // based on @tsconfig/node-lts
   module: typescript.ModuleKind.Preserve
+  alwaysStrict: false
+  ignoreDeprecations: "6.0"
 }
 
 export function transpileTsToJs(

@@ -1,0 +1,229 @@
+{ type Position, TextDocument } from vscode-languageserver-textdocument
+{ CompletionItem, CompletionItemKind, DocumentLink, DocumentSymbol, Location, SymbolKind, type URI } from vscode-languageserver
+
+{ type HeraAST, type Loc, parse, type Token } from @danielx/hera
+
+export { parse }
+
+// TODO: Combine all of these into some kind of cached "DocumentInfo"
+sourceCache := new Map<URI, string>()
+declarationsCache := new Map<URI, Map<string, Loc>>()
+referencesCache := new Map<URI, Map<string, Location[]>>()
+symbolsCache := new Map<URI, DocumentSymbol[]>()
+linksCache := new Map<URI, DocumentLink[]>()
+
+type DeclEntry = [string, Loc]
+
+function* traverse(node: Token): Iterable<Token>
+  if Array.isArray(node)
+    for n of node
+      for node of traverse(n)
+        yield node
+
+    return
+
+  if node
+    yield node
+
+    { children } := node
+    for node of traverse(children)
+      yield node
+
+export function declarations(statements: Token[]): Map<string, Loc>
+  new Map statements.flatMap<Token>(({ children }) =>
+    if children?.[1]?.type is "Rule"
+      children[1].children[0] as Token
+    else
+      []
+  ).map<DeclEntry>(({ token, loc }) => [token as string, loc])
+
+
+function partitionMap<T, K, V>(iterable: Iterable<T>, keyFn: (item: T) => K, valueFn: (item: T) => V?)
+  m := new Map<K, V[]>()
+
+  for item of iterable
+    v := valueFn(item)
+    if v
+      key := keyFn(item)
+      q .= m.get(key)
+      unless q
+        q = []
+        m.set(key, q)
+      q.push(v)
+
+  m
+
+function* filterMap<T, V>(iterable: Iterable<T>, fn: (item: T) => V?): Iterable<V>
+  for item of iterable
+    v := fn(item)
+    yield v unless v is undefined
+
+
+function links(doc: TextDocument, grammar: Token): DocumentLink[]
+  results: DocumentLink[] := []
+  decLookup := declarationsCache.get(doc.uri)
+
+  if decLookup
+    for node of traverse(grammar)
+      { type, loc, token } := node
+
+      if type is "Name"
+        if decl := decLookup.get(String(token))
+          { line, character } := locToLocation(doc, decl).range.start
+          target := doc.uri + `#${line + 1}:${character}`
+
+          results.push
+            range: locToLocation(doc, loc).range,
+            data:
+              target: target
+              tooltip: target
+
+  return results
+
+function references(doc: TextDocument, grammar: Token): Map<string, Location[]>
+  return partitionMap traverse(grammar), (node) => String(node.token), ({ type, loc }) =>
+    if type is "Name"
+      return locToLocation(doc, loc)
+
+    return
+
+
+function stringValue(literal: Token)
+  Array.from(filterMap(traverse(literal), ({ token }) =>
+    typeof token is "string" ? token : undefined
+  )).join('')
+
+function* ruleSymbolChildren(doc: TextDocument, node: Token)
+  for child of traverse(node)
+    { type, children, loc } := child
+
+    // TODO: Identifier children as well
+    switch type
+      when "StringValue"
+        if Array.isArray(children)
+          { range } := locToLocation(doc, loc)
+          yield { name: stringValue(child), kind: SymbolKind.String, range, selectionRange: range }
+      when "RegExpLiteral"
+        { range } := locToLocation(doc, loc)
+        yield { name: stringValue(child), kind: SymbolKind.String, range, selectionRange: range }
+      when "Name"
+        { range } := locToLocation(doc, loc)
+        yield { name: stringValue(child), kind: SymbolKind.Variable, range, selectionRange: range }
+
+function* symbols(doc: TextDocument, grammar: Token): Iterable<DocumentSymbol>
+  for node of traverse(grammar)
+    { type, children } := node
+
+    // eslint-disable-next-line no-empty
+    if type is not "Rule" or not Array.isArray(children)
+      continue
+
+    location := locToLocation(doc, node.loc)
+
+    yield {
+      name: String(children[0].token),
+      kind: SymbolKind.Class,
+      range: location.range,
+      selectionRange: location.range,
+      children: Array.from(ruleSymbolChildren(doc, node)).filter (c) =>
+        c.range.start.line != location.range.start.line
+    }
+
+export function parseDocument(textDocument: TextDocument): void
+  text := textDocument.getText()
+  tokens := parse(text, { tokenize: true })
+
+  sourceCache.set(textDocument.uri, text)
+  declarationsCache.set(textDocument.uri, declarations(tokens.children))
+  linksCache.set(textDocument.uri, links(textDocument, tokens))
+  referencesCache.set(textDocument.uri, references(textDocument, tokens))
+  symbolsCache.set(textDocument.uri, Array.from(symbols(textDocument, tokens)))
+
+
+identifier := /[a-zA-Z0-9]+/suy
+alphaNumeric := /[a-zA-Z0-9]/
+
+export function wordAt(document: TextDocument, position: Position): string
+  { line, character } := position
+
+  text := document.getText({
+    start: {
+      line: line,
+      character: 0
+    },
+    end: {
+      line: line + 1,
+      character: 0
+    }
+  })
+
+  identifier.lastIndex = character
+  match := text.match(identifier)
+
+  // need the beginning of the word too
+  if match
+    i .= character
+    //@ts-ignore
+    while i >= 0 and text[i].match(alphaNumeric)
+      i--
+    return text.slice(i + 1, character) + match[0]
+
+  return ""
+
+function locToLocation(doc: TextDocument, loc: Loc)
+  { pos, length } := loc
+
+  uri: doc.uri,
+  range: {
+    start: doc.positionAt(pos),
+    end: doc.positionAt(pos + length)
+  }
+
+export function getDeclarationFor(doc: TextDocument, pos: Position): Location?
+  lookup := declarationsCache.get(doc.uri)
+  id := wordAt(doc, pos)
+  loc := lookup?.get(id)
+
+  if loc
+    return locToLocation(doc, loc)
+
+  return
+
+export function getReferencesFor(doc: TextDocument, pos: Position): Location[]?
+  id := wordAt(doc, pos)
+
+  referencesCache.get(doc.uri)?.get(id)
+
+export function getDocumentSymbols(doc: TextDocument): DocumentSymbol[]?
+  symbolsCache.get(doc.uri)
+
+export function getCompletionsFor(doc: TextDocument, _pos: Position): CompletionItem[]?
+  { uri } := doc
+  keys := declarationsCache.get(uri)?.keys()
+  return unless keys
+  Array.from keys, (s) =>
+    label: s
+    kind: CompletionItemKind.Variable
+    data: uri
+
+export function onCompletionResolve(item: CompletionItem): CompletionItem
+  { label, data } := item
+  lookup := declarationsCache.get(data)
+
+  if lookup
+    loc := lookup.get(label)
+    source := sourceCache.get(data)
+
+    item.detail = label
+
+    if source and loc
+      // TODO: this should be the body of the rule
+      item.documentation = source.slice(loc.pos, loc.pos + loc.length)
+
+  return item
+
+export function getDocumentLinksFor(doc: TextDocument): DocumentLink[]
+  linksCache.get(doc.uri) or []
+
+export function onLinkResolve(item: DocumentLink): DocumentLink
+  Object.assign(item, item.data)

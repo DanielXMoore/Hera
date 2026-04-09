@@ -3,7 +3,8 @@
   "displayName": "Hera",
   "description": "Hera Language Server",
   "icon": "images/hera.png",
-  "version": "0.1.6",
+  "version": "0.1.7-pre.1",
+  "license": "MIT",
   "publisher": "DanielX",
   "repository": {
     "type": "git",
@@ -56,7 +57,11 @@
       "properties": {
         "hera.language": {
           "type": "string",
-          "enum": ["javascript", "typescript", "civet"],
+          "enum": [
+            "javascript",
+            "typescript",
+            "civet"
+          ],
           "default": "javascript",
           "description": "The language used for handlers and code blocks in .hera files."
         }
@@ -65,11 +70,10 @@
   },
   "mocha": {
     "extension": [
-      "ts"
+      "civet"
     ],
     "require": [
-      "source-map-support",
-      "ts-node/register"
+      "@danielx/civet/register"
     ],
     "reporter": "spec",
     "recursive": true,
@@ -77,52 +81,47 @@
       "test"
     ]
   },
-  "nyc": {
-    "check-coverage": false,
-    "branches": 100,
-    "lines": 100,
-    "functions": 100,
-    "statements": 100,
+  "c8": {
+    "all": true,
     "reporter": [
       "lcov",
       "text"
     ],
     "extension": [
-      ".ts"
+      ".civet"
     ],
-    "exclude": [
-      "test/"
-    ],
-    "sourceMap": true,
-    "instrument": true
+    "include": [
+      "source/"
+    ]
   },
   "scripts": {
-    "build": "node .esbuild.mjs",
+    "build": "civet .esbuild.civet",
     "e2e": "sh ./scripts/e2e.sh",
     "lint": "eslint ./src --ext .ts,.tsx",
-    "package": "node .esbuild.mjs && vsce package --no-dependencies",
-    "vsce-publish": "node .esbuild.mjs && vsce publish --no-dependencies",
-    "test": "nyc mocha",
-    "watch": "node .esbuild.mjs --watch"
+    "package": "civet .esbuild.civet && vsce package --no-dependencies",
+    "vsce-publish": "civet .esbuild.civet && vsce publish --no-dependencies",
+    "test": "c8 mocha",
+    "watch": "civet .esbuild.civet --watch"
   },
   "devDependencies": {
+    "@danielx/civet": "0.11.6",
     "@danielx/hera": "workspace:*",
-    "@types/mocha": "^9.1.0",
-    "@types/node": "^14.17.0",
-    "@types/vscode": "^1.63.0",
-    "@typescript-eslint/eslint-plugin": "^5.13.0",
-    "@typescript-eslint/parser": "^5.13.0",
-    "@vscode/test-electron": "^2.1.2",
-    "esbuild": "^0.14.25",
-    "eslint": "^8.10.0",
-    "mocha": "^9.2.1",
-    "nyc": "^15.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.5.2",
+    "@types/vscode": "^1.115.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "@vscode/test-electron": "^2.5.2",
+    "c8": "^11.0.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.2.0",
+    "mocha": "^11.7.5",
     "source-map-support": "^0.5.21",
-    "ts-node": "^10.6.0",
-    "typescript": "^5.3.3",
-    "vsce": "^2.7.0",
-    "vscode-languageclient": "^7.0.0",
-    "vscode-languageserver": "^7.0.0",
-    "vscode-languageserver-textdocument": "^1.0.4"
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "vsce": "^2.15.0",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
   }
 }

@@ -1,0 +1,189 @@
+{
+  createConnection,
+  TextDocuments,
+  Diagnostic,
+  DiagnosticSeverity,
+  ProposedFeatures,
+  InitializeParams,
+  DidChangeConfigurationNotification,
+  TextDocumentSyncKind,
+  InitializeResult
+} from vscode-languageserver/node
+
+{
+  TextDocument
+} from vscode-languageserver-textdocument
+
+{
+  getCompletionsFor
+  getDeclarationFor
+  getDocumentSymbols
+  getReferencesFor
+  onCompletionResolve
+  parseDocument
+} from ./util.civet
+
+// Create a connection for the server, using Node's IPC as a transport.
+// Also include all preview / proposed LSP features.
+connection := createConnection(ProposedFeatures.all)
+
+// Create a simple text document manager.
+documents: TextDocuments<TextDocument> := new TextDocuments(TextDocument)
+
+hasConfigurationCapability .= false
+hasWorkspaceFolderCapability .= false
+
+connection.onInitialize((params: InitializeParams) => {
+  capabilities := params.capabilities
+
+  // Does the client support the `workspace/configuration` request?
+  // If not, we fall back using global settings.
+  hasConfigurationCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.configuration
+  )
+  hasWorkspaceFolderCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.workspaceFolders
+  )
+
+  result: InitializeResult := {
+    capabilities: {
+      textDocumentSync: TextDocumentSyncKind.Incremental,
+      // Tell the client that this server supports code completion.
+      completionProvider: {
+        resolveProvider: true
+      },
+      // documentLinkProvider: {
+      //   resolveProvider: true
+      // },
+      documentSymbolProvider: true,
+      definitionProvider: true,
+      referencesProvider: true,
+    }
+  }
+  if (hasWorkspaceFolderCapability) {
+    result.capabilities.workspace = {
+      workspaceFolders: {
+        supported: true
+      }
+    }
+  }
+  return result
+})
+
+connection.onInitialized =>
+  if hasConfigurationCapability
+    // Register for all configuration changes.
+    connection.client.register(DidChangeConfigurationNotification.type, undefined)
+
+  if hasWorkspaceFolderCapability
+    connection.workspace.onDidChangeWorkspaceFolders (_event) =>
+      connection.console.log('Workspace folder change event received.')
+
+  lang := await getHeraLanguage()
+  connection.console.log(`[hera] language: ${lang}`)
+
+// This handler provides the initial list of the completion items.
+connection.onCompletion (params) =>
+  if doc := documents.get(params.textDocument.uri)
+    getCompletionsFor(doc, params.position)
+
+// This handler resolves additional information for the item selected in
+// the completion list.
+connection.onCompletionResolve(onCompletionResolve)
+
+// Goto definition
+// textDocument/definitio
+connection.onDefinition (params, _token, _workDoneProgress, _resultProgress) =>
+  if doc := documents.get(params.textDocument.uri)
+    getDeclarationFor(doc, params.position)
+
+connection.onReferences (params) =>
+  if doc := documents.get(params.textDocument.uri)
+    getReferencesFor(doc, params.position)
+
+connection.onDocumentSymbol (params) =>
+  if doc := documents.get(params.textDocument.uri)
+    getDocumentSymbols(doc)
+
+interface HeraSettings
+  language: 'javascript' | 'typescript' | 'civet'
+
+defaultHeraSettings: HeraSettings := { language: 'javascript' }
+
+/**
+ * Read hera.language from the workspace package.json as a fallback
+ * when no VS Code setting is present.
+ */
+async function getLanguageFromPackageJson(): Promise<HeraSettings['language']?>
+  try
+    workspaceFolders := await connection.workspace.getWorkspaceFolders()
+    return unless workspaceFolders?#
+
+    rootUri := workspaceFolders[0]!.uri
+    { fileURLToPath } := await import('node:url')
+    pkgPath := fileURLToPath(rootUri) + '/package.json'
+
+    { readFile } := await import('node:fs/promises')
+    raw := await readFile(pkgPath, 'utf8')
+    pkg := JSON.parse(raw)
+    lang := pkg?.hera?.language
+
+    if lang === 'javascript' || lang === 'typescript' || lang === 'civet'
+      return lang
+
+  return
+
+/**
+ * Resolve the effective hera.language for the workspace.
+ * Priority: VS Code setting > package.json#hera.language > default ('javascript')
+ */
+function getHeraLanguage(): Promise<HeraSettings['language']>
+  if (hasConfigurationCapability) {
+    settings := await connection.workspace.getConfiguration({ section: 'hera' })
+    lang := (settings as Partial<HeraSettings>).language
+    switch lang
+      when 'javascript', 'typescript', 'civet'
+        return lang
+  }
+  return (await getLanguageFromPackageJson()) ?? defaultHeraSettings.language
+
+connection.onDidChangeConfiguration (_change) =>
+  documents.all().forEach(validateTextDocument)
+
+// The content of a text document has changed. This event is emitted
+// when the text document first opened or when its content has changed.
+documents.onDidChangeContent (change) =>
+  validateTextDocument(change.document)
+
+async function validateTextDocument(textDocument: TextDocument): Promise<void>
+  diagnostics: Diagnostic[] := []
+
+  try
+    parseDocument(textDocument)
+  catch (e: any)
+    if [_, line, character, message] := e.message.match(/^[^:]*:(\d+):(\d+)\s*(.*)$/s)
+      diagnostics.push
+        range:
+          start:
+            line: line - 1,
+            character: character - 1
+          end:
+            line: line - 1,
+            character: +character
+        severity: DiagnosticSeverity.Error,
+        message: message,
+        source: "hera"
+
+  // Send the computed diagnostics to VSCode.
+  connection.sendDiagnostics { textDocument.uri, diagnostics }
+
+connection.onDidChangeWatchedFiles (_change) =>
+  // Monitored files have change in VSCode
+  connection.console.log('We received an file change event')
+
+// Make the text document manager listen on the connection
+// for open, change and close text document events
+documents.listen(connection)
+
+// Listen on the connection
+connection.listen()

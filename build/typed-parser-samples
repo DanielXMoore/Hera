@@ -18,7 +18,7 @@ function compile_parser() {
 # Since we're compiling these parsers with the source/ version instead of dist/,
 # we need to compile these, too so they are avaible to the compiled hera.hera.
 civet --compile source/hera-types.civet --output parsers/hera-types.ts
-tsc source/machine.ts --declaration --emitDeclarationOnly --outDir parsers --target es6 --moduleResolution bundler
+tsc source/machine.ts --declaration --emitDeclarationOnly --outDir parsers --target es2019 --moduleResolution bundler --ignoreConfig
 compile_parser source/hera.hera
 
 compile_parser samples/code.hera
