@@ -109,6 +109,25 @@ describe "Hera", ->
     """
     assert.equal parser.parse("a"), 1
 
+  it "should not shadow module-level free variables named state/ctx", ->
+    // Regression: handlers are emitted as an IIFE inside the rule function,
+    // which takes `(ctx, state)` as parameters.  If the handler body
+    // references a module-level free variable that happens to also be named
+    // `state` or `ctx` (common in parsers that keep parse-time mutable
+    // state at module scope — e.g. Civet's parser.hera keeps
+    // `state.indentLevels`, `config`, etc.), the IIFE's lexical scope
+    // captures the rule function's parameter and the handler silently
+    // writes to the wrong object.
+    //
+    // Assert on the emitted code so we don't silently regress: the rule
+    // function's parameters must NOT be plain `ctx` / `state`.
+    code := compile """
+      Rule
+        "a" -> 1
+    """
+    assert.doesNotMatch code, /function Rule\(ctx,\s*state\)/
+    assert.doesNotMatch code, /function Rule\(ctx:\s*\w+,\s*state:\s*\w+\)/
+
   it "should allow a type annotation with no handler", ->
     // `Rule\n  Name ::Type` should parse and compile the same as
     // `Rule\n  Name` — the `::Type` is advisory only and does not introduce
@@ -126,7 +145,7 @@ describe "Hera", ->
     // With `types: true`, the annotation should flow into the emitted
     // rule's return type so recursive grammars don't fall back to `unknown`.
     code := compile grammar, types: true
-    assert.match code, /function Rule\(ctx: ParserContext, state: ParseState\): MaybeResult<any>/
+    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
 
   it "should compile multi-line inline handler bodies", ->
     // Regression: an inline handler body that spans multiple lines
@@ -299,7 +318,7 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('function Rule(ctx: ParserContext, state: ParseState): MaybeResult<MyType>')
+    assert tsSrc.includes('function Rule($$ctx: ParserContext, $$state: ParseState): MaybeResult<MyType>')
 
   it "unions the types of a choice rule whose alternatives all declare return types", ->
     heraSrc := """
@@ -311,7 +330,7 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('function Rule(ctx: ParserContext, state: ParseState): MaybeResult<A | B>')
+    assert tsSrc.includes('function Rule($$ctx: ParserContext, $$state: ParseState): MaybeResult<A | B>')
 
   it "numbered regex groups in mappings", ->
     grammar := """

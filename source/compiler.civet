@@ -155,7 +155,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
   eventDataType := if types then ": unknown" else ""
   ```
-\  const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
+\  const $$entered${enteredType} = $$ctx.enter && $$ctx.enter(${JSON.stringify(name)}, $$state);
   if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
   const $$eventData${eventDataType} = $$entered && $$entered.data;
   ```
@@ -174,15 +174,15 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   nameLit := JSON.stringify(name)
   finalCast := types ? " as any" : ""
   ```
-\  if ($$final && ctx.tokenize) {
+\  if ($$final && $$ctx.tokenize) {
     ($$final${finalCast}).value = {
       type: ${nameLit},
       children: [$$final.value].flat(),
-      token: state.input.substring(state.pos, $$final.pos),
+      token: $$state.input.substring($$state.pos, $$final.pos),
       loc: $$final.loc
     };
   }
-  if (ctx.exit) ctx.exit(${nameLit}, state, $$final, $$eventData);
+  if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, $$final, $$eventData);
   ```
 
 // Emit an inline IIFE that applies the handler to the parser result.
@@ -277,7 +277,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       helpers
       body: [
         emitEventEnter(options, name, retType)
-        `  const $$final = ${rule}(ctx, state);\n`
+        `  const $$final = ${rule}($$ctx, $$state);\n`
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
@@ -295,12 +295,12 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     body := if wrapEvent
       [
         emitEventEnter(options, name, retType)
-        `  const $$final = ${fnName}$parser(ctx, state);\n`
+        `  const $$final = ${fnName}$parser($$ctx, $$state);\n`
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
     else
-      [`  return ${fnName}$parser(ctx, state);`]
+      [`  return ${fnName}$parser($$ctx, $$state);`]
     return { helpers, body }
 
   // Rule has a handler — inline it as an IIFE with parameter types that
@@ -366,7 +366,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   nameLit := JSON.stringify(name)
   exitHook := (retExpr: string): string ->
     if wrapEvent
-      `if (ctx.exit) ctx.exit(${nameLit}, state, ${retExpr}, $$eventData);`
+      `if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, ${retExpr}, $$eventData);`
     else
       ""
 
@@ -374,19 +374,19 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // object; sub-rules pass $$r through so the dispatcher wraps once.
   tokenBranch := if wrapEvent
     tokTokenType := types ? ": any" : ""
-    `  if (ctx.tokenize) {
+    `  if ($$ctx.tokenize) {
     const $$tok${tokTokenType} = $$r;
-    $$tok.value = { type: ${nameLit}, children: [$$r.value].flat(), token: state.input.substring(state.pos, $$r.pos), loc: $$r.loc };
+    $$tok.value = { type: ${nameLit}, children: [$$r.value].flat(), token: $$state.input.substring($$state.pos, $$r.pos), loc: $$r.loc };
     ${exitHook("$$tok")}
     return $$tok${tokenizeCast};
   }\n`
   else
-    `  if (ctx.tokenize) return $$r${tokenizeCast};\n`
+    `  if ($$ctx.tokenize) return $$r${tokenizeCast};\n`
 
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push `  const $$r = ${fnName}$parser(ctx, state);
+  body.push `  const $$r = ${fnName}$parser($$ctx, $$state);
   if (!$$r) {
     ${exitHook("undefined")}
     return undefined;
@@ -424,7 +424,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
-      `function ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+      `function ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
       body
       `\n}`
     ]
@@ -435,11 +435,11 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   subFunctions := args.flatMap (arg, i) ->
     helperName := `${name}$${i}`
     if typeof arg is "string"
-      return [`function ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
+      return [`function ${helperName}($$ctx${ctxType}, $$state${stateType}) { return ${arg}($$ctx, $$state); }\n\n`]
     { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false)
     allHelpers.push ...helpers
     [
-      `function ${helperName}(ctx${ctxType}, state${stateType}) {\n`
+      `function ${helperName}($$ctx${ctxType}, $$state${stateType}) {\n`
       body
       `\n}\n\n`
     ]
@@ -453,14 +453,14 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   finalWideDecl := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
   tryBlock := args.map (_, i) ->
     if i is 0
-      `  let $$final${finalWideDecl} = ${name}$${i}(ctx, state);\n`
+      `  let $$final${finalWideDecl} = ${name}$${i}($$ctx, $$state);\n`
     else
-      `  if (!$$final) $$final = ${name}$${i}(ctx, state);\n`
+      `  if (!$$final) $$final = ${name}$${i}($$ctx, $$state);\n`
 
   [
     ...allHelpers.flatMap((h) -> [h, "\n\n"])
     ...subFunctions
-    `function ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+    `function ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
     emitEventEnter(options, name, retType)
     ...tryBlock
     emitEventExit(options, name)
