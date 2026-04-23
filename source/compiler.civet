@@ -249,15 +249,17 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
 //   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
-// Returns { helpers, body }: top-level helper function declarations to emit
-// before the rule function, and the rule function body statements.
-compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST, wrapEvent: boolean) ->
+// `fnName` is the emitted JS function's name (may differ from `name` when this
+// is a choice sub-rule like `Foo$0`).  The rule's combinator expression is
+// hoisted into a top-level `const ${fnName}$parser = ...` so that `$S`/`$C`/
+// `$E`/etc. closures are allocated once at module load instead of on every
+// call (the source of a ~10% parse regression vs the old combinator output).
+// Returns { helpers, body }: top-level helper declarations to emit before
+// the rule function, and the rule function body statements.
+compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean) ->
   { types } := options
   retType := ruleReturnType(rule)
 
-  // Previously we emitted top-level handler helper functions; with the
-  // inline-IIFE approach nothing needs to be hoisted above the rule.
-  // Keep the shape { helpers, body } so call sites don't have to branch.
   helpers: any[] := []
 
   // Reference to another rule. This branch only fires for top-level rules
@@ -277,15 +279,16 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   // No handler: return the parser's result verbatim.
   if rule.length !== 3
     parserExpr := compileOp(rule, name, true, types)
+    helpers.push `const ${fnName}$parser = ${parserExpr};`
     body := if wrapEvent
       [
         emitEventEnter(options, name, retType)
-        `  const $$final = (${parserExpr})(ctx, state);\n`
+        `  const $$final = ${fnName}$parser(ctx, state);\n`
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
     else
-      [`  return (${parserExpr})(ctx, state);`]
+      [`  return ${fnName}$parser(ctx, state);`]
     return { helpers, body }
 
   // Rule has a handler — inline it as an IIFE with parameter types that
@@ -298,6 +301,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     throw new Error "unknown handler format"
 
   parserExpr := compileOp(rule, name, false, types)
+  helpers.push `const ${fnName}$parser = ${parserExpr};`
 
   tokenizeCast := types ? " as any" : ""
 
@@ -371,7 +375,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push `  const $$r = (${parserExpr})(ctx, state);
+  body.push `  const $$r = ${fnName}$parser(ctx, state);
   if (!$$r) {
     ${exitHook("undefined")}
     return undefined;
@@ -407,7 +411,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     // grammars where rules reference each other) don't fall back to `unknown`
     // during TS's circular-inference resolution.
     retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
-    { helpers, body } := compileRuleBodyInline(options, name, rule, true)
+    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
       `function ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
@@ -422,7 +426,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     helperName := `${name}$${i}`
     if typeof arg is "string"
       return [`function ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
-    { helpers, body } := compileRuleBodyInline(options, name, arg, false)
+    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false)
     allHelpers.push ...helpers
     [
       `function ${helperName}(ctx${ctxType}, state${stateType}) {\n`
