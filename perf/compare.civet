@@ -22,13 +22,19 @@ samples :=
     input: "x = 1\ny = 2\nz = x + y\n"
   "regex.hera":
     input: "/foo[abc](?:bar)\\d+/g"
+  // hera_v0_8.hera is the hera grammar itself (without the TS-syntax handlers
+  // that source/hera.hera uses), so the parser it generates can parse its own
+  // grammar source.  A ~230-line realistic workload.
+  "hera_v0_8.hera":
+    input: fs.readFileSync("samples/hera_v0_8.hera", "utf8")
 
 compileWith := (hera, grammarSrc) ->
   js := hera.compile hera.parse(grammarSrc), { module: false }
   hera.execMod js
 
-benchOne := (name, input) ->
+benchOne := (name, meta) ->
   grammarSrc := fs.readFileSync path.join("samples", name), "utf8"
+  input := meta.input
 
   prevParser := compileWith prevHera, grammarSrc
   currParser := compileWith currHera, grammarSrc
@@ -71,4 +77,4 @@ console.log `  prev version: ${require("@danielx/hera-previous/package.json").ve
 console.log `  curr version: ${require("../package.json").version} (working tree)`
 
 for [name, meta] of Object.entries(samples)
-  benchOne name, meta.input
+  benchOne name, meta

@@ -55,7 +55,7 @@
   },
   "scripts": {
     "prepublishOnly": "pnpm build && pnpm test",
-    "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet ./perf/benchmark.civet",
+    "benchmark": "civet ./perf/compare.civet",
     "build": "bash build/compile",
     "build:rules": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet build/rules.civet",
     "test": "bash ./build/test",
