@@ -1055,7 +1055,8 @@ describe "Hera", ->
             return $1
       """
       result := compile(parse(grammar), language: 'javascript')
-      // Regex handlers call the IIFE with `$$r.value[i]` for each positional;
-      // the `as any[]` cast is TS-only so it must not leak into JS output.
-      assert.match result, /\$\$r\.value\[1\]/
+      // Regex handlers call the IIFE with `$$value[i]` for each positional
+      // (cached off `$$r.value` once per call); the `as any[]` cast is TS-only
+      // so it must not leak into JS output.
+      assert.match result, /\$\$value\[1\]/
       assert.doesNotMatch result, /as any\[\]/

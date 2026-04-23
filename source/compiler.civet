@@ -230,8 +230,11 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
     handlerToken
 
   // `void $skip, $loc, $0, ...` references every formal parameter so
-  // `noUnusedParameters` is silenced without wrapping the entire IIFE in
-  // a `//@ts-ignore` (which would swallow real errors in the handler body).
+  // `noUnusedParameters` is silenced without wrapping the entire IIFE in a
+  // `//@ts-ignore` (which would swallow real errors in the handler body).
+  // Tried `if (false) { …refs… }` — benchmarked slower: the extra branch
+  // isn't free even when always-false, while V8 strips the void-comma
+  // expression cleanly once the function is JIT-compiled.
   voidLine := if types and parameters.length then `${bodyIndent}void ${parameters.join(", ")};\n` else ""
   namedBlock := namedParameters ? `${bodyIndent}${namedParameters}\n` : ""
 
@@ -298,18 +301,21 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
 
   tokenizeCast := types ? " as any" : ""
 
-  // Per-shape: params, their types (against typeof $$r.value), and call args.
+  // Per-shape: params, their types (against typeof $$value), and call args.
+  // We cache `$$r`'s `loc`/`value` into locals `$$loc`/`$$value` before
+  // building the handler call, so V8 sees direct variable reads instead of
+  // repeated `$$r.loc` / `$$r.value[i]` property lookups each call.
   let parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string
   namedParameters = ""
   if rule[0] is "S"
     n := rule[1].length
     parameters = ["$skip", "$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
-    paramTypes = ["typeof SKIP", "Loc", "typeof $$r.value"]
+    paramTypes = ["typeof SKIP", "Loc", "typeof $$value"]
     for i of [0...n]
-      paramTypes.push `typeof $$r.value[${i}]`
-    callArgs = ["SKIP", "$$r.loc", "$$r.value"]
+      paramTypes.push `typeof $$value[${i}]`
+    callArgs = ["SKIP", "$$loc", "$$value"]
     for i of [0...n]
-      callArgs.push `$$r.value[${i}]`
+      callArgs.push `$$value[${i}]`
     namedParameters = rule[1].map (node, i) -> getParameterDeclaration(node, i+1)
     .join("")
   else if rule[0] is "R"
@@ -321,15 +327,15 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     // tuples (`["a"|"b"]`) don't trip TS2493 at indices beyond the tuple
     // length.  In JS mode the cast is elided — `as any[]` isn't valid JS.
     /* c8 ignore next */
-    valueExpr := if types then "($$r.value as any[])" else "$$r.value"
-    callArgs = ["SKIP", "$$r.loc"]
+    valueExpr := if types then "($$value as any[])" else "$$value"
+    callArgs = ["SKIP", "$$loc"]
     for i of [0..9]
       callArgs.push `${valueExpr}[${i}]`
   else
     parameters = regularHandlerParams.slice()
     // $TV-style: $0 === $1 === the value.
-    paramTypes = ["typeof SKIP", "Loc", "typeof $$r.value", "typeof $$r.value"]
-    callArgs = ["SKIP", "$$r.loc", "$$r.value", "$$r.value"]
+    paramTypes = ["typeof SKIP", "Loc", "typeof $$value", "typeof $$value"]
+    callArgs = ["SKIP", "$$loc", "$$value", "$$value"]
     namedParameters = getParameterDeclaration(rule, 0)
 
   // Emit the IIFE at the rule function's top-level indent (2-space) so the
@@ -370,14 +376,20 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     ${exitHook("undefined")}
     return undefined;
   }
-${tokenBranch}  const $$m = `
+${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
+  const $$m = `
   body.push iife
-  // Merge the SKIP check with $$final construction so the non-tokenize path
-  // takes one branch instead of two, and hits the exit hook only once.
+  // Mutate $$r.value in place instead of allocating a fresh ParseResult —
+  // matches $TS's behavior in the old combinator output and saves a heap
+  // allocation per successful rule match.
   finalAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+  rValueCast := types ? " as any" : ""
   body.push `;
   let $$final${finalAnno} = undefined;
-  if (($$m${tokenizeCast}) !== SKIP) $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };
+  if (($$m${tokenizeCast}) !== SKIP) {
+    ($$r${rValueCast}).value = $$m;
+    $$final = $$r${tokenizeCast};
+  }
   ${exitHook("$$final")}
   return $$final;`
   return { helpers, body }
