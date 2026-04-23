@@ -194,12 +194,11 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
 // leaves `.reduce`, `.filter`, etc. inside handler bodies with no known
 // method signatures).
 //
-// `parameters` is the formal parameter list (including $skip / $loc); the
-// first `skipLocParamCount` entries are the skip/loc params that take
-// `typeof SKIP` and `Loc` — the rest are positional args typed against
-// `contextualTypes`.  `callArgs` is the matching argument list used to
-// invoke the IIFE.  `namedParameters` is any `var foo = $N;` aliasing the
-// grammar's `:name` markers.
+// `parameters` / `paramTypes` / `callArgs` are parallel arrays: the formal
+// parameter names, their TS types (referencing `typeof $$value[i]`), and the
+// matching argument expressions used to invoke the IIFE.  `namedParameters`
+// is any `var foo = $N;` aliasing the grammar's `:name` markers, emitted at
+// the top of the IIFE body.
 //
 // Civet's indent-sensitive parser is happy as long as the IIFE body sits at
 // a strictly-deeper indent than the IIFE declaration.  We rely on the rule
@@ -350,7 +349,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       callArgs.push `${valueExpr}[${i}]`
   else
     parameters = regularHandlerParams.slice()
-    // $TV-style: $0 === $1 === the value.
+    // Single-value shape: `$0` and `$1` both bind to the whole parser value.
     paramTypes = ["typeof SKIP", "Loc", "typeof $$value", "typeof $$value"]
     callArgs = ["SKIP", "$$loc", "$$value", "$$value"]
     namedParameters = getParameterDeclaration(rule, 0)
@@ -396,9 +395,8 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
 ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
   const $$m = `
   body.push iife
-  // Mutate $$r.value in place instead of allocating a fresh ParseResult —
-  // matches $TS's behavior in the old combinator output and saves a heap
-  // allocation per successful rule match.
+  // Mutate $$r.value in place instead of allocating a fresh ParseResult,
+  // saving a heap allocation per successful rule match.
   finalAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
   rValueCast := types ? " as any" : ""
   body.push `;
