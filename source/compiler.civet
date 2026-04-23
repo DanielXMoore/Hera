@@ -327,10 +327,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     n := rule[1].length
     parameters = ["$skip", "$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
     paramTypes = ["typeof SKIP", "Loc", "typeof $$value"]
-    for i of [0...n]
-      paramTypes.push `typeof $$value[${i}]`
     callArgs = ["SKIP", "$$loc", "$$value"]
-    for i of [0...n]
+    for (let i = 0; i < n; i++)
+      paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
     namedParameters = rule[1].map (node, i) -> getParameterDeclaration(node, i+1)
     .join("")
@@ -345,7 +344,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     /* c8 ignore next */
     valueExpr := if types then "($$value as any[])" else "$$value"
     callArgs = ["SKIP", "$$loc"]
-    for i of [0..9]
+    for (let i = 0; i < 10; i++)
       callArgs.push `${valueExpr}[${i}]`
   else
     parameters = regularHandlerParams.slice()
