@@ -157,19 +157,27 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   // Probing for cache via `hasOwnProperty` instead of `'cache' in X`: civet's
   // parser otherwise gets confused by a string-literal `in`-expression at this
   // deep nesting level after several thousand similar rules.
-  `  const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
+  ```
+\u0020 const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
   if ($$entered && Object.prototype.hasOwnProperty.call($$entered, "cache")) return $$entered.cache${retAnno};
   const $$eventData${eventDataType} = $$entered && $$entered.data;
-`
+  ```
+  + "\n"
 
 // Emit the inline $EVENT exit hook. Assumes `$$final` holds the result.
 // Also inlines the $TOKEN wrap that $EVENT applies when `ctx.tokenize` is set,
 // rewriting `$$final.value` into a `{ type, children, token, loc }` object.
+//
+// The `\u0020` on the first content line of the template is a "dedent
+// anchor" — it renders as one literal space but counts as non-whitespace
+// for civet's auto-dedent, which prevents the dedent from swallowing the
+// explicit 2- and 4-space indentation we want in the output.
 emitEventExit := (options: CompilerOptions, name: string): string ->
   { types } := options
   nameLit := JSON.stringify(name)
   finalCast := types ? " as any" : ""
-  `  if ($$final && ctx.tokenize) {
+  ```
+\u0020 if ($$final && ctx.tokenize) {
     ($$final${finalCast}).value = {
       type: ${nameLit},
       children: [$$final.value].flat(),
@@ -177,7 +185,8 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
       loc: $$final.loc
     };
   }
-  if (ctx.exit) ctx.exit(${nameLit}, state, $$final, $$eventData);`
+  if (ctx.exit) ctx.exit(${nameLit}, state, $$final, $$eventData);
+  ```
 
 // Emit an inline IIFE that applies the handler to the parser result.
 //
@@ -333,41 +342,47 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, namedParameters, "  ")
 
   // Compose the rule body with early returns for the null / tokenize /
-  // skip paths; all exits route through a single exit-hook helper.
-  // `indent` controls where the hook line sits relative to its enclosing
-  // block (the top-level rule indents at 2-space; paths nested inside
-  // `if (!$$r) { ... }` etc. indent at 4-space).
-  exitHook := (retExpr: string, indent: string) ->
+  // skip paths; all exits route through a single exit-hook helper.  The
+  // hook only fires for the top-level dispatcher (`wrapEvent=true`);
+  // choice sub-rules leave event plumbing to their parent.
+  nameLit := JSON.stringify(name)
+  exitHook := (retExpr: string): string ->
     if wrapEvent
-      `${indent}if (ctx.exit) ctx.exit(${JSON.stringify(name)}, state, ${retExpr}, $$eventData);\n`
+      `if (ctx.exit) ctx.exit(${nameLit}, state, ${retExpr}, $$eventData);`
     else
       ""
 
-  tokenFinalCast := types ? ": any" : ""
+  // Tokenize branch: the top-level rule rewrites $$r.value into a Token
+  // object; sub-rules pass $$r through so the dispatcher wraps once.
+  tokenBranch := if wrapEvent
+    tokTokenType := types ? ": any" : ""
+    `  if (ctx.tokenize) {
+    const $$tok${tokTokenType} = $$r;
+    $$tok.value = { type: ${nameLit}, children: [$$r.value].flat(), token: state.input.substring(state.pos, $$r.pos), loc: $$r.loc };
+    ${exitHook("$$tok")}
+    return $$tok${tokenizeCast};
+  }\n`
+  else
+    `  if (ctx.tokenize) return $$r${tokenizeCast};\n`
 
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push `  const $$r = (${parserExpr})(ctx, state);\n`
-  body.push `  if (!$$r) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
-  // Tokenize wrap only fires on the top-level rule dispatcher; choice
-  // sub-rules return their raw result so the dispatcher can wrap once.
-  if wrapEvent
-    body.push `  if (ctx.tokenize) {\n`
-    body.push `    const $$tok${tokenFinalCast} = $$r;\n`
-    body.push `    $$tok.value = { type: ${JSON.stringify(name)}, children: [$$r.value].flat(), token: state.input.substring(state.pos, $$r.pos), loc: $$r.loc };\n`
-    body.push exitHook("$$tok", "    ")
-    body.push `    return $$tok${tokenizeCast};\n  }\n`
-  else
-    // Sub-rule in tokenize mode: pass the raw result through unchanged.
-    body.push `  if (ctx.tokenize) return $$r${tokenizeCast};\n`
-  body.push `  const $$m = `
+  body.push `  const $$r = (${parserExpr})(ctx, state);
+  if (!$$r) {
+    ${exitHook("undefined")}
+    return undefined;
+  }
+${tokenBranch}  const $$m = `
   body.push iife
-  body.push `;\n`
-  body.push `  if (($$m${tokenizeCast}) === SKIP) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
-  body.push `  const $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };\n`
-  body.push exitHook("$$final", "  ")
-  body.push `  return $$final;`
+  body.push `;
+  if (($$m${tokenizeCast}) === SKIP) {
+    ${exitHook("undefined")}
+    return undefined;
+  }
+  const $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };
+  ${exitHook("$$final")}
+  return $$final;`
   return { helpers, body }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
