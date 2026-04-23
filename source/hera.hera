@@ -93,10 +93,15 @@ Handling
   Space* TypeAnnotation?:t Arrow HandlingExpression:handler ->
     if (t) handler = { ...handler, t }
     return handler as Handler
+  # Type annotation without a handler: declares the rule's return type
+  # while leaving the sub-parser's result to flow through verbatim.
+  Space* TypeAnnotation:t NonCommentEOS ->
+    return { t } as Handler
 
 HandlingExpression
-  # Try to parse properly indented first
-  NonCommentEOS HandlingExpressionBody EOS? -> $2
+  # Try to parse properly indented first — permits a trailing `#` comment on
+  # the same line as `->` before the indented block body.
+  TrailingCommentEOS HandlingExpressionBody EOS? -> $2
   # Otherwise, allow content on the same line
   HandlingExpressionInline :: Handler ->
     return {
@@ -201,6 +206,12 @@ Space
 NonCommentEOS
   /([ \t]*(\n|\r\n|\r|$))+/
 
+# Like NonCommentEOS but also accepts a single `#` comment on the first line
+# before the newline.  Used after `->` so a trailing comment doesn't get
+# mistaken for an inline handler body.
+TrailingCommentEOS
+  /[ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$)([ \t]*(\n|\r\n|\r|$))*/
+
 EOS
   /([ \t]*(#[^\n\r]*)?(\n|\r\n|\r|$))+/
 
@@ -208,7 +219,10 @@ TripleBacktick
   "```"
 
 TypeAnnotation
-  "::" $/(?:(?!->).)*/ -> $2
+  # Match a single-line TS type expression: stop at end-of-line OR at `->`
+  # (whichever comes first).  Without the `[^\n\r]` guard this would greedily
+  # span subsequent rules thanks to the `s` regex flag applied by the runtime.
+  "::" $/(?:(?!->)[^\n\r])*/ -> $2
 
 CodeBody
   $/(?:(?:`(?!``))|[^`])*/ :: CodeBlockNode ->

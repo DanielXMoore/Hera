@@ -341,7 +341,30 @@
             "f": "    if (t) handler = { ...handler, t }\n    return handler as Handler",
             "$loc": {
               "pos": 1724,
-              "length": 70
+              "length": 69
+            }
+          }
+        ],
+        [
+          "S",
+          [
+            [
+              "*",
+              "Space"
+            ],
+            [
+              {
+                "name": "t"
+              },
+              "TypeAnnotation"
+            ],
+            "NonCommentEOS"
+          ],
+          {
+            "f": "    return { t } as Handler",
+            "$loc": {
+              "pos": 1975,
+              "length": 29
             }
           }
         ]
@@ -353,7 +376,7 @@
         [
           "S",
           [
-            "NonCommentEOS",
+            "TrailingCommentEOS",
             "HandlingExpressionBody",
             [
               "?",
@@ -363,7 +386,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 1901,
+              "pos": 2210,
               "length": 49
             },
             "inline": true
@@ -377,7 +400,7 @@
           {
             "f": "    return {\n      f: $1.trimEnd(),\n      $loc,\n      inline: true,\n    }",
             "$loc": {
-              "pos": 1991,
+              "pos": 2300,
               "length": 75
             },
             "t": " Handler "
@@ -391,7 +414,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 2129,
+          "pos": 2438,
           "length": 64
         },
         "t": " Handler "
@@ -444,7 +467,7 @@
       {
         "f": "    return $1 + $2.join(\"\") + ($3 ?? \"\")",
         "$loc": {
-          "pos": 2676,
+          "pos": 2985,
           "length": 42
         },
         "t": " string "
@@ -486,7 +509,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 2982,
+          "pos": 3291,
           "length": 4
         },
         "inline": true
@@ -523,7 +546,7 @@
       {
         "f": "[\"L\", $1]",
         "$loc": {
-          "pos": 3102,
+          "pos": 3411,
           "length": 11
         },
         "inline": true
@@ -558,7 +581,7 @@
           {
             "f": "[\"R\", $3]",
             "$loc": {
-              "pos": 3165,
+              "pos": 3474,
               "length": 10
             },
             "inline": true
@@ -570,7 +593,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3206,
+              "pos": 3515,
               "length": 10
             },
             "inline": true
@@ -582,7 +605,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3225,
+              "pos": 3534,
               "length": 11
             },
             "inline": true
@@ -696,6 +719,10 @@
       "R",
       "([ \\t]*(\\n|\\r\\n|\\r|$))+"
     ],
+    "TrailingCommentEOS": [
+      "R",
+      "[ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$)([ \\t]*(\\n|\\r\\n|\\r|$))*"
+    ],
     "EOS": [
       "R",
       "([ \\t]*(#[^\\n\\r]*)?(\\n|\\r\\n|\\r|$))+"
@@ -715,14 +742,14 @@
           "$",
           [
             "R",
-            "(?:(?!->).)*"
+            "(?:(?!->)[^\\n\\r])*"
           ]
         ]
       ],
       {
         "f": "$2",
         "$loc": {
-          "pos": 3889,
+          "pos": 4705,
           "length": 4
         },
         "inline": true
@@ -737,7 +764,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 3949,
+          "pos": 4765,
           "length": 73
         },
         "t": " CodeBlockNode "

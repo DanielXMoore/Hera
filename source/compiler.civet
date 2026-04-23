@@ -215,7 +215,6 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   else
     parameters
 
-  handlerToken := { $loc: handler.$loc, token: handler.f }
   // The IIFE is emitted at 2-space indent (rule body scope).  Handler bodies
   // must be strictly deeper for civet to parse `(function(...) {` as a
   // function body rather than an object literal, so we emit them at 4-space
@@ -224,6 +223,15 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   // indent from the grammar source; inline handlers get the `return ` prefix
   // added at 4-space here.
   bodyIndent := "    "
+  // For multi-line inline handlers (e.g. `-> { ... }` where the object body
+  // spans lines), the grammar-level indent of the continuation lines is
+  // shallower than our IIFE body indent.  Left unshifted, the continuation
+  // lines land at the same indent as `return`, and downstream indent-
+  // sensitive consumers (Civet parsing Hera's output) read them as new
+  // statements instead of the object body.  Prepend `bodyIndent` after each
+  // newline so the grammar's relative nesting is preserved inside the IIFE.
+  handlerText := if handler.inline then handler.f.replace(/\n/g, `\n${bodyIndent}`) else handler.f
+  handlerToken := { $loc: handler.$loc, token: handlerText }
   handlerBody := if handler.inline
     [`${bodyIndent}return `, handlerToken]
   else
@@ -276,8 +284,13 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       ]
     }
 
-  // No handler: return the parser's result verbatim.
-  if rule.length !== 3
+  // No handler: return the parser's result verbatim.  Two shapes land
+  // here: (a) `rule.length === 2`, no handler slot at all, and (b) the
+  // type-annotation-only form (`Name ::Type` without `->`) where rule[2]
+  // carries a `t` but no `f`.  In the latter case `ruleReturnType` already
+  // surfaces the declared type onto the rule function signature.
+  typeOnlyHandler := rule.length is 3 and rule[2] and ("t" in rule[2]) and not ("f" in rule[2])
+  if rule.length !== 3 or typeOnlyHandler
     parserExpr := compileOp(rule, name, true, types)
     helpers.push `const ${fnName}$parser = ${parserExpr};`
     body := if wrapEvent
