@@ -223,10 +223,15 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   else
     handlerToken
 
+  // `void $skip, $loc, $0, ...` references every formal parameter so
+  // `noUnusedParameters` is silenced without wrapping the entire IIFE in
+  // a `//@ts-ignore` (which would swallow real errors in the handler body).
+  voidLine := if types and parameters.length then `${bodyIndent}void ${parameters.join(", ")};\n` else ""
   namedBlock := namedParameters ? `${bodyIndent}${namedParameters}\n` : ""
 
   [
     `(function(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    voidLine
     namedBlock
     handlerBody
     `\n${baseIndent}})(${callArgs.join(", ")})`
@@ -266,12 +271,12 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     body := if wrapEvent
       [
         emitEventEnter(options, name, retType)
-        `  //@ts-ignore\n  const $$final = (${parserExpr})(ctx, state);\n`
+        `  const $$final = (${parserExpr})(ctx, state);\n`
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
     else
-      [`  //@ts-ignore\n  return (${parserExpr})(ctx, state);`]
+      [`  return (${parserExpr})(ctx, state);`]
     return { helpers, body }
 
   // Rule has a handler — inline it as an IIFE with parameter types that
@@ -343,7 +348,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push `  //@ts-ignore\n  const $$r = (${parserExpr})(ctx, state);\n`
+  body.push `  const $$r = (${parserExpr})(ctx, state);\n`
   body.push `  if (!$$r) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
   // Tokenize wrap only fires on the top-level rule dispatcher; choice
   // sub-rules return their raw result so the dispatcher can wrap once.
@@ -356,9 +361,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   else
     // Sub-rule in tokenize mode: pass the raw result through unchanged.
     body.push `  if (ctx.tokenize) return $$r${tokenizeCast};\n`
-  // `//@ts-ignore` on the IIFE silences noUnusedParameters (TS6133) —
-  // handler bodies routinely leave some positional args unused.
-  body.push `  //@ts-ignore\n  const $$m = `
+  body.push `  const $$m = `
   body.push iife
   body.push `;\n`
   body.push `  if (($$m${tokenizeCast}) === SKIP) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
@@ -383,7 +386,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     { helpers, body } := compileRuleBodyInline(options, name, rule, true)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
-      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+      `function ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
       body
       `\n}`
     ]
@@ -394,11 +397,11 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   subFunctions := args.flatMap (arg, i) ->
     helperName := `${name}$${i}`
     if typeof arg is "string"
-      return [`//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
+      return [`function ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
     { helpers, body } := compileRuleBodyInline(options, name, arg, false)
     allHelpers.push ...helpers
     [
-      `//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) {\n`
+      `function ${helperName}(ctx${ctxType}, state${stateType}) {\n`
       body
       `\n}\n\n`
     ]
@@ -419,7 +422,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   [
     ...allHelpers.flatMap((h) -> [h, "\n\n"])
     ...subFunctions
-    `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+    `function ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
     emitEventEnter(options, name, retType)
     ...tryBlock
     emitEventExit(options, name)
