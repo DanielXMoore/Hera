@@ -158,7 +158,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   // parser otherwise gets confused by a string-literal `in`-expression at this
   // deep nesting level after several thousand similar rules.
   ```
-\u0020 const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
+\  const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
   if ($$entered && Object.prototype.hasOwnProperty.call($$entered, "cache")) return $$entered.cache${retAnno};
   const $$eventData${eventDataType} = $$entered && $$entered.data;
   ```
@@ -168,7 +168,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
 // Also inlines the $TOKEN wrap that $EVENT applies when `ctx.tokenize` is set,
 // rewriting `$$final.value` into a `{ type, children, token, loc }` object.
 //
-// The `\u0020` on the first content line of the template is a "dedent
+// The `\ ` on the first content line of the template is a "dedent
 // anchor" — it renders as one literal space but counts as non-whitespace
 // for civet's auto-dedent, which prevents the dedent from swallowing the
 // explicit 2- and 4-space indentation we want in the output.
@@ -177,7 +177,7 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   nameLit := JSON.stringify(name)
   finalCast := types ? " as any" : ""
   ```
-\u0020 if ($$final && ctx.tokenize) {
+\  if ($$final && ctx.tokenize) {
     ($$final${finalCast}).value = {
       type: ${nameLit},
       children: [$$final.value].flat(),
