@@ -179,37 +179,57 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   }
   if (ctx.exit) ctx.exit(${nameLit}, state, $$final, $$eventData);`
 
-// Emit a top-level handler helper function.
-// Civet's indent-sensitive parser needs the handler body to be indented more
-// than the function's declaration line; emitting the handler as a top-level
-// function (0 indent) achieves this unconditionally, regardless of how deeply
-// the rule function inlines the tokenize / non-tokenize branches.
-compileHandlerFnDecl := (options: CompilerOptions, fnName: string, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], namedParameters: string) ->
+// Emit an inline IIFE that applies the handler to the parser result.
+//
+// The IIFE's parameter types reference typeof on rule-local variables (so TS
+// contextually types `$0`, `$1`, ... from the parser's concrete result shape
+// at each call site — `V[i]` in a generic top-level helper wouldn't:
+// TS type-checks a generic function body once with `V` unresolved, which
+// leaves `.reduce`, `.filter`, etc. inside handler bodies with no known
+// method signatures).
+//
+// `parameters` is the formal parameter list (including $skip / $loc); the
+// first `skipLocParamCount` entries are the skip/loc params that take
+// `typeof SKIP` and `Loc` — the rest are positional args typed against
+// `contextualTypes`.  `callArgs` is the matching argument list used to
+// invoke the IIFE.  `namedParameters` is any `var foo = $N;` aliasing the
+// grammar's `:name` markers.
+//
+// Civet's indent-sensitive parser is happy as long as the IIFE body sits at
+// a strictly-deeper indent than the IIFE declaration.  We rely on the rule
+// function using early returns for the null/tokenize paths so the IIFE
+// lands at 2-space indent, while the handler body comes in at 4-space from
+// the grammar's source indent.
+emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string, baseIndent: string) ->
   { types } := options
   handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
 
-  // Annotate each parameter as `any` in TS mode so the handler body's
-  // references to `$0`, `$1`, ... don't trip noImplicitAny.  Callers pass
-  // raw parser result fragments whose shape we don't statically track.
   typedParameters := if types
-    parameters.map((p) -> `${p}: any`)
+    parameters.map (p, i) -> `${p}: ${paramTypes[i]}`
   else
     parameters
 
   handlerToken := { $loc: handler.$loc, token: handler.f }
-  indent := handler.inline ? "  " : "    "
+  // The IIFE is emitted at 2-space indent (rule body scope).  Handler bodies
+  // must be strictly deeper for civet to parse `(function(...) {` as a
+  // function body rather than an object literal, so we emit them at 4-space
+  // regardless of whether the grammar's source was inline (`-> expr`) or a
+  // multi-line block.  Multi-line blocks already carry their own 4-space
+  // indent from the grammar source; inline handlers get the `return ` prefix
+  // added at 4-space here.
+  bodyIndent := "    "
   handlerBody := if handler.inline
-    [`${indent}return `, handlerToken]
+    [`${bodyIndent}return `, handlerToken]
   else
     handlerToken
 
-  namedBlock := namedParameters ? `${indent}${namedParameters}\n` : ""
+  namedBlock := namedParameters ? `${bodyIndent}${namedParameters}\n` : ""
 
   [
-    `//@ts-ignore\nfunction ${fnName}(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    `(function(${typedParameters.join(", ")})${handlerRetAnno} {\n`
     namedBlock
     handlerBody
-    `\n}`
+    `\n${baseIndent}})(${callArgs.join(", ")})`
   ]
 
 // Emit the inline body for one rule (or one choice sub-rule).
@@ -217,11 +237,14 @@ compileHandlerFnDecl := (options: CompilerOptions, fnName: string, handler: { $l
 //   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
 // Returns { helpers, body }: top-level helper function declarations to emit
 // before the rule function, and the rule function body statements.
-compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean) ->
+compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST, wrapEvent: boolean) ->
   { types } := options
   retType := ruleReturnType(rule)
 
-  helpers := []
+  // Previously we emitted top-level handler helper functions; with the
+  // inline-IIFE approach nothing needs to be hoisted above the rule.
+  // Keep the shape { helpers, body } so call sites don't have to branch.
+  helpers: any[] := []
 
   // Reference to another rule. This branch only fires for top-level rules
   // (wrapEvent=true); choice-alternative string references are short-circuited
@@ -251,79 +274,97 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       [`  //@ts-ignore\n  return (${parserExpr})(ctx, state);`]
     return { helpers, body }
 
-  // Rule has a handler — extract it into a top-level helper function, call it
-  // inline, and apply $T/$TR/$TS/$TV equivalent logic around the result.
+  // Rule has a handler — inline it as an IIFE with parameter types that
+  // reference `typeof $$r.value`.  TS contextually types the IIFE body per
+  // call site (unlike a top-level generic helper, which type-checks its
+  // body once with the generic unresolved), so `.reduce`/`.filter`
+  // callbacks inside handler bodies get proper positional typing.
   h := rule[2]
   unless h is like { f } and h.f <? "string"
     throw new Error "unknown handler format"
 
   parserExpr := compileOp(rule, name, false, types)
 
-  finalDeclType := types and h.t ? `: ParseResult<${h.t.trim()}> | undefined` : ""
   tokenizeCast := types ? " as any" : ""
-  skipCast := types ? " as any" : ""
-  handlerCallCast := types and h.t ? ` as ${h.t}` : ""
 
-  // Per-shape destructuring of parser result into $0, $1, ... plus the
-  // parameter list and argument list for the handler helper call.
-  let parameters: string[], extractArgs: string[], positionalExtracts: string[], namedParameters: string
+  // Per-shape: params, their types (against typeof $$r.value), and call args.
+  let parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string
   namedParameters = ""
   if rule[0] is "S"
+    n := rule[1].length
     parameters = ["$skip", "$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
-    extractArgs = [...parameters]
-    positionalExtracts = [`    const $0 = $$r.value;\n`]
-    rule[1].forEach (_, i) =>
-      positionalExtracts.push `    const $${i+1} = $0[${i}];\n`
+    paramTypes = ["typeof SKIP", "Loc", "typeof $$r.value"]
+    for i of [0...n]
+      paramTypes.push `typeof $$r.value[${i}]`
+    callArgs = ["SKIP", "$$r.loc", "$$r.value"]
+    for i of [0...n]
+      callArgs.push `$$r.value[${i}]`
     namedParameters = rule[1].map (node, i) -> getParameterDeclaration(node, i+1)
     .join("")
   else if rule[0] is "R"
     parameters = regExpHandlerParams.slice()
-    extractArgs = [...parameters]
-    // Regexes typed as a short tuple (e.g. reTupleType's `["a"|"b"]`) would
-    // otherwise make `$$r.value[6]` etc. fail TS2493; route through an
-    // intermediate cast (elided in JS mode — `any[]` isn't valid JS syntax).
+    // RegExpMatchArray positional typing (and reTupleType short tuples) don't
+    // pass cleanly through .reduce/.filter; keep positional args as `any`.
+    paramTypes = ["typeof SKIP", "Loc"].concat Array(10).fill("any")
+    // In TS mode the positional extraction casts through `any[]` so short
+    // tuples (`["a"|"b"]`) don't trip TS2493 at indices beyond the tuple
+    // length.  In JS mode the cast is elided — `as any[]` isn't valid JS.
     /* c8 ignore next */
-    mvDecl := if types then `    const $$m_v: any[] = $$r.value;\n` else `    const $$m_v = $$r.value;\n`
-    positionalExtracts = [mvDecl]
+    valueExpr := if types then "($$r.value as any[])" else "$$r.value"
+    callArgs = ["SKIP", "$$r.loc"]
     for i of [0..9]
-      positionalExtracts.push `    const $${i} = $$m_v[${i}];\n`
+      callArgs.push `${valueExpr}[${i}]`
   else
     parameters = regularHandlerParams.slice()
-    extractArgs = [...parameters]
-    positionalExtracts = [
-      `    const $0 = $$r.value;\n`
-      `    const $1 = $$r.value;\n`
-    ]
+    // $TV-style: $0 === $1 === the value.
+    paramTypes = ["typeof SKIP", "Loc", "typeof $$r.value", "typeof $$r.value"]
+    callArgs = ["SKIP", "$$r.loc", "$$r.value", "$$r.value"]
     namedParameters = getParameterDeclaration(rule, 0)
 
-  handlerFnName := `${fnName}$handler`
-  helpers.push compileHandlerFnDecl(options, handlerFnName, h, parameters, namedParameters)
+  // Emit the IIFE at the rule function's top-level indent (2-space) so the
+  // handler body (which comes in at 4-space from the grammar source) is
+  // strictly deeper than the IIFE's declaration line — civet's parser
+  // needs that for block vs object-literal disambiguation.
+  iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, namedParameters, "  ")
+
+  // Compose the rule body with early returns for the null / tokenize /
+  // skip paths; all exits route through a single exit-hook helper.
+  // `indent` controls where the hook line sits relative to its enclosing
+  // block (the top-level rule indents at 2-space; paths nested inside
+  // `if (!$$r) { ... }` etc. indent at 4-space).
+  exitHook := (retExpr: string, indent: string) ->
+    if wrapEvent
+      `${indent}if (ctx.exit) ctx.exit(${JSON.stringify(name)}, state, ${retExpr}, $$eventData);\n`
+    else
+      ""
+
+  tokenFinalCast := types ? ": any" : ""
 
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push [
-    `  //@ts-ignore\n  const $$r = (${parserExpr})(ctx, state);\n`
-    `  let $$final${finalDeclType};\n`
-    `  if (!$$r) {\n`
-    `    $$final = undefined;\n`
-    `  } else if (ctx.tokenize) {\n`
-    `    $$final = $$r${tokenizeCast};\n`
-    `  } else {\n`
-    `    const $loc = $$r.loc;\n`
-    ...positionalExtracts
-    `    const $skip = SKIP;\n`
-    `    const $$m = ${handlerFnName}(${extractArgs.join(", ")})${handlerCallCast};\n`
-    `    if (($$m${skipCast}) === SKIP) {\n`
-    `      $$final = undefined;\n`
-    `    } else {\n`
-    `      $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };\n`
-    `    }\n`
-    `  }\n`
-  ]
+  body.push `  //@ts-ignore\n  const $$r = (${parserExpr})(ctx, state);\n`
+  body.push `  if (!$$r) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
+  // Tokenize wrap only fires on the top-level rule dispatcher; choice
+  // sub-rules return their raw result so the dispatcher can wrap once.
   if wrapEvent
-    body.push emitEventExit(options, name)
-  body.push `\n  return $$final;`
+    body.push `  if (ctx.tokenize) {\n`
+    body.push `    const $$tok${tokenFinalCast} = $$r;\n`
+    body.push `    $$tok.value = { type: ${JSON.stringify(name)}, children: [$$r.value].flat(), token: state.input.substring(state.pos, $$r.pos), loc: $$r.loc };\n`
+    body.push exitHook("$$tok", "    ")
+    body.push `    return $$tok${tokenizeCast};\n  }\n`
+  else
+    // Sub-rule in tokenize mode: pass the raw result through unchanged.
+    body.push `  if (ctx.tokenize) return $$r${tokenizeCast};\n`
+  // `//@ts-ignore` on the IIFE silences noUnusedParameters (TS6133) —
+  // handler bodies routinely leave some positional args unused.
+  body.push `  //@ts-ignore\n  const $$m = `
+  body.push iife
+  body.push `;\n`
+  body.push `  if (($$m${tokenizeCast}) === SKIP) {\n${exitHook("undefined", "    ")}    return undefined;\n  }\n`
+  body.push `  const $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };\n`
+  body.push exitHook("$$final", "  ")
+  body.push `  return $$final;`
   return { helpers, body }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
@@ -339,7 +380,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     // grammars where rules reference each other) don't fall back to `unknown`
     // during TS's circular-inference resolution.
     retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
-    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
+    { helpers, body } := compileRuleBodyInline(options, name, rule, true)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
       `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
@@ -349,12 +390,12 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
   // Top-level choice: emit helpers + per-alternative dispatcher function + top-level rule.
   args := rule[1]
-  allHelpers := []
+  allHelpers: any[] := []
   subFunctions := args.flatMap (arg, i) ->
     helperName := `${name}$${i}`
     if typeof arg is "string"
       return [`//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
-    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false)
+    { helpers, body } := compileRuleBodyInline(options, name, arg, false)
     allHelpers.push ...helpers
     [
       `//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) {\n`
@@ -641,6 +682,7 @@ mjsHead := """
 """
 
 tsHead := mjsHead.replace("}", """
+  type Loc,
   type MaybeResult,
   type ParseResult,
   type Parser,
@@ -650,7 +692,7 @@ tsHead := mjsHead.replace("}", """
 }
 """) +
   "\nvoid " + mjsHead.match(/\{[\s\S]+\}/m)![0] + // quick-and-dirty way to void all the imports so that TS doesn't complain if they aren't used
-  "\n// Reference all imported types at value-position so TS doesn't flag them as unused.\nconst _types: MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | undefined = undefined; void _types;\n"
+  "\n// Reference all imported types at value-position so TS doesn't flag them as unused.\nconst _types: Loc | MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | undefined = undefined; void _types;\n"
 
 
 tsTail := """

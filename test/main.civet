@@ -1003,8 +1003,12 @@ describe "Hera", ->
           }
       """
       result := compile(parse(grammar), language: 'civet')
-      assert.match result, /\n  var t = \$0;\n  return \{\n    type: "TypeSuffix",/m
-      assert.match result, /\n  \}\n\}\n/m
+      // Handler bodies inside the IIFE are emitted at 4-space so they're
+      // strictly deeper than the IIFE's 2-space declaration line (civet
+      // uses indent to disambiguate function bodies from object literals).
+      assert.match result, /\n    var t = \$0;\n    return \{\n    type: "TypeSuffix",/m
+      // The handler IIFE closes with `  })(...)` at 2-space indent.
+      assert.match result, /\n  \}\)\(/m
 
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
       grammar := """
@@ -1044,14 +1048,14 @@ describe "Hera", ->
       result := compile(parse(grammar), types: true)
       assert.match result, /: ParseState/
 
-    it "should emit regex-handler positional extraction without TS casts in JS mode", ->
+    it "should emit regex-handler positional args without TS casts in JS mode", ->
       grammar := """
         Rule
           /(\\d+)/ ->
             return $1
       """
       result := compile(parse(grammar), language: 'javascript')
-      // Positional extraction for regex handlers uses `$$m_v = $$r.value;`
-      // with no `as any[]` cast in JS mode.
-      assert.match result, /const \$\$m_v = \$\$r\.value;/
+      // Regex handlers call the IIFE with `$$r.value[i]` for each positional;
+      // the `as any[]` cast is TS-only so it must not leak into JS output.
+      assert.match result, /\$\$r\.value\[1\]/
       assert.doesNotMatch result, /as any\[\]/
