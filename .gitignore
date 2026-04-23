@@ -2,6 +2,7 @@
 coverage/
 dist/
 node_modules/
+perf/report.txt
 source/machine.js
 parsers/
 tmp/

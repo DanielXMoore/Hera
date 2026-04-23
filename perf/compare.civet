@@ -1,7 +1,10 @@
 // Side-by-side benchmark: @danielx/hera-previous (0.8.20, combinator) vs the
 // current working tree (hybrid-compiler, inline IIFE).  Compiles each sample
 // with both, runs the generated parser on a representative input, and reports
-// parse ops/sec, compile time, and generated code size.
+// parse ops/sec, compile ops/sec, and generated code size.
+//
+// Writes a clean summary table to `perf/report.txt` (gitignored) so we can
+// diff successive runs without re-grepping console output.
 
 Benchmark from benchmark
 fs from fs
@@ -32,6 +35,26 @@ compileWith := (hera, grammarSrc) ->
   js := hera.compile hera.parse(grammarSrc), { module: false }
   hera.execMod js
 
+// Run a benchmark.js suite synchronously, returning {name: hz} for each case.
+runSuite := (cases) ->
+  suite := new Benchmark.Suite
+  for [name, fn] of Object.entries(cases)
+    suite.add name, fn
+  results := {}
+  suite.on 'cycle', (event) ->
+    results[event.target.name] = event.target.hz
+  suite.run async: false
+  return results
+
+// ["1,234", "5,678", "+17%"] style formatting for fixed-width columns.
+fmt := {}
+fmt.int = (n: number) -> n.toLocaleString('en-US', { maximumFractionDigits: 0 })
+fmt.pct = (prev: number, curr: number) ->
+  delta := (curr / prev - 1) * 100
+  sign := delta >= 0 ? "+" : ""
+  `${sign}${delta.toFixed(1)}%`
+fmt.pad = (s: string, w: number) -> s.padStart(w, " ")
+
 benchOne := (name, meta) ->
   grammarSrc := fs.readFileSync path.join("samples", name), "utf8"
   input := meta.input
@@ -39,42 +62,81 @@ benchOne := (name, meta) ->
   prevParser := compileWith prevHera, grammarSrc
   currParser := compileWith currHera, grammarSrc
 
-  // Measure generated source size (module: false -> CJS).
   prevSize := prevHera.compile(prevHera.parse(grammarSrc), module: false).length
   currSize := currHera.compile(currHera.parse(grammarSrc), module: false).length
 
-  // Verify both parse the same input successfully.
-  prevResult := prevParser.parse(input)
-  currResult := currParser.parse(input)
+  // Smoke-test: both must accept the input.
+  prevParser.parse(input)
+  currParser.parse(input)
 
-  console.log `\n=== ${name} ===`
-  console.log `  codesize: prev ${prevSize}   curr ${currSize}   (${((currSize/prevSize - 1) * 100).toFixed(1)}% change)`
+  console.error `  benchmarking ${name}...`
 
-  // Benchmark grammar compilation (parse + emit) with statistical sampling.
-  compileSuite := new Benchmark.Suite
-  compileSuite.add `prev compile ${name}`, -> compileWith prevHera, grammarSrc
-  compileSuite.add `curr compile ${name}`, -> compileWith currHera, grammarSrc
-  compileSuite.on 'cycle', (event) ->
-    console.log `  ${String(event.target)}`
-  compileSuite.on 'complete', ->
-    fastest := this.filter('fastest').map('name')
-    console.log `  compile fastest: ${fastest}`
-  compileSuite.run async: false
+  compileRes := runSuite
+    prev: -> compileWith prevHera, grammarSrc
+    curr: -> compileWith currHera, grammarSrc
 
-  // Benchmark parse speed.
-  parseSuite := new Benchmark.Suite
-  parseSuite.add `prev parse   ${name}`, -> prevParser.parse(input)
-  parseSuite.add `curr parse   ${name}`, -> currParser.parse(input)
-  parseSuite.on 'cycle', (event) ->
-    console.log `  ${String(event.target)}`
-  parseSuite.on 'complete', ->
-    fastest := this.filter('fastest').map('name')
-    console.log `  parse fastest: ${fastest}`
-  parseSuite.run async: false
+  parseRes := runSuite
+    prev: -> prevParser.parse(input)
+    curr: -> currParser.parse(input)
 
-console.log "Hera parse benchmark: previous (0.8.20) vs current (hybrid-compiler)"
-console.log `  prev version: ${require("@danielx/hera-previous/package.json").version}`
-console.log `  curr version: ${require("../package.json").version} (working tree)`
+  return {
+    name
+    prevSize, currSize
+    prevCompile: compileRes.prev, currCompile: compileRes.curr
+    prevParse: parseRes.prev,     currParse: parseRes.curr
+  }
 
+// ---- run -------------------------------------------------------------------
+
+prevVersion := require("@danielx/hera-previous/package.json").version
+currVersion := require("../package.json").version
+timestamp := new Date().toISOString()
+
+rows: any[] := []
 for [name, meta] of Object.entries(samples)
-  benchOne name, meta
+  rows.push benchOne(name, meta)
+
+// ---- format report ---------------------------------------------------------
+
+headers := ["sample", "compile prev", "compile curr", "compile Δ", "parse prev", "parse curr", "parse Δ", "size prev", "size curr", "size Δ"]
+widths := headers.map &.length
+
+rowCells := rows.map (r) -> [
+  r.name
+  `${fmt.int(r.prevCompile)}/s`
+  `${fmt.int(r.currCompile)}/s`
+  fmt.pct(r.prevCompile, r.currCompile)
+  `${fmt.int(r.prevParse)}/s`
+  `${fmt.int(r.currParse)}/s`
+  fmt.pct(r.prevParse, r.currParse)
+  fmt.int(r.prevSize)
+  fmt.int(r.currSize)
+  fmt.pct(r.prevSize, r.currSize)
+]
+
+// Column widths = max of header + all row cells.
+for row of rowCells
+  row.forEach (cell, i) ->
+    widths[i] = Math.max(widths[i], cell.length)
+
+makeRow := (cells) ->
+  cells.map((c, i) -> fmt.pad(c, widths[i])).join("  ")
+
+lines := [
+  `Hera benchmark: prev vs current (hybrid-compiler)`
+  `  prev: @danielx/hera-previous ${prevVersion}`
+  `  curr: working tree ${currVersion}`
+  `  ran:  ${timestamp}`
+  ""
+  makeRow headers
+  makeRow widths.map((w) -> "-".repeat(w))
+  ...rowCells.map(makeRow)
+  ""
+]
+
+report := lines.join("\n")
+
+// Print to stdout (so `npm run benchmark` still shows results) and write
+// to perf/report.txt for easy diffing between runs.
+console.log report
+fs.writeFileSync path.join(path.dirname(new URL(import.meta.url).pathname), "report.txt"), report
