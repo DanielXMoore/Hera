@@ -1,0 +1,74 @@
+// Side-by-side benchmark: @danielx/hera-previous (0.8.20, combinator) vs the
+// current working tree (hybrid-compiler, inline IIFE).  Compiles each sample
+// with both, runs the generated parser on a representative input, and reports
+// parse ops/sec, compile time, and generated code size.
+
+Benchmark from benchmark
+fs from fs
+path from path
+{ createRequire } from module
+
+require := createRequire(import.meta.url)
+prevHera := require "@danielx/hera-previous/dist/main.js"
+currHera := require "../dist/main.js"
+
+// Parse inputs per sample.  Each picked to exercise the grammar meaningfully.
+samples :=
+  "url.hera":
+    input: "http://danielx.net:443/%21?query#fragment"
+  "math.hera":
+    input: "1 + 2 * (3 - 4) / 5 + 6 * 7 - 8"
+  "coffee.hera":
+    input: "x = 1\ny = 2\nz = x + y\n"
+  "regex.hera":
+    input: "/foo[abc](?:bar)\\d+/g"
+
+compileWith := (hera, grammarSrc) ->
+  js := hera.compile hera.parse(grammarSrc), { module: false }
+  hera.execMod js
+
+benchOne := (name, input) ->
+  grammarSrc := fs.readFileSync path.join("samples", name), "utf8"
+
+  prevParser := compileWith prevHera, grammarSrc
+  currParser := compileWith currHera, grammarSrc
+
+  // Measure generated source size (module: false -> CJS).
+  prevSize := prevHera.compile(prevHera.parse(grammarSrc), module: false).length
+  currSize := currHera.compile(currHera.parse(grammarSrc), module: false).length
+
+  // Verify both parse the same input successfully.
+  prevResult := prevParser.parse(input)
+  currResult := currParser.parse(input)
+
+  console.log `\n=== ${name} ===`
+  console.log `  codesize: prev ${prevSize}   curr ${currSize}   (${((currSize/prevSize - 1) * 100).toFixed(1)}% change)`
+
+  // Benchmark grammar compilation (parse + emit) with statistical sampling.
+  compileSuite := new Benchmark.Suite
+  compileSuite.add `prev compile ${name}`, -> compileWith prevHera, grammarSrc
+  compileSuite.add `curr compile ${name}`, -> compileWith currHera, grammarSrc
+  compileSuite.on 'cycle', (event) ->
+    console.log `  ${String(event.target)}`
+  compileSuite.on 'complete', ->
+    fastest := this.filter('fastest').map('name')
+    console.log `  compile fastest: ${fastest}`
+  compileSuite.run async: false
+
+  // Benchmark parse speed.
+  parseSuite := new Benchmark.Suite
+  parseSuite.add `prev parse   ${name}`, -> prevParser.parse(input)
+  parseSuite.add `curr parse   ${name}`, -> currParser.parse(input)
+  parseSuite.on 'cycle', (event) ->
+    console.log `  ${String(event.target)}`
+  parseSuite.on 'complete', ->
+    fastest := this.filter('fastest').map('name')
+    console.log `  parse fastest: ${fastest}`
+  parseSuite.run async: false
+
+console.log "Hera parse benchmark: previous (0.8.20) vs current (hybrid-compiler)"
+console.log `  prev version: ${require("@danielx/hera-previous/package.json").version}`
+console.log `  curr version: ${require("../package.json").version} (working tree)`
+
+for [name, meta] of Object.entries(samples)
+  benchOne name, meta.input

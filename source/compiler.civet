@@ -154,12 +154,9 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   retAnno := if types then ` as MaybeResult<${retType ? retType.trim() : "any"}>` else ""
   enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
   eventDataType := if types then ": unknown" else ""
-  // Probing for cache via `hasOwnProperty` instead of `'cache' in X`: civet's
-  // parser otherwise gets confused by a string-literal `in`-expression at this
-  // deep nesting level after several thousand similar rules.
   ```
 \  const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
-  if ($$entered && Object.prototype.hasOwnProperty.call($$entered, "cache")) return $$entered.cache${retAnno};
+  if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
   const $$eventData${eventDataType} = $$entered && $$entered.data;
   ```
   + "\n"
@@ -375,12 +372,12 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   }
 ${tokenBranch}  const $$m = `
   body.push iife
+  // Merge the SKIP check with $$final construction so the non-tokenize path
+  // takes one branch instead of two, and hits the exit hook only once.
+  finalAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
   body.push `;
-  if (($$m${tokenizeCast}) === SKIP) {
-    ${exitHook("undefined")}
-    return undefined;
-  }
-  const $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };
+  let $$final${finalAnno} = undefined;
+  if (($$m${tokenizeCast}) !== SKIP) $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };
   ${exitHook("$$final")}
   return $$final;`
   return { helpers, body }
