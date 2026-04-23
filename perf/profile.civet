@@ -1,0 +1,141 @@
+// CPU-profile the parse() step for both prev and curr hera on a single sample.
+// Isolates parse from compile/setup by wrapping only the parse loop in a
+// Session.Profiler start/stop.
+//
+// Usage:
+//   npx civet ./perf/profile.civet [sample] [iters]
+//   default sample = hera_v0_8.hera, default iters = 20000
+//
+// Writes perf/prev.cpuprofile and perf/curr.cpuprofile, then prints a flat
+// top-N table per profile so we can compare hot functions side-by-side.
+
+fs from fs
+path from path
+inspector from inspector
+{ createRequire } from module
+
+require := createRequire(import.meta.url)
+prevHera := require "@danielx/hera-previous/dist/main.js"
+currHera := require "../dist/main.js"
+
+sample := process.argv[2] ?? "hera_v0_8.hera"
+iters  := parseInt(process.argv[3] ?? "20000", 10)
+
+grammarSrc := fs.readFileSync path.join("samples", sample), "utf8"
+input := switch sample
+  when "hera_v0_8.hera" then grammarSrc
+  when "url.hera"       then "http://danielx.net:443/%21?query#fragment"
+  when "math.hera"      then "1 + 2 * (3 - 4) / 5 + 6 * 7 - 8"
+  when "coffee.hera"    then "x = 1\ny = 2\nz = x + y\n"
+  when "regex.hera"     then "/foo[abc](?:bar)\\d+/g"
+  else                       grammarSrc
+
+console.log `Sample: ${sample}  iters: ${iters}  input len: ${input.length}`
+
+compileWith := (hera) ->
+  js := hera.compile hera.parse(grammarSrc), { module: false }
+  hera.execMod js
+
+prevParser := compileWith prevHera
+currParser := compileWith currHera
+
+// Smoke
+prevParser.parse input
+currParser.parse input
+
+runProfile := (label, parser) ->
+  session := new inspector.Session
+  session.connect()
+  await new Promise<void> (resolve, reject) ->
+    session.post 'Profiler.enable', (err) ->
+      if err then reject(err) else resolve()
+  await new Promise<void> (resolve, reject) ->
+    session.post 'Profiler.start', (err) ->
+      if err then reject(err) else resolve()
+
+  // warmup
+  for i of [0...500]
+    parser.parse input
+
+  t0 := process.hrtime.bigint()
+  for i of [0...iters]
+    parser.parse input
+  t1 := process.hrtime.bigint()
+  elapsedMs := Number(t1 - t0) / 1e6
+
+  result: any := await new Promise (resolve, reject) ->
+    session.post 'Profiler.stop', (err, res) ->
+      if err then reject(err) else resolve(res)
+
+  outPath := path.join "perf", `${label}.cpuprofile`
+  fs.writeFileSync outPath, JSON.stringify(result.profile)
+  session.disconnect()
+
+  console.log `${label}: ${iters} parses in ${elapsedMs.toFixed(1)} ms  (${(iters / (elapsedMs / 1000)).toFixed(0)}/s)`
+  return { profile: result.profile, elapsedMs, outPath }
+
+// ---- flat self-time table -------------------------------------------------
+// V8's Profiler.stop returns { nodes, samples, timeDeltas, startTime, endTime }.
+// Each sample is a tick attributed to the innermost node (leaf).  Summing
+// timeDeltas by leaf node id gives self-time per function.
+
+summarize := (profile, topN = 25) ->
+  { nodes, samples, timeDeltas } := profile
+  byId := new Map<number, any>
+  for n of nodes
+    byId.set n.id, n
+
+  selfByFn := new Map<string, number>
+  totalUs .= 0
+  for i of [0...samples.length]
+    nodeId := samples[i]
+    dt := timeDeltas[i]
+    totalUs += dt
+    leaf := byId.get nodeId
+    continue unless leaf
+    { functionName, url, lineNumber } := leaf.callFrame
+    key := `${functionName || "(anonymous)"}  ${path.basename(url || "(native)")}:${lineNumber}`
+    selfByFn.set key, (selfByFn.get(key) ?? 0) + dt
+
+  entries := [...selfByFn.entries()].sort (a, b) -> b[1] - a[1]
+  console.log ""
+  console.log `  total profile time: ${(totalUs / 1000).toFixed(1)} ms over ${samples.length} samples`
+  console.log `  top ${topN} self-time functions:`
+  console.log `  ${"self ms".padStart(8)}  ${"self %".padStart(7)}  function`
+  for [key, us] of entries.slice(0, topN)
+    pct := (us / totalUs * 100).toFixed(1)
+    console.log `  ${(us / 1000).toFixed(1).padStart(8)}  ${pct.padStart(7)}  ${key}`
+
+  // Aggregate by source-file basename for a high-level view
+  byFile := new Map<string, number>
+  for i of [0...samples.length]
+    nodeId := samples[i]
+    dt := timeDeltas[i]
+    leaf := byId.get nodeId
+    continue unless leaf
+    file := path.basename(leaf.callFrame.url || "(native)")
+    byFile.set file, (byFile.get(file) ?? 0) + dt
+  fileEntries := [...byFile.entries()].sort (a, b) -> b[1] - a[1]
+  console.log ""
+  console.log `  self-time by file:`
+  for [file, us] of fileEntries
+    pct := (us / totalUs * 100).toFixed(1)
+    console.log `  ${(us / 1000).toFixed(1).padStart(8)}  ${pct.padStart(7)}  ${file}`
+
+main := async ->
+  console.log "=== prev ==="
+  prev := await runProfile "prev", prevParser
+  summarize prev.profile
+
+  console.log ""
+  console.log "=== curr ==="
+  curr := await runProfile "curr", currParser
+  summarize curr.profile
+
+  console.log ""
+  console.log `Wrote ${prev.outPath} and ${curr.outPath}.`
+  console.log `Load in Chrome DevTools (chrome://inspect or the Performance tab → Load profile) for flamegraphs.`
+
+main().catch (e) ->
+  console.error e
+  process.exit 1

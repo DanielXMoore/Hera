@@ -3,6 +3,8 @@ coverage/
 dist/
 node_modules/
 perf/report.txt
+perf/*.cpuprofile
+perf/*.generated.js
 source/machine.js
 parsers/
 tmp/
