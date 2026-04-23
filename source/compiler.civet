@@ -121,106 +121,270 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
 regExpHandlerParams := ["$skip", "$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"]
 regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 
-compileHandler := (variableName: string,options: CompilerOptions, arg: HeraAST, name: string) ->
-  if arg <? "string"
-    return `${variableName} = ${arg}` // reference to other named parser function
+// Compute the declared return type of a rule, if any.
+// For top-level choice: union of sub-rule types (only if all are annotated).
+// For single-body: the handler's h.t.
+// Returns undefined if not statically known.
+ruleReturnType := (rule: HeraAST): string | undefined ->
+  return undefined if typeof rule is "string"
+  if rule[0] is "/" and !rule[2]
+    // Top-level choice
+    subTypes := rule[1].map (arg) ->
+      return undefined if typeof arg is "string"
+      return arg[2].t if arg.length is 3 and arg[2]
+      return undefined
+    if subTypes.every((t) -> t?)
+      return subTypes.map((t) -> t!.trim()).join(" | ")
+    return undefined
+  if rule.length is 3 and rule[2]
+    return rule[2].t
+  return undefined
 
-  if arg.length is 3
-    h := arg[2]
-    unless h is like { f } and h.f <? "string"
-      throw new Error "unknown handler format"
+// Emit the inline $EVENT enter hook. Establishes `$$eventData` and may early-return on cache hit.
+//
+// Flattened form (avoid three levels of nested `if`): a single guard on
+// `ctx.enter` with `&&` short-circuits matches the shape civet's parser
+// accepts cleanly across many rules in the same module; the deeply-nested
+// form confused civet's state after ~7k lines of similar rule functions in
+// Civet's own parser.hera output.
+emitEventEnter := (options: CompilerOptions, name: string, retType: string | undefined): string ->
+  { types } := options
+  // Cast the cache return so the rule function's inferred return type matches
+  // `Parser<T>` (i.e. `MaybeResult<T>`), not `unknown` from `ParserContext.enter`.
+  retAnno := if types then ` as MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+  enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
+  eventDataType := if types then ": unknown" else ""
+  // Probing for cache via `hasOwnProperty` instead of `'cache' in X`: civet's
+  // parser otherwise gets confused by a string-literal `in`-expression at this
+  // deep nesting level after several thousand similar rules.
+  `  const $$entered${enteredType} = ctx.enter && ctx.enter(${JSON.stringify(name)}, state);
+  if ($$entered && Object.prototype.hasOwnProperty.call($$entered, "cache")) return $$entered.cache${retAnno};
+  const $$eventData${eventDataType} = $$entered && $$entered.data;
+`
 
-    parser := compileOp(arg, name, false, options.types)
+// Emit the inline $EVENT exit hook. Assumes `$$final` holds the result.
+// Also inlines the $TOKEN wrap that $EVENT applies when `ctx.tokenize` is set,
+// rewriting `$$final.value` into a `{ type, children, token, loc }` object.
+emitEventExit := (options: CompilerOptions, name: string): string ->
+  { types } := options
+  nameLit := JSON.stringify(name)
+  finalCast := types ? " as any" : ""
+  `  if ($$final && ctx.tokenize) {
+    ($$final${finalCast}).value = {
+      type: ${nameLit},
+      children: [$$final.value].flat(),
+      token: state.input.substring(state.pos, $$final.pos),
+      loc: $$final.loc
+    };
+  }
+  if (ctx.exit) ctx.exit(${nameLit}, state, $$final, $$eventData);`
 
-    handlerToken :=
-      $loc: h.$loc
-      token: h.f
+// Emit a top-level handler helper function.
+// Civet's indent-sensitive parser needs the handler body to be indented more
+// than the function's declaration line; emitting the handler as a top-level
+// function (0 indent) achieves this unconditionally, regardless of how deeply
+// the rule function inlines the tokenize / non-tokenize branches.
+compileHandlerFnDecl := (options: CompilerOptions, fnName: string, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], namedParameters: string) ->
+  { types } := options
+  handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
 
-    // Inline handlers may have a closing line that is indented by two spaces,
-    // so we start at an indent of 2 so that we don't get underindentation
-    // errors from Civet. Otherwise, we indent 4 to match the source input.
-    indent := h.inline ? "  " : "    "
+  // Annotate each parameter as `any` in TS mode so the handler body's
+  // references to `$0`, `$1`, ... don't trip noImplicitAny.  Callers pass
+  // raw parser result fragments whose shape we don't statically track.
+  typedParameters := if types
+    parameters.map((p) -> `${p}: any`)
+  else
+    parameters
 
-    handler := if h.inline
-      [`${indent}return `, handlerToken]
+  handlerToken := { $loc: handler.$loc, token: handler.f }
+  indent := handler.inline ? "  " : "    "
+  handlerBody := if handler.inline
+    [`${indent}return `, handlerToken]
+  else
+    handlerToken
+
+  namedBlock := namedParameters ? `${indent}${namedParameters}\n` : ""
+
+  [
+    `//@ts-ignore\nfunction ${fnName}(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    namedBlock
+    handlerBody
+    `\n}`
+  ]
+
+// Emit the inline body for one rule (or one choice sub-rule).
+//   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
+//   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
+// Returns { helpers, body }: top-level helper function declarations to emit
+// before the rule function, and the rule function body statements.
+compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean) ->
+  { types } := options
+  retType := ruleReturnType(rule)
+
+  helpers := []
+
+  // Reference to another rule. This branch only fires for top-level rules
+  // (wrapEvent=true); choice-alternative string references are short-circuited
+  // in compileRule directly, before we get here.
+  if typeof rule is "string"
+    return {
+      helpers
+      body: [
+        emitEventEnter(options, name, retType)
+        `  const $$final = ${rule}(ctx, state);\n`
+        emitEventExit(options, name)
+        `\n  return $$final;`
+      ]
+    }
+
+  // No handler: return the parser's result verbatim.
+  if rule.length !== 3
+    parserExpr := compileOp(rule, name, true, types)
+    body := if wrapEvent
+      [
+        emitEventEnter(options, name, retType)
+        `  //@ts-ignore\n  const $$final = (${parserExpr})(ctx, state);\n`
+        emitEventExit(options, name)
+        `\n  return $$final;`
+      ]
     else
-      handlerToken
+      [`  //@ts-ignore\n  return (${parserExpr})(ctx, state);`]
+    return { helpers, body }
 
+  // Rule has a handler — extract it into a top-level helper function, call it
+  // inline, and apply $T/$TR/$TS/$TV equivalent logic around the result.
+  h := rule[2]
+  unless h is like { f } and h.f <? "string"
+    throw new Error "unknown handler format"
+
+  parserExpr := compileOp(rule, name, false, types)
+
+  finalDeclType := types and h.t ? `: ParseResult<${h.t.trim()}> | undefined` : ""
+  tokenizeCast := types ? " as any" : ""
+  skipCast := types ? " as any" : ""
+  handlerCallCast := types and h.t ? ` as ${h.t}` : ""
+
+  // Per-shape destructuring of parser result into $0, $1, ... plus the
+  // parameter list and argument list for the handler helper call.
+  let parameters: string[], extractArgs: string[], positionalExtracts: string[], namedParameters: string
+  namedParameters = ""
+  if rule[0] is "S"
+    parameters = ["$skip", "$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
+    extractArgs = [...parameters]
+    positionalExtracts = [`    const $0 = $$r.value;\n`]
+    rule[1].forEach (_, i) =>
+      positionalExtracts.push `    const $${i+1} = $0[${i}];\n`
+    namedParameters = rule[1].map (node, i) -> getParameterDeclaration(node, i+1)
+    .join("")
+  else if rule[0] is "R"
+    parameters = regExpHandlerParams.slice()
+    extractArgs = [...parameters]
+    // Regexes typed as a short tuple (e.g. reTupleType's `["a"|"b"]`) would
+    // otherwise make `$$r.value[6]` etc. fail TS2493; route through an
+    // intermediate cast (elided in JS mode — `any[]` isn't valid JS syntax).
     /* c8 ignore next */
-    handlerType := options.types && h.t ? `: ${h.t}` : ""
-    parserTypeAnnotation := options.types && h.t ? `: Parser<${h.t.trim()}>` : ""
+    mvDecl := if types then `    const $$m_v: any[] = $$r.value;\n` else `    const $$m_v = $$r.value;\n`
+    positionalExtracts = [mvDecl]
+    for i of [0..9]
+      positionalExtracts.push `    const $${i} = $$m_v[${i}];\n`
+  else
+    parameters = regularHandlerParams.slice()
+    extractArgs = [...parameters]
+    positionalExtracts = [
+      `    const $0 = $$r.value;\n`
+      `    const $1 = $$r.value;\n`
+    ]
+    namedParameters = getParameterDeclaration(rule, 0)
 
-    if arg[0] is "S"
-      // Gather names from each element in arg[1]
-      // Only handle top level names for now
-      // TODO: transform based on structure, walk AST tree to gather named parameters and mappings based on structural location
-      namedParameters := indent + arg[1].map (node, i) ->
-        getParameterDeclaration(node, i+1)
-      .join("")
+  handlerFnName := `${fnName}$handler`
+  helpers.push compileHandlerFnDecl(options, handlerFnName, h, parameters, namedParameters)
 
-      parameters := ["$skip", "$loc", "$0"].concat arg[1].map (_, i) => `$${i+1}`
-
-      return [
-        `${variableName}${parserTypeAnnotation} = `
-        `$TS(${parser}, function(${parameters.join(", ")})${handlerType} {\n`
-        namedParameters
-        "\n"
-        handler
-        "\n});"
-      ]
-
-    else if arg[0] is "R"
-      // NOTE: RegExp named groups may go here later
-      return [
-        `${variableName}${parserTypeAnnotation} = `
-        `$TR(${parser}, function(${regExpHandlerParams.join(", ")})${handlerType} {\n`
-        handler
-        "\n});"
-      ]
-    else
-      namedParameters := indent + getParameterDeclaration(arg, 0)
-
-      return [
-        `${variableName}${parserTypeAnnotation} = `
-        `$TV(${parser}, function(${regularHandlerParams.join(", ")})${handlerType} {\n`
-        namedParameters
-        "\n"
-        handler
-        "\n});"
-      ]
-
-  return `${variableName} = ${compileOp(arg, name, true, options.types)}`
+  body := []
+  if wrapEvent
+    body.push emitEventEnter(options, name, retType)
+  body.push [
+    `  //@ts-ignore\n  const $$r = (${parserExpr})(ctx, state);\n`
+    `  let $$final${finalDeclType};\n`
+    `  if (!$$r) {\n`
+    `    $$final = undefined;\n`
+    `  } else if (ctx.tokenize) {\n`
+    `    $$final = $$r${tokenizeCast};\n`
+    `  } else {\n`
+    `    const $loc = $$r.loc;\n`
+    ...positionalExtracts
+    `    const $skip = SKIP;\n`
+    `    const $$m = ${handlerFnName}(${extractArgs.join(", ")})${handlerCallCast};\n`
+    `    if (($$m${skipCast}) === SKIP) {\n`
+    `      $$final = undefined;\n`
+    `    } else {\n`
+    `      $$final = { loc: $$r.loc, pos: $$r.pos, value: $$m };\n`
+    `    }\n`
+    `  }\n`
+  ]
+  if wrapEvent
+    body.push emitEventExit(options, name)
+  body.push `\n  return $$final;`
+  return { helpers, body }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
   stateType := types ? ": ParseState" : ""
   ctxType := types ? ": ParserContext" : ""
 
-  // first level choice may have nested handlings
-  if typeof rule is "string" or !(rule[0] is "/" and !rule[2])
-    body := `$EVENT(ctx, state, ${JSON.stringify(name)}, ${name}$0)`
+  isTopChoice := not (typeof rule is "string") and rule[0] is "/" and !rule[2]
 
-    [
-      // NOTE: This can return an array so we can't just jam it into the template string
-      `//@ts-ignore\nconst `, compileHandler(`${name}$0`, options, rule, name), "\n",
-      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
+  if not isTopChoice
+    retType := ruleReturnType(rule)
+    // Always annotate return type in TS mode so recursive rules (e.g. expression
+    // grammars where rules reference each other) don't fall back to `unknown`
+    // during TS's circular-inference resolution.
+    retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
+    return [
+      ...helpers.flatMap((h) -> [h, "\n\n"])
+      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+      body
+      `\n}`
     ]
-  else
-    args := rule[1]
-    fns := args.map (arg, i) ->
-      [`//@ts-ignore\nconst `, compileHandler(`${name}$${i}`, options, arg, name), "\n"]
 
-    choices := args.map (_, i) ->
-      `${name}$${i}`
-
-    choicesDec := `//@ts-ignore\nconst ${name}$$ = [${choices.join(",")}]\n`
-    body := `$EVENT_C(ctx, state, ${JSON.stringify(name)}, ${name}$$)`
-
+  // Top-level choice: emit helpers + per-alternative dispatcher function + top-level rule.
+  args := rule[1]
+  allHelpers := []
+  subFunctions := args.flatMap (arg, i) ->
+    helperName := `${name}$${i}`
+    if typeof arg is "string"
+      return [`//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) { return ${arg}(ctx, state); }\n\n`]
+    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false)
+    allHelpers.push ...helpers
     [
-      ...fns
-      choicesDec
-      `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType}) { return ${body} }`
+      `//@ts-ignore\nfunction ${helperName}(ctx${ctxType}, state${stateType}) {\n`
+      body
+      `\n}\n\n`
     ]
+
+  retType := ruleReturnType(rule)
+  retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+
+  // In TS mode, widen $$final's declared type so successive alternatives
+  // (which may return unrelated literal types, e.g. "+" vs "-") don't collide
+  // on the let binding's inferred narrow type.
+  finalWideDecl := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+  tryBlock := args.map (_, i) ->
+    if i is 0
+      `  let $$final${finalWideDecl} = ${name}$${i}(ctx, state);\n`
+    else
+      `  if (!$$final) $$final = ${name}$${i}(ctx, state);\n`
+
+  [
+    ...allHelpers.flatMap((h) -> [h, "\n\n"])
+    ...subFunctions
+    `//@ts-ignore\nfunction ${name}(ctx${ctxType}, state${stateType})${retAnno} {\n`
+    emitEventEnter(options, name, retType)
+    ...tryBlock
+    emitEventExit(options, name)
+    `\n  return $$final;`
+    `\n}`
+  ]
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
@@ -400,8 +564,6 @@ cjsHead := """
   const {
     $C,
     $E,
-    $EVENT,
-    $EVENT_C,
     $EXPECT,
     $L,
     $N,
@@ -410,14 +572,11 @@ cjsHead := """
     $R,
     $R$0,
     $S,
-    $T,
     $TEXT,
-    $TR,
-    $TS,
-    $TV,
     $Y,
     ParseError,
     Parser,
+    SKIP,
     Validator
   } = require("./machine.js")
 
@@ -464,8 +623,6 @@ mjsHead := """
   import {
     $C,
     $E,
-    $EVENT,
-    $EVENT_C,
     $EXPECT,
     $L,
     $N,
@@ -474,26 +631,26 @@ mjsHead := """
     $R,
     $R$0,
     $S,
-    $T,
     $TEXT,
-    $TR,
-    $TS,
-    $TV,
     $Y,
     ParseError,
+    SKIP,
     Validator,
   } from "./machine.js"
 
 """
 
 tsHead := mjsHead.replace("}", """
+  type MaybeResult,
+  type ParseResult,
   type Parser,
   type ParserContext,
   type ParserOptions,
   type ParseState,
 }
 """) +
-  "\nvoid " + mjsHead.match(/\{[\s\S]+\}/m)![0] // quick-and-dirty way to void all the imports so that TS doesn't complain if they aren't used
+  "\nvoid " + mjsHead.match(/\{[\s\S]+\}/m)![0] + // quick-and-dirty way to void all the imports so that TS doesn't complain if they aren't used
+  "\n// Reference all imported types at value-position so TS doesn't flag them as unused.\nconst _types: MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | undefined = undefined; void _types;\n"
 
 
 tsTail := """

@@ -11,14 +11,16 @@ rm -rf ./parsers
 mkdir -p ./parsers
 
 function compile_parser() {
-  civet source/cli.civet --types --libPath ../source/machine < "$1" > "parsers/$(basename "$1").ts"
+  civet source/cli.civet --types --libPath ./machine.js < "$1" > "parsers/$(basename "$1").ts"
 }
 
-# hera.hera depends on hera-types.civet which depends on machine.ts.
-# Since we're compiling these parsers with the source/ version instead of dist/,
-# we need to compile these, too so they are avaible to the compiled hera.hera.
-civet --compile source/hera-types.civet --output parsers/hera-types.ts
-tsc source/machine.ts --declaration --emitDeclarationOnly --outDir parsers --target es2019 --moduleResolution bundler --ignoreConfig
+# hera.hera depends on hera-types.civet which depends on machine.civet.
+# Copy the built machine artifacts into parsers/ so the generated parsers
+# (and the compiled hera-types.ts) can resolve `./machine.js` against
+# dist/machine.d.ts (emitted by pnpm build).
+cp dist/machine.js parsers/machine.js
+cp dist/machine.d.ts parsers/machine.d.ts
+civet --civet 'rewriteCivetImports=.js' --compile source/hera-types.civet --output parsers/hera-types.ts
 compile_parser source/hera.hera
 
 compile_parser samples/code.hera

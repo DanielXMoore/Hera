@@ -4,9 +4,12 @@ shopt -s globstar
 
 rm -rf dist
 mkdir dist
-./node_modules/.bin/esbuild source/machine.ts --outfile=source/machine.js --bundle --platform=node
-cp source/machine.* dist/
 civet build/esbuild.civet
+
+# main.civet's modImport resolves machine.js alongside its own __dirname, so
+# the file also needs to exist next to source/main.civet for unbuilt (test)
+# runs via the civet/register hook.
+cp dist/machine.js source/machine.js
 
 # Cross-platform version of `sed -i`
 # Assumes that the last parameter is the file being modified

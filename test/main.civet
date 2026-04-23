@@ -220,7 +220,19 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('const Rule$0: Parser<MyType> = $TV')
+    assert tsSrc.includes('function Rule(ctx: ParserContext, state: ParseState): MaybeResult<MyType>')
+
+  it "unions the types of a choice rule whose alternatives all declare return types", ->
+    heraSrc := """
+      Rule
+        "a" ::A ->
+          return "a" as any as A
+        "b" ::B ->
+          return "b" as any as B
+    """
+    tsSrc := compile hera.parse(heraSrc), types: true
+
+    assert tsSrc.includes('function Rule(ctx: ParserContext, state: ParseState): MaybeResult<A | B>')
 
   it "numbered regex groups in mappings", ->
     grammar := """
@@ -992,7 +1004,7 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), language: 'civet')
       assert.match result, /\n  var t = \$0;\n  return \{\n    type: "TypeSuffix",/m
-      assert.match result, /\n  \}\n\}\);/m
+      assert.match result, /\n  \}\n\}\n/m
 
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
       grammar := """
@@ -1031,3 +1043,15 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), types: true)
       assert.match result, /: ParseState/
+
+    it "should emit regex-handler positional extraction without TS casts in JS mode", ->
+      grammar := """
+        Rule
+          /(\\d+)/ ->
+            return $1
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      // Positional extraction for regex handlers uses `$$m_v = $$r.value;`
+      // with no `as any[]` cast in JS mode.
+      assert.match result, /const \$\$m_v = \$\$r\.value;/
+      assert.doesNotMatch result, /as any\[\]/

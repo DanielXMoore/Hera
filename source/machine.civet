@@ -569,7 +569,11 @@ function $TOKEN(name: string, state: ParseState, newState: MaybeResult<Token | s
   return newState as ParseResult<Token>
 }
 
-const SKIP = {}
+/**
+ * Sentinel returned from inlined rule handlers to signal "treat this rule as a
+ * failed match" (reachable via the `$skip` parameter in hera grammars).
+ */
+export const SKIP = {}
 
 // End of machinery
 // Parser specific things below
