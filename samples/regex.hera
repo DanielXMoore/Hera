@@ -25,6 +25,9 @@ EscapeSequence
   Backslash /[^]/ ->
     return '\\' + $2
 
+Backslash
+  "\\"
+
 GroupPrefix
   GroupName
   NonCapturing

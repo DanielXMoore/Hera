@@ -71,6 +71,7 @@ esbuild.build {
   entryPoints: [
     "source/esm.civet"
     "source/hera-types.civet"
+    "source/machine.civet"
     "source/register.civet"
     "source/register/cjs.civet"
     "source/register/tsc/cjs.civet"

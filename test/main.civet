@@ -95,6 +95,104 @@ describe "Hera", ->
     assert typeof rules.Rule[2] is "object" and "f" in rules.Rule[2]
     assert.equal rules.Rule[2].f, "{\n    # comment 1\n    value: 1,\n    # comment 2\n  }.value"
 
+  it "should treat a trailing comment after -> as a block handler", ->
+    // Regression: when the grammar places a `# comment` on the same line as
+    // `->`, Hera used to capture the comment as if it were the inline
+    // handler body and then prepend `return `, producing
+    // `return # comment\n  return 1` in the emitted handler.  The real body
+    // should be the indented block below, and the trailing comment must not
+    // contaminate it.
+    parser := generate """
+      Rule
+        "a" -> # trailing comment
+          return 1
+    """
+    assert.equal parser.parse("a"), 1
+
+  it "should not shadow module-level free variables named state/ctx", ->
+    // Regression: handlers are emitted as an IIFE inside the rule function,
+    // which takes `(ctx, state)` as parameters.  If the handler body
+    // references a module-level free variable that happens to also be named
+    // `state` or `ctx` (common in parsers that keep parse-time mutable
+    // state at module scope — e.g. Civet's parser.hera keeps
+    // `state.indentLevels`, `config`, etc.), the IIFE's lexical scope
+    // captures the rule function's parameter and the handler silently
+    // writes to the wrong object.
+    //
+    // Assert on the emitted code so we don't silently regress: the rule
+    // function's parameters must NOT be plain `ctx` / `state`.
+    code := compile """
+      Rule
+        "a" -> 1
+    """
+    assert.doesNotMatch code, /function Rule\(ctx,\s*state\)/
+    assert.doesNotMatch code, /function Rule\(ctx:\s*\w+,\s*state:\s*\w+\)/
+
+  it "should allow a type annotation with no handler", ->
+    // `Rule\n  Name ::Type` should parse and compile the same as
+    // `Rule\n  Name` — the `::Type` is advisory only and does not introduce
+    // a handler (the rule's return value is the sub-parser's result).
+    grammar := """
+      Rule
+        Inner ::any
+
+      Inner
+        "x" -> 42
+    """
+    parser := generate grammar
+    assert.equal parser.parse("x"), 42
+
+    // With `types: true`, the annotation should flow into the emitted
+    // rule's return type so recursive grammars don't fall back to `unknown`.
+    code := compile grammar, types: true
+    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
+
+  it "should compile multi-line inline handler bodies", ->
+    // Regression: an inline handler body that spans multiple lines
+    // (`-> { ... }` with the object contents below) must emit code that's
+    // valid in indent-sensitive downstream parsers (Civet consumes Hera's
+    // output this way).  The continuation lines of a multi-line inline
+    // handler must be strictly deeper than the IIFE's statement indent, or
+    // Civet treats them as a new statement instead of object properties.
+    //
+    // First: the emitted parser must still work at runtime.
+    parser := generate """
+      Rule
+        "a" -> {
+          type: "X",
+          value: 1,
+        }
+    """
+    assert.deepEqual parser.parse("a"), { type: "X", value: 1 }
+
+    // Second: inspect the emitted code.  After the `return {` line inside
+    // the handler IIFE, every continuation line up to and including the
+    // matching `}` must be indented strictly deeper than the `return`.
+    code := compile """
+      Rule
+        "a" -> {
+          type: "X",
+          value: 1,
+        }
+    """
+    lines := code.split("\n")
+    returnIdx := lines.findIndex (l) -> /^\s+return\s*\{\s*$/.test l
+    assert returnIdx >= 0, "expected a `return {` line in emitted handler"
+    returnIndent := lines[returnIdx].match(/^(\s*)/)![1].length
+    // Find the matching closing `}` (a line with fewer-or-equal indent).
+    closeIdx .= -1
+    for i of [returnIdx + 1...lines.length]
+      indent := lines[i].match(/^(\s*)/)![1].length
+      if /^\s*\}/.test(lines[i]) and indent <= returnIndent
+        closeIdx = i
+        break
+    assert closeIdx > returnIdx, "expected closing `}` after `return {`"
+    for i of [returnIdx + 1...closeIdx]
+      continue if lines[i].trim() is ""
+      indent := lines[i].match(/^(\s*)/)![1].length
+      assert indent > returnIndent,
+        `continuation line ${i} of inline handler must be deeper than return: ${JSON.stringify(lines[i])}`
+
   it "should handle rules that are aliases", ->
     grammar := """
       Grammar
@@ -220,7 +318,19 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('const Rule$0: Parser<MyType> = $TV')
+    assert tsSrc.includes('function Rule($$ctx: ParserContext, $$state: ParseState): MaybeResult<MyType>')
+
+  it "unions the types of a choice rule whose alternatives all declare return types", ->
+    heraSrc := """
+      Rule
+        "a" ::A ->
+          return "a" as any as A
+        "b" ::B ->
+          return "b" as any as B
+    """
+    tsSrc := compile hera.parse(heraSrc), types: true
+
+    assert tsSrc.includes('function Rule($$ctx: ParserContext, $$state: ParseState): MaybeResult<A | B>')
 
   it "numbered regex groups in mappings", ->
     grammar := """
@@ -991,8 +1101,16 @@ describe "Hera", ->
           }
       """
       result := compile(parse(grammar), language: 'civet')
-      assert.match result, /\n  var t = \$0;\n  return \{\n    type: "TypeSuffix",/m
-      assert.match result, /\n  \}\n\}\);/m
+      // Handler bodies inside the IIFE are emitted at 4-space so they're
+      // strictly deeper than the IIFE's 2-space declaration line (civet
+      // uses indent to disambiguate function bodies from object literals).
+      // For multi-line inline handlers the continuation lines are shifted
+      // by bodyIndent (4 extra spaces) past the grammar's original indent
+      // so downstream indent-sensitive parsers read them as the object
+      // body rather than separate statements.
+      assert.match result, /\n    var t = \$0;\n    return \{\n        type: "TypeSuffix",/m
+      // The handler IIFE closes with `  })(...)` at 2-space indent.
+      assert.match result, /\n  \}\)\(/m
 
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
       grammar := """
@@ -1031,3 +1149,16 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), types: true)
       assert.match result, /: ParseState/
+
+    it "should emit regex-handler positional args without TS casts in JS mode", ->
+      grammar := """
+        Rule
+          /(\\d+)/ ->
+            return $1
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      // Regex handlers call the IIFE with `$$value[i]` for each positional
+      // (cached off `$$r.value` once per call); the `as any[]` cast is TS-only
+      // so it must not leak into JS output.
+      assert.match result, /\$\$value\[1\]/
+      assert.doesNotMatch result, /as any\[\]/

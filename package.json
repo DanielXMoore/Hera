@@ -1,10 +1,10 @@
 {
   "name": "@danielx/hera",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Small and fast parsing expression grammars",
   "devDependencies": {
     "@danielx/civet": "0.11.6",
-    "@danielx/hera-previous": "npm:@danielx/hera@0.8.20",
+    "@danielx/hera-previous": "npm:@danielx/hera@0.9.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.5.2",
     "benchmark": "^2.1.4",
@@ -55,7 +55,7 @@
   },
   "scripts": {
     "prepublishOnly": "pnpm build && pnpm test",
-    "benchmark": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet ./perf/benchmark.civet",
+    "benchmark": "civet ./perf/compare.civet",
     "build": "bash build/compile",
     "build:rules": "NODE_OPTIONS='--import=@danielx/hera-previous/register/tsc' civet build/rules.civet",
     "test": "bash ./build/test",
