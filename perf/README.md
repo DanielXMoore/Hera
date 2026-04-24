@@ -3,6 +3,9 @@
 Benchmarks and profiling harness comparing the current working tree against
 the last published release (`@danielx/hera-previous`, pinned in `package.json`).
 
+Both scripts load `dist/main.js`, so run `pnpm build` first — they'll fail
+with `MODULE_NOT_FOUND` otherwise.
+
 ## compare.civet
 
 Throughput benchmark for both compilation and parsing, across a representative

@@ -65,9 +65,13 @@ benchOne := (name, meta) ->
   prevSize := prevHera.compile(prevHera.parse(grammarSrc), module: false).length
   currSize := currHera.compile(currHera.parse(grammarSrc), module: false).length
 
-  // Smoke-test: both must accept the input.
-  prevParser.parse(input)
-  currParser.parse(input)
+  // Smoke-test: both must produce a truthy value for the representative
+  // input, or the benchmark would measure parse failures at microsecond
+  // speed and report misleadingly high throughput.
+  prevResult := prevParser.parse(input)
+  currResult := currParser.parse(input)
+  unless prevResult? and currResult?
+    throw new Error `${name}: smoke-test parse returned ${prevResult} (prev) / ${currResult} (curr) — fix the sample input before benchmarking`
 
   console.error `  benchmarking ${name}...`
 
