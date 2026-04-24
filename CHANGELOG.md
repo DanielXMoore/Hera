@@ -2,6 +2,31 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.0] - 2026-04-23
+
+### Changed (breaking)
+- `&` lookahead assertions now return `true` instead of `undefined`, so a
+  match can be distinguished from a failure when used with `?` (e.g.
+  `(&Pattern)?`) (#65)
+- `!` negative assertions now return `true` instead of `undefined`, mirroring
+  the `&` change for the same reason (#66)
+
+### Fixed
+- Stop treating doubly-indented `#` lines as comments inside handler bodies
+
+### Changed
+- Replaced structural handler combinators with inline handlers (#63)
+- Indent inline handlers by 2 spaces
+- Source mapping for structural handlers
+
+### Docs
+- Document `?` optional return value
+- Document `&` / `!` return values
+
+### Internal
+- LSP converted to Civet (#67)
+- Publishing to npm via GitHub Actions OIDC trusted publishing (#58, #59)
+
 ## [0.8.20] - 2026-04-04
 
 ### Changed
