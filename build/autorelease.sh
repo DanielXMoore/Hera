@@ -27,4 +27,12 @@ else
   fi
   # npm publish performs OIDC trusted publishing on GitHub Actions; pnpm does not.
   npm publish --access public "${TAG_ARGS[@]}"
+
+  GIT_TAG="v$LOCAL"
+  if git ls-remote --exit-code --tags origin "refs/tags/$GIT_TAG" >/dev/null 2>&1; then
+    echo "Tag $GIT_TAG already exists on origin; skipping tag creation."
+  else
+    git tag "$GIT_TAG"
+    git push origin "$GIT_TAG"
+  fi
 fi
