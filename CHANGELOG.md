@@ -2,6 +2,58 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.1] - 2026-04-23
+
+### Fixed
+- Consumers importing from `@danielx/hera/lib` no longer stack-overflow
+  TypeScript's analyzer (#68).  Two things caused the overflow and both are
+  addressed:
+    1. Previously we shipped `dist/machine.ts` (the 708-line runtime source
+       with recursive generics on `$S`/`$C`/`$EVENT_C`).  TypeScript's
+       module resolver prefers `.ts` over `.d.ts`, so every consumer got
+       those types checked in-depth.  We now ship `dist/machine.d.ts` only
+       (no `.ts`), which is a compact declaration file.
+    2. Previously each rule's hoisted parser const was wrapped in
+       `$TS`/`$TR`/`$TV` handler helpers whose generic signatures
+       compounded with the nested combinator types.  The handler is now
+       inlined as an IIFE inside the rule function, so the hoisted const
+       is just `$S(...)` / `$C(...)` / etc. — TS materializes each rule's
+       parser type once as a simple binding.
+  As a consequence every `//@ts-ignore` the compiler used to emit in front
+  of a rule declaration has been dropped.
+
+### Added
+- Grammar: `Name ::Type` (type annotation without a handler) now parses and
+  compiles — the declared type flows into the rule function's return type
+  and the sub-parser's result passes through verbatim
+- Grammar: a trailing `#` comment on the `->` line is treated as a comment
+  rather than swallowed into the inline handler body
+
+### Changed
+- Emission: handlers are inlined as an IIFE within the rule function (was:
+  separate `$TS`/`$TR`/`$TV` helpers at module scope), with parameter types
+  anchored to `typeof $$r.value` so `.reduce`/`.filter` callbacks inside
+  handler bodies get proper positional typing from the parser's concrete
+  result shape
+- Emission: multi-line inline handler bodies (`-> { ... }` spanning lines)
+  now shift continuation lines by the IIFE's indent so downstream indent-
+  sensitive consumers (e.g. Civet parsing Hera's output) read them as the
+  object body rather than separate statements
+- Emission: rule function parameters renamed from `(ctx, state)` to
+  `($$ctx, $$state)` so user handler bodies referencing module-level free
+  variables named `state` or `ctx` (a common pattern in parsers that keep
+  mutable parse state at module scope) resolve to the intended binding
+  rather than to the rule function's parameter
+
+### Performance
+- Parse throughput roughly +1-14% vs 0.9.0 across the sample grammars
+  (url +0.7%, regex +8.3%, coffee +10.1%, math +12.0%, hera_v0_8 +14.3%),
+  thanks to in-place mutation of the `ParseResult` on rule handlers and
+  caching `$$r.loc`/`$$r.value` into locals
+- Compile throughput is slower (~10-22%) and generated code size is larger
+  (+115-185%) because event hooks and tokenize branches are now inlined
+  into each rule function.  Parse is the hot path for consumers.
+
 ## [0.9.0] - 2026-04-23
 
 ### Changed (breaking)
