@@ -39,9 +39,13 @@ compileWith := (hera) ->
 prevParser := compileWith prevHera
 currParser := compileWith currHera
 
-// Smoke
-prevParser.parse input
-currParser.parse input
+// Smoke-test: both must produce a truthy value for this input, or the
+// profile would capture thousands of microsecond-fast parse failures
+// instead of real work.
+prevResult := prevParser.parse input
+currResult := currParser.parse input
+unless prevResult? and currResult?
+  throw new Error `${sample}: smoke-test parse returned ${prevResult} (prev) / ${currResult} (curr) — fix the sample input before profiling`
 
 runProfile := (label, parser) ->
   session := new inspector.Session

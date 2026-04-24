@@ -1,7 +1,7 @@
-// Side-by-side benchmark: @danielx/hera-previous (0.8.20, combinator) vs the
-// current working tree (hybrid-compiler, inline IIFE).  Compiles each sample
-// with both, runs the generated parser on a representative input, and reports
-// parse ops/sec, compile ops/sec, and generated code size.
+// Side-by-side benchmark: `@danielx/hera-previous` (pinned in package.json)
+// vs the current working tree.  Compiles each sample grammar with both,
+// runs the generated parser on a representative input, and reports parse
+// ops/sec, compile ops/sec, and generated code size.
 //
 // Writes a clean summary table to `perf/report.txt` (gitignored) so we can
 // diff successive runs without re-grepping console output.
