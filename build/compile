@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-shopt -s globstar
+shopt -s globstar nullglob
 
 rm -rf dist
 mkdir dist
