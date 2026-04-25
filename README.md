@@ -156,9 +156,13 @@ Both `&` and `!` predicates returns `true`, so that matching vs. not can be dist
 
 **Stringify** (`$`): `$...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
 
+**Return type**: The return type of a choice (or more precisely, its handler)
+can be specified explicitly using `::type` after the choice and before the
+handler (if any — otherwise, it returns the default value).
+This return type gets emitted when generating TypeScript or Civet output.
+
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.
-Optionally, `->` can be preceded by a return type annotation of the form `::type`.
 The most general handler is JavaScript, TypeScript, or Civet code indented
 beneath the choice, which `return`s the desired value for the matched choice.
 Alternatively, a single expression can start on the same line as `->`, and it will be implicitly `return`ed.
