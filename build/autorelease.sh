@@ -16,8 +16,10 @@ LOCAL=$(node -p "require('./package.json').version")
 
 echo "Checking $NAME@$LOCAL"
 
+GIT_TAG="v$LOCAL"
+
 if npm view "$NAME@$LOCAL" version >/dev/null 2>&1; then
-  echo "Skip: this version is already on npm."
+  echo "Skip publish: $NAME@$LOCAL already on npm."
 else
   TAG_ARGS=()
   # Semver: drop +build, then '-' means prerelease (e.g. 1.0.0-rc.1); 1.0.0+meta is stable.
@@ -27,4 +29,13 @@ else
   fi
   # npm publish performs OIDC trusted publishing on GitHub Actions; pnpm does not.
   npm publish --access public "${TAG_ARGS[@]}"
+fi
+
+# Tag independently so a transient tag-push failure can recover on the next run,
+# instead of leaving a published version permanently untagged.
+if git ls-remote --exit-code --tags origin "refs/tags/$GIT_TAG" >/dev/null 2>&1; then
+  echo "Skip tag: $GIT_TAG already exists on origin."
+else
+  git tag "$GIT_TAG"
+  git push origin "$GIT_TAG"
 fi
