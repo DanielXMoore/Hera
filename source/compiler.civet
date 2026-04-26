@@ -269,6 +269,18 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
 
   helpers: any[] := []
 
+  // Unwrap type-annotation-only handlers (`Name ::Type` without `->`)
+  // where rule[2] carries a `t` but no `f`.  `ruleReturnType` already
+  // surfaces the declared type onto the rule function signature.
+  if rule.length is 3 and rule[2] <? "object" and "t" in rule[2] and "f" not in rule[2]
+    // `Choice` wraps a rule with a type-only handler in a sequence ("S"),
+    // which will wrap the result in an array.
+    // Avoid this array wrapper if the length is 1, like the no-handler case.
+    if rule[0] is "S" and rule[1]# is 1
+      rule = rule[1][0]
+    else
+      rule = rule[<2] as HeraAST
+
   // Reference to another rule. This branch only fires for top-level rules
   // (wrapEvent=true); choice-alternative string references are short-circuited
   // in compileRule directly, before we get here.
@@ -283,13 +295,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       ]
     }
 
-  // No handler: return the parser's result verbatim.  Two shapes land
-  // here: (a) `rule.length === 2`, no handler slot at all, and (b) the
-  // type-annotation-only form (`Name ::Type` without `->`) where rule[2]
-  // carries a `t` but no `f`.  In the latter case `ruleReturnType` already
-  // surfaces the declared type onto the rule function signature.
-  typeOnlyHandler := rule.length is 3 and rule[2] and ("t" in rule[2]) and not ("f" in rule[2])
-  if rule.length !== 3 or typeOnlyHandler
+  // No handler: return the parser's result verbatim.  This case includes
+  // type-annotation-only handlers which have already been removed.
+  if rule.length !== 3
     parserExpr := compileOp(rule, name, true, types)
     helpers.push `const ${fnName}$parser = ${parserExpr};`
     body := if wrapEvent
