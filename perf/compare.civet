@@ -10,9 +10,11 @@ Benchmark from benchmark
 fs from fs
 path from path
 { createRequire } from module
+{ fileURLToPath } from url
 
 require := createRequire(import.meta.url)
-prevHera := require "@danielx/hera-previous/dist/main.js"
+prevRoot := process.env.HERA_PREVIOUS_ROOT ?? "@danielx/hera-previous"
+prevHera := require path.join prevRoot, "dist/main.js"
 currHera := require "../dist/main.js"
 
 // Parse inputs per sample.  Each picked to exercise the grammar meaningfully.
@@ -92,7 +94,7 @@ benchOne := (name, meta) ->
 
 // ---- run -------------------------------------------------------------------
 
-prevVersion := require("@danielx/hera-previous/package.json").version
+prevVersion := require(path.join prevRoot, "package.json").version
 currVersion := require("../package.json").version
 timestamp := new Date().toISOString()
 
@@ -128,7 +130,7 @@ makeRow := (cells) ->
 
 lines := [
   `Hera benchmark: prev vs current (hybrid-compiler)`
-  `  prev: @danielx/hera-previous ${prevVersion}`
+  `  prev: ${prevRoot} ${prevVersion}`
   `  curr: working tree ${currVersion}`
   `  ran:  ${timestamp}`
   ""
@@ -143,4 +145,4 @@ report := lines.join("\n")
 // Print to stdout (so `npm run benchmark` still shows results) and write
 // to perf/report.txt for easy diffing between runs.
 console.log report
-fs.writeFileSync path.join(path.dirname(new URL(import.meta.url).pathname), "report.txt"), report
+fs.writeFileSync path.join(path.dirname(fileURLToPath import.meta.url), "report.txt"), report
