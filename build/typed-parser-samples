@@ -10,10 +10,6 @@ export PATH="$PWD/node_modules/.bin:$PATH"
 rm -rf ./parsers
 mkdir -p ./parsers
 
-function compile_parser() {
-  civet source/cli.civet --types --libPath ./machine.js < "$1" > "parsers/$(basename "$1").ts"
-}
-
 # hera.hera depends on hera-types.civet which depends on machine.civet.
 # Copy the built machine artifacts into parsers/ so the generated parsers
 # (and the compiled hera-types.ts) can resolve `./machine.js` against
@@ -21,22 +17,23 @@ function compile_parser() {
 cp dist/machine.js parsers/machine.js
 cp dist/machine.d.ts parsers/machine.d.ts
 civet --civet 'rewriteCivetImports=.js' --compile source/hera-types.civet --output parsers/hera-types.ts
-compile_parser source/hera.hera
 
-compile_parser samples/code.hera
-compile_parser samples/regex.hera
-compile_parser samples/url.hera
-compile_parser samples/coffee.hera
-compile_parser samples/structural-mapping.hera
-compile_parser samples/math.hera
-compile_parser samples/named-params.hera
-compile_parser samples/unary-subtract.hera
-compile_parser samples/types.hera
+# Compile all parser samples and the inference fixture in a single CLI
+# invocation to amortize node + civet loader startup over all inputs.
+# `--module` is required for the inference fixture (issue #73): its paired
+# inference.test-d.ts uses `import { Mini } from './inference.fixture.hera'`
+# which only resolves against ES exports.
+civet source/cli.civet --types --module --libPath ./machine.js -o parsers \
+  source/hera.hera \
+  samples/code.hera \
+  samples/regex.hera \
+  samples/url.hera \
+  samples/coffee.hera \
+  samples/structural-mapping.hera \
+  samples/math.hera \
+  samples/named-params.hera \
+  samples/unary-subtract.hera \
+  samples/types.hera \
+  test/inference.fixture.hera
 
-# Acceptance test for AST type inference (issue #73): compiles in `module`
-# mode with `language=civet` so the consumer's `import { Mini } from
-# './inference.fixture.hera'` resolves, and copies the test-d.ts authoring
-# file into parsers/ so tsc -p tsconfig.parsers.json checks them together.
-civet source/cli.civet --types --module --language civet --libPath ./machine.js \
-  < test/inference.fixture.hera > parsers/inference.fixture.hera.tsx
 cp test/inference.test-d.ts parsers/inference.test-d.ts
