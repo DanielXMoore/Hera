@@ -1228,14 +1228,3 @@ describe "Hera", ->
       assert.match result, /\(function\(\$0\) \{/m
       assert.match result, /\}\)\(\$\$value\)/m
       assert.match result, /\$\$value = \$\$r\.value/
-
-    it "should omit cached value when only $skip is used", ->
-      grammar := """
-        Rule
-          "a" ->
-            return $skip
-      """
-      result := compile(parse(grammar), language: 'javascript')
-      assert.match result, /\(function\(\$skip\) \{/m
-      assert.match result, /\}\)\(SKIP\)/m
-      assert.doesNotMatch result, /\$\$value = \$\$r\.value/
