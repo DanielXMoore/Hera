@@ -407,14 +407,23 @@ ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
   const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
-  // saving a heap allocation per successful rule match.
-  finalAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
-  rValueCast := types ? " as any" : ""
+  // saving a heap allocation per successful rule match.  When no explicit
+  // ::Type is present, type $$final and the assigned $$r as
+  // `MaybeResult<typeof $$m>` so the IIFE's inferred return type flows out
+  // as the rule function's return type.  With `::Type`, the original
+  // `MaybeResult<retType>` / `as any` shapes are preserved unchanged.
+  finalAnno := if types
+    if retType then `: MaybeResult<${retType.trim()}>` else ": MaybeResult<typeof $$m>"
+  else ""
+  rValueCast := if types
+    if retType then " as any" else " as unknown as MaybeResult<typeof $$m>"
+  else ""
+  rMutateCast := types ? " as any" : ""
   body.push `;
   let $$final${finalAnno} = undefined;
   if (($$m${tokenizeCast}) !== SKIP) {
-    ($$r${rValueCast}).value = $$m;
-    $$final = $$r${tokenizeCast};
+    ($$r${rMutateCast}).value = $$m;
+    $$final = $$r${rValueCast};
   }
   ${exitHook("$$final")}
   return $$final;`
