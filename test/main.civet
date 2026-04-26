@@ -1206,3 +1206,39 @@ describe "Hera", ->
       // so it must not leak into JS output.
       assert.match result, /\$\$value\[1\]/
       assert.doesNotMatch result, /as any\[\]/
+
+    it "should omit unused handler arguments and cached locals", ->
+      grammar := """
+        Rule
+          "a" ->
+            return 1
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(\) \{/m
+      assert.match result, /\}\)\(\)/m
+      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
+      assert.doesNotMatch result, /\$\$value = \$\$r\.value/
+
+    it "should omit cached loc when only value arguments are used", ->
+      grammar := """
+        Rule
+          "a" ->
+            return $0
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(\$0\) \{/m
+      assert.match result, /\}\)\(\$\$value\)/m
+      assert.match result, /\$\$value = \$\$r\.value/
+      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
+
+    it "should omit cached loc and value when only $skip is used", ->
+      grammar := """
+        Rule
+          "a" ->
+            return $skip
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(\$skip\) \{/m
+      assert.match result, /\}\)\(SKIP\)/m
+      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
+      assert.doesNotMatch result, /\$\$value = \$\$r\.value/

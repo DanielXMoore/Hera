@@ -121,6 +121,10 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
 regExpHandlerParams := ["$skip", "$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"]
 regularHandlerParams := ["$skip", "$loc", "$0", "$1"]
 
+usesIdentifier := (text: string, identifier: string): boolean ->
+  escaped := identifier.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
+  new RegExp(`(?<!\\p{ID_Continue})${escaped}(?!\\p{ID_Continue})`, "u").test text
+
 // Compute the declared return type of a rule, if any.
 // For top-level choice: union of sub-rule types (only if all are annotated).
 // For single-body: the handler's h.t.
@@ -373,6 +377,19 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     callArgs = ["SKIP", "$$loc", "$$value", "$$value"]
     namedParameters = getParameterDeclaration(rule, 0)
 
+  // Only pass the handler parameters that the handler text appears to use.
+  // We use a lexical regex rather than parsing to keep things fast/simple.
+  // Comments and strings will count as usage, but this is mostly harmless
+  // (just reduces optimization).
+  usedParameterIndexes := parameters.flatMap (p, i) ->
+    if usesIdentifier(h.f, p) or usesIdentifier(namedParameters, p)
+      [i]
+    else
+      []
+  parameters = usedParameterIndexes.map (i) -> parameters[i]
+  paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
+  callArgs = usedParameterIndexes.map (i) -> callArgs[i]
+
   // Emit the IIFE at the rule function's top-level indent (2-space) so the
   // handler body (which comes in at 4-space from the grammar source) is
   // strictly deeper than the IIFE's declaration line — civet's parser
@@ -406,13 +423,18 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
+  localDeclarations := []
+  if parameters.some (p) -> usesIdentifier(p, "$loc")
+    localDeclarations.push "$$loc = $$r.loc"
+  if callArgs.some (arg) -> usesIdentifier(arg, "$$value")
+    localDeclarations.push "$$value = $$r.value"
+  localLine := if localDeclarations.length then `  const ${localDeclarations.join(", ")};\n` else ""
   body.push `  const $$r = ${fnName}$parser($$ctx, $$state);
   if (!$$r) {
     ${exitHook("undefined")}
     return undefined;
   }
-${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
-  const $$m = `
+${tokenBranch}${localLine}  const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit
