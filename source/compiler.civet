@@ -402,6 +402,11 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   }
 ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
   const $$m = `
+  // When no ::Type: wrap the IIFE in $ID<const T> so TypeScript preserves
+  // string literal types in the handler return (e.g. `type: "Block"` stays
+  // `"Block"` instead of being widened to `string`).
+  if types and not retType
+    body.push "$ID("
   body.push iife
   // When an explicit ::Type is present: mutate $$r.value in place (avoids a
   // heap allocation per match) and cast through MaybeResult<T>.
@@ -415,6 +420,11 @@ ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
     ($$r${rValueCast}).value = $$m;
     $$final = $$r${tokenReturnCast};
   }
+  ${exitHook("$$final")}
+  return $$final;`
+  else if types
+    body.push `);
+  const $$final = $$m !== SKIP ? { ...$$r, value: $$m } : undefined;
   ${exitHook("$$final")}
   return $$final;`
   else
@@ -587,6 +597,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
+  // $ID uses a TypeScript 5.0+ `const` type parameter to prevent string
+  // literal widening (e.g. `type: "Block"` stays `"Block"` not `string`).
+  // It is referenced by handler IIFEs whose rules carry no explicit ::Type.
+  // `void $ID` silences "noUnusedLocals" for grammars where every rule
+  // happens to have an explicit annotation.
+  tsUtils := if types then "function $ID<const T>(x: T): T { return x }\nvoid $ID;\n\n" else ""
+
   code := generate [
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
@@ -595,6 +612,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     "\n\n"
     reDefSource
     "\n\n"
+    tsUtils
     body
     "\n\n"
     tail
