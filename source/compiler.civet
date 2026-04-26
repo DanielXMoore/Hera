@@ -341,17 +341,17 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // tighter cast).
   tokenReturnCast := if types and not retType then " as never" else tokenizeCast
 
-  // Per-shape: params, their types (against typeof $$value), and call args.
-  // We cache `$$r`'s `loc`/`value` into locals `$$loc`/`$$value` before
-  // building the handler call, so V8 sees direct variable reads instead of
-  // repeated `$$r.loc` / `$$r.value[i]` property lookups each call.
+  // Per-shape: params, their types, and call args.  If any retained arg needs
+  // parser value access, cache `$$r.value` into `$$value` before building the
+  // handler call, so V8 sees direct variable reads instead of repeated
+  // `$$r.value[i]` property lookups.
   let parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string
   namedParameters = ""
   if rule[0] is "S"
     n := rule[1].length
     parameters = ["$skip", "$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
     paramTypes = ["typeof SKIP", "Loc", "typeof $$value"]
-    callArgs = ["SKIP", "$$loc", "$$value"]
+    callArgs = ["SKIP", "$$r.loc", "$$value"]
     for (let i = 0; i < n; i++)
       paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
@@ -367,14 +367,14 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     // length.  In JS mode the cast is elided — `as any[]` isn't valid JS.
     /* c8 ignore next */
     valueExpr := if types then "($$value as any[])" else "$$value"
-    callArgs = ["SKIP", "$$loc"]
+    callArgs = ["SKIP", "$$r.loc"]
     for (let i = 0; i < 10; i++)
       callArgs.push `${valueExpr}[${i}]`
   else
     parameters = regularHandlerParams.slice()
     // Single-value shape: `$0` and `$1` both bind to the whole parser value.
     paramTypes = ["typeof SKIP", "Loc", "typeof $$value", "typeof $$value"]
-    callArgs = ["SKIP", "$$loc", "$$value", "$$value"]
+    callArgs = ["SKIP", "$$r.loc", "$$value", "$$value"]
     namedParameters = getParameterDeclaration(rule, 0)
 
   // Only pass the handler parameters that the handler text appears to use.
@@ -389,6 +389,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parameters = usedParameterIndexes.map (i) -> parameters[i]
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
+  valueDecl := if callArgs.some((arg) -> usesIdentifier(arg, "$$value")) then "  const $$value = $$r.value;\n" else ""
 
   // Emit the IIFE at the rule function's top-level indent (2-space) so the
   // handler body (which comes in at 4-space from the grammar source) is
@@ -423,18 +424,12 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  localDeclarations := []
-  if parameters.some (p) -> usesIdentifier(p, "$loc")
-    localDeclarations.push "$$loc = $$r.loc"
-  if callArgs.some (arg) -> usesIdentifier(arg, "$$value")
-    localDeclarations.push "$$value = $$r.value"
-  localLine := if localDeclarations.length then `  const ${localDeclarations.join(", ")};\n` else ""
   body.push `  const $$r = ${fnName}$parser($$ctx, $$state);
   if (!$$r) {
     ${exitHook("undefined")}
     return undefined;
   }
-${tokenBranch}${localLine}  const $$m = `
+${tokenBranch}${valueDecl}  const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit

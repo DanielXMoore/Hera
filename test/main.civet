@@ -1216,10 +1216,9 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'javascript')
       assert.match result, /\(function\(\) \{/m
       assert.match result, /\}\)\(\)/m
-      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
       assert.doesNotMatch result, /\$\$value = \$\$r\.value/
 
-    it "should omit cached loc when only value arguments are used", ->
+    it "should cache parser value when value arguments are used", ->
       grammar := """
         Rule
           "a" ->
@@ -1229,9 +1228,8 @@ describe "Hera", ->
       assert.match result, /\(function\(\$0\) \{/m
       assert.match result, /\}\)\(\$\$value\)/m
       assert.match result, /\$\$value = \$\$r\.value/
-      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
 
-    it "should omit cached loc and value when only $skip is used", ->
+    it "should omit cached value when only $skip is used", ->
       grammar := """
         Rule
           "a" ->
@@ -1240,5 +1238,4 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'javascript')
       assert.match result, /\(function\(\$skip\) \{/m
       assert.match result, /\}\)\(SKIP\)/m
-      assert.doesNotMatch result, /\$\$loc = \$\$r\.loc/
       assert.doesNotMatch result, /\$\$value = \$\$r\.value/
