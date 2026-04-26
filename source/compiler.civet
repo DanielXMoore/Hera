@@ -205,16 +205,14 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
 //
 // `parameters` / `paramTypes` / `callArgs` are parallel arrays: the formal
 // parameter names, their TS types (referencing `typeof $$value[i]`), and the
-// matching argument expressions used to invoke the IIFE.  `namedParameters`
-// is any `var foo = $N;` aliasing the grammar's `:name` markers, emitted at
-// the top of the IIFE body.
+// matching argument expressions used to invoke the IIFE.
 //
 // Civet's indent-sensitive parser is happy as long as the IIFE body sits at
 // a strictly-deeper indent than the IIFE declaration.  We rely on the rule
 // function using early returns for the null/tokenize paths so the IIFE
 // lands at 2-space indent, while the handler body comes in at 4-space from
 // the grammar's source indent.
-emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string, baseIndent: string) ->
+emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string) ->
   { types } := options
   handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
 
@@ -245,19 +243,20 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   else
     handlerToken
 
-  // `void $skip, $loc, $0, ...` references every formal parameter so
+  // `void $loc, $0, ...` references generated positional parameters so
   // `noUnusedParameters` is silenced without wrapping the entire IIFE in a
   // `//@ts-ignore` (which would swallow real errors in the handler body).
+  // Named parameters are intentionally left out so TS can still flag them
+  // when the regex usage scan only saw the name in a comment/string.
   // Tried `if (false) { …refs… }` — benchmarked slower: the extra branch
   // isn't free even when always-false, while V8 strips the void-comma
   // expression cleanly once the function is JIT-compiled.
-  voidLine := if types and parameters.length then `${bodyIndent}void ${parameters.join(", ")};\n` else ""
-  namedBlock := namedParameters ? `${bodyIndent}${namedParameters}\n` : ""
+  voidParameters := parameters.filter (p) => p.startsWith "$"
+  voidLine := if types and voidParameters.length then `${bodyIndent}void ${voidParameters.join(", ")};\n` else ""
 
   [
     `(function(${typedParameters.join(", ")})${handlerRetAnno} {\n`
     voidLine
-    namedBlock
     handlerBody
     `\n${baseIndent}})(${callArgs.join(", ")})`
   ]
@@ -345,8 +344,16 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // parser value access, cache `$$r.value` into `$$value` before building the
   // handler call, so V8 sees direct variable reads instead of repeated
   // `$$r.value[i]` property lookups.
-  let parameters: string[], paramTypes: string[], callArgs: string[], namedParameters: string
-  namedParameters = ""
+  let parameters: string[], paramTypes: string[], callArgs: string[]
+
+  addNamedParameter := (name: string | undefined, paramType: string, callArg: string) ->
+    return unless name
+    if parameters.includes(name)
+      throw new Error `duplicate named parameter: ${name}`
+    parameters.push name
+    paramTypes.push paramType
+    callArgs.push callArg
+
   if rule[0] is "S"
     n := rule[1].length
     parameters = ["$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
@@ -355,8 +362,8 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     for (let i = 0; i < n; i++)
       paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
-    namedParameters = rule[1].map (node, i) -> getParameterDeclaration(node, i+1)
-    .join("")
+    for i of [0...n]
+      addNamedParameter getNamedVariable(rule[1][i][0]), `typeof $$value[${i}]`, `$$value[${i}]`
   else if rule[0] is "R"
     parameters = regExpHandlerParams.slice()
     // RegExpMatchArray positional typing (and reTupleType short tuples) don't
@@ -375,14 +382,14 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     // Single-value shape: `$0` and `$1` both bind to the whole parser value.
     paramTypes = ["Loc", "typeof $$value", "typeof $$value"]
     callArgs = ["$$r.loc", "$$value", "$$value"]
-    namedParameters = getParameterDeclaration(rule, 0)
+    addNamedParameter getNamedVariable(rule[0]), "typeof $$value", "$$value"
 
   // Only pass the handler parameters that the handler text appears to use.
   // We use a lexical regex rather than parsing to keep things fast/simple.
   // Comments and strings will count as usage, but this is mostly harmless
   // (just reduces optimization).
   usedParameterIndexes := parameters.flatMap (p, i) ->
-    if usesIdentifier(h.f, p) or usesIdentifier(namedParameters, p)
+    if usesIdentifier(h.f, p)
       [i]
     else
       []
@@ -395,7 +402,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // handler body (which comes in at 4-space from the grammar source) is
   // strictly deeper than the IIFE's declaration line — civet's parser
   // needs that for block vs object-literal disambiguation.
-  iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, namedParameters, "  ")
+  iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
 
   // Compose the rule body with early returns for the null / tokenize /
   // skip paths; all exits route through a single exit-hook helper.  The
@@ -549,18 +556,7 @@ compileExports := (ruleNames: string[], module: boolean) ->
     .join("\n")
 
 /**
-Get a JS declaration string for nodes that have named parameters.
-*/
-getParameterDeclaration := (node: HeraAST, i: number) ->
-  name := getNamedVariable node[0]
-
-  if name
-    `var ${name} = $${i};`
-  else
-    ""
-
-/**
-Get a JS declaration string for nodes that have named parameters.
+Get the named handler parameter, if any, from an operator wrapper.
 */
 getNamedVariable := (op: HeraAST[0]): string | undefined ->
   if typeof op is "object" and "name" in op
