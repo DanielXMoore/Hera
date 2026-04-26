@@ -149,9 +149,11 @@ ruleReturnType := (rule: HeraAST): string | undefined ->
 // Civet's own parser.hera output.
 emitEventEnter := (options: CompilerOptions, name: string, retType: string | undefined): string ->
   { types } := options
-  // Cast the cache return so the rule function's inferred return type matches
-  // `Parser<T>` (i.e. `MaybeResult<T>`), not `unknown` from `ParserContext.enter`.
-  retAnno := if types then ` as MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+  // When an explicit ::Type is declared, cast the cache return to MaybeResult<T>
+  // so the rule's inferred return type stays consistent with Parser<T>.
+  // When no type is declared, cast to `never` so this early-return path doesn't
+  // contribute `unknown` (from cache?: unknown) to the inferred union.
+  retAnno := if types then (if retType then ` as MaybeResult<${retType.trim()}>` else " as never") else ""
   enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
   eventDataType := if types then ": unknown" else ""
   ```
@@ -315,7 +317,14 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parserExpr := compileOp(rule, name, false, types)
   helpers.push `const ${fnName}$parser = ${parserExpr};`
 
-  tokenizeCast := types ? " as any" : ""
+  // Casts for TS mode — vary by whether an explicit ::Type is declared.
+  // With retType: "as any" (old behaviour, consistent with MaybeResult<T>).
+  // Without retType: tokenize-path returns cast to "as never" so they don't
+  // widen the inferred return type union; SKIP comparison needs no cast since
+  // the handler's return type always overlaps with SKIP's {} type.
+  tokenReturnCast := if types then (if retType then " as any" else " as never") else ""
+  skipCast := types and retType ? " as any" : ""
+  rValueCast := types ? " as any" : ""
 
   // Per-shape: params, their types (against typeof $$value), and call args.
   // We cache `$$r`'s `loc`/`value` into locals `$$loc`/`$$value` before
@@ -378,10 +387,10 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     const $$tok${tokTokenType} = $$r;
     $$tok.value = { type: ${nameLit}, children: [$$r.value].flat(), token: $$state.input.substring($$state.pos, $$r.pos), loc: $$r.loc };
     ${exitHook("$$tok")}
-    return $$tok${tokenizeCast};
+    return $$tok${tokenReturnCast};
   }\n`
   else
-    `  if ($$ctx.tokenize) return $$r${tokenizeCast};\n`
+    `  if ($$ctx.tokenize) return $$r${tokenReturnCast};\n`
 
   body := []
   if wrapEvent
@@ -394,16 +403,23 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
 ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
   const $$m = `
   body.push iife
-  // Mutate $$r.value in place instead of allocating a fresh ParseResult,
-  // saving a heap allocation per successful rule match.
-  finalAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
-  rValueCast := types ? " as any" : ""
-  body.push `;
+  // When an explicit ::Type is present: mutate $$r.value in place (avoids a
+  // heap allocation per match) and cast through MaybeResult<T>.
+  // When no ::Type: use a spread so TS infers `{ ...ParseResult, value: HandlerReturn }`,
+  // which lets ReturnType<typeof Rule>["value"] resolve to the handler's precise type.
+  if types and retType
+    finalAnno := `: MaybeResult<${retType.trim()}>`
+    body.push `;
   let $$final${finalAnno} = undefined;
-  if (($$m${tokenizeCast}) !== SKIP) {
+  if (($$m${skipCast}) !== SKIP) {
     ($$r${rValueCast}).value = $$m;
-    $$final = $$r${tokenizeCast};
+    $$final = $$r${tokenReturnCast};
   }
+  ${exitHook("$$final")}
+  return $$final;`
+  else
+    body.push `;
+  const $$final = $$m !== SKIP ? { ...$$r, value: $$m } : undefined;
   ${exitHook("$$final")}
   return $$final;`
   return { helpers, body }
