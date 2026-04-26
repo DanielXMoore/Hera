@@ -32,3 +32,11 @@ compile_parser samples/math.hera
 compile_parser samples/named-params.hera
 compile_parser samples/unary-subtract.hera
 compile_parser samples/types.hera
+
+# Acceptance test for AST type inference (issue #73): compiles in `module`
+# mode with `language=civet` so the consumer's `import { Mini } from
+# './inference.fixture.hera'` resolves, and copies the test-d.ts authoring
+# file into parsers/ so tsc -p tsconfig.parsers.json checks them together.
+civet source/cli.civet --types --module --language civet --libPath ./machine.js \
+  < test/inference.fixture.hera > parsers/inference.fixture.hera.tsx
+cp test/inference.test-d.ts parsers/inference.test-d.ts

@@ -1,0 +1,16 @@
+Mini
+  Block
+  Num
+
+Block
+  "{" Num "}" -> {
+    type: "Block" as const,
+    children: $0,
+  }
+
+Num
+  /[0-9]+/ -> {
+    type: "Num" as const,
+    value: parseInt($1),
+    children: [$1],
+  }
