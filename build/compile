@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-shopt -s globstar
+shopt -s globstar nullglob
 
 rm -rf dist
 mkdir dist
@@ -30,8 +30,8 @@ function sed_i() {
 }
 
 # hack to rewrite require extension
-# adjust .js files
-for f in dist/**/*.js dist/hera; do
+# adjust .js and .d.ts files
+for f in dist/**/*.js dist/**/*.d.ts dist/hera; do
   # replace all .civet imports with .js
   sed_i 's/\.civet"/.js"/g' "$f"
 done
