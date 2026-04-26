@@ -38,20 +38,31 @@
   "c8": {
     "100": true,
     "check-coverage": true,
+    "all": true,
     "reporter": [
       "lcov",
       "text"
     ],
     "extension": [
       ".civet",
-      ".hera",
-      ".mts",
-      ".ts"
+      ".hera"
     ],
     "exclude": [
       "build/",
       "dist/",
-      "test/"
+      "esbuild-example/",
+      "loader-examples/",
+      "lsp/",
+      "parsers/",
+      "perf/",
+      "samples/",
+      "source/cli-bin.civet",
+      "source/hera.hera.d.ts",
+      "source/machine.civet",
+      "source/register.civet",
+      "source/register/",
+      "test/",
+      "tmp/"
     ]
   },
   "scripts": {

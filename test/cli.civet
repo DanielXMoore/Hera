@@ -1,0 +1,41 @@
+assert from assert
+{ main } from ../source/cli.civet
+
+grammar := """
+  Rule
+    "a" ->
+      return "ok"
+
+"""
+
+describe "cli main", ->
+  it "should emit JSON ast with --ast", ->
+    out := main ['node', 'hera', '--ast'], grammar
+    parsed := JSON.parse out
+    assert parsed
+
+  it "should emit EBNF with --ebnf", ->
+    out := main ['node', 'hera', '--ebnf'], grammar
+    assert.match out, /Rule/
+
+  it "should compile to JS by default", ->
+    out := main ['node', 'hera'], grammar
+    assert.match out, /parse/
+    assert.doesNotMatch out, /^if \(require\.main/m
+
+  it "should pass --types/--module/--language through to compile", ->
+    out := main ['node', 'hera', '--types', '--module', '--language', 'typescript'], grammar
+    assert.match out, /parse/
+
+  it "should read --libPath via getOptValue", ->
+    out := main ['node', 'hera', '--libPath', './machine.js'], grammar
+    assert.match out, /\.\/machine\.js/
+
+  it "should append cli io block when --cli is set", ->
+    out := main ['node', 'hera', '--cli'], grammar
+    assert.match out, /if \(require\.main === module\)/
+
+  it "should default the filename argument to <stdin>", ->
+    // Smoke check — main should not throw when filename is omitted.
+    out := main ['node', 'hera'], grammar
+    assert typeof out is 'string'

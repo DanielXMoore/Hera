@@ -34,7 +34,7 @@ buildOrWatch({
 }).catch -> process.exit 1
 
 buildOrWatch({
-  entryPoints: ['source/cli.civet']
+  entryPoints: ['source/cli-bin.civet']
   bundle: false
   format: "cjs"
   sourcemap
@@ -69,6 +69,7 @@ esbuild.build {
 
 esbuild.build {
   entryPoints: [
+    "source/cli.civet"
     "source/esm.civet"
     "source/hera-types.civet"
     "source/machine.civet"
