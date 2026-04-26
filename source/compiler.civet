@@ -417,10 +417,12 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
   if not isTopChoice
     retType := ruleReturnType(rule)
-    // Always annotate return type in TS mode so recursive rules (e.g. expression
-    // grammars where rules reference each other) don't fall back to `unknown`
-    // during TS's circular-inference resolution.
-    retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+    // Annotate return type in TS mode only when an explicit ::Type is present.
+    // Without an annotation, TS infers the precise return type from the body,
+    // enabling consumers to use ReturnType<typeof Rule> for AST node types.
+    // When ::Type IS present, the annotation anchors recursive-rule inference
+    // (preventing `unknown` fallback during circular resolution).
+    retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
     { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
@@ -445,17 +447,22 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     ]
 
   retType := ruleReturnType(rule)
-  retAnno := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
+  // Only emit the return annotation when an explicit ::Type is known.
+  retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
 
-  // In TS mode, widen $$final's declared type so successive alternatives
-  // (which may return unrelated literal types, e.g. "+" vs "-") don't collide
-  // on the let binding's inferred narrow type.
-  finalWideDecl := if types then `: MaybeResult<${retType ? retType.trim() : "any"}>` else ""
-  tryBlock := args.map (_, i) ->
-    if i is 0
-      `  let $$final${finalWideDecl} = ${name}$${i}($$ctx, $$state);\n`
-    else
-      `  if (!$$final) $$final = ${name}$${i}($$ctx, $$state);\n`
+  // When an explicit return type is present, widen $$final so successive
+  // alternatives (which may return unrelated literal types) don't collide on
+  // the let binding's narrow type.  When no explicit type exists, use ??
+  // chaining so TS infers the union of each alternative's return type.
+  tryBlock := if types and retType
+    finalWideDecl := `: MaybeResult<${retType.trim()}>`
+    args.map (_, i) ->
+      if i is 0
+        `  let $$final${finalWideDecl} = ${name}$${i}($$ctx, $$state);\n`
+      else
+        `  if (!$$final) $$final = ${name}$${i}($$ctx, $$state);\n`
+  else
+    [`  const $$final = ${args.map((_, i) -> `${name}$${i}($$ctx, $$state)`).join(" ??\n    ")};\n`]
 
   [
     ...allHelpers.flatMap((h) -> [h, "\n\n"])
