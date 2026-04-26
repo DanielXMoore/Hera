@@ -1,28 +1,28 @@
 import { Mini, Block, Num } from "./inference.fixture.hera"
 
-// 1. The rule's return type carries the inferred AST shape.
+// Type-level assertion helpers, mirroring the core of TypeStrong/ts-expect.
+const expectType = <T>(_: T): void => void 0
+type TypeEqual<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)
+    ? true : false
+
 type MiniValue = NonNullable<ReturnType<typeof Mini>>["value"]
 type BlockValue = NonNullable<ReturnType<typeof Block>>["value"]
 type NumValue = NonNullable<ReturnType<typeof Num>>["value"]
 
-// 2. Discriminator literals survive inference.
-const blockType: "Block" = (null as unknown as BlockValue).type
-const numType: "Num" = (null as unknown as NumValue).type
-void blockType, numType
+// Discriminator literals survive inference (not widened to `string`).
+expectType<"Block">((null as unknown as BlockValue).type)
+expectType<"Num">((null as unknown as NumValue).type)
 
-// 3. Mini is the union of its alternatives.
-const m = null as unknown as MiniValue
+// Mini is exactly the union of its alternatives' value types.
+expectType<TypeEqual<MiniValue, BlockValue | NumValue>>(true)
+
+// Discriminated narrowing: each branch only sees its own fields.
+declare const m: MiniValue
 if (m.type === "Block") {
-  const c: unknown[] = m.children   // narrowed to Block
-  void c
-} else {
-  const v: number = m.value         // narrowed to Num
-  void v
-}
-
-// 4. Cross-arm field access is rejected.
-const wrong = m.type === "Block"
+  expectType<unknown[]>(m.children)
   // @ts-expect-error — Block has no `value` field
-  ? m.value
-  : null
-void wrong
+  m.value
+} else {
+  expectType<number>(m.value)
+}

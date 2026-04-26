@@ -408,21 +408,19 @@ ${tokenBranch}  const $$loc = $$r.loc, $$value = $$r.value;
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit
-  // ::Type is present, type $$final and the assigned $$r as
-  // `MaybeResult<typeof $$m>` so the IIFE's inferred return type flows out
-  // as the rule function's return type.  With `::Type`, the original
-  // `MaybeResult<retType>` / `as any` shapes are preserved unchanged.
+  // ::Type is present, annotate $$final as `MaybeResult<typeof $$m>` so the
+  // IIFE's inferred return type flows out as the rule function's return
+  // type.  $$final's annotation does the typing work — the `as any` on the
+  // assignment from $$r is just to bypass the structural mismatch (TS still
+  // believes $$r.value has its old shape pre-mutation).
   finalAnno := if types
     if retType then `: MaybeResult<${retType.trim()}>` else ": MaybeResult<typeof $$m>"
   else ""
-  rValueCast := if types
-    if retType then " as any" else " as unknown as MaybeResult<typeof $$m>"
-  else ""
-  rMutateCast := types ? " as any" : ""
+  rValueCast := types ? " as any" : ""
   body.push `;
   let $$final${finalAnno} = undefined;
   if (($$m${tokenizeCast}) !== SKIP) {
-    ($$r${rMutateCast}).value = $$m;
+    ($$r${rValueCast}).value = $$m;
     $$final = $$r${rValueCast};
   }
   ${exitHook("$$final")}

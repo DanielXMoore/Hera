@@ -2,6 +2,25 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## Unreleased
+
+### Changed
+- Rules without an explicit `::Type` are no longer emitted with a
+  `MaybeResult<any>` return annotation.  TypeScript now infers the
+  precise return type from the rule body, so consumers can read the AST
+  shape via `ReturnType<typeof Rule>` (#73).
+- **Migration note**: grammars with mutual recursion (e.g.
+  `Expression → Primary → Expression`) now need a single `::Type`
+  annotation somewhere in the cycle to break TypeScript's circular
+  inference.  `::any -> $1` works as a minimal pass-through; using a
+  more specific type gives consumers tighter inference.  Without the
+  annotation, `tsc --types` reports `implicitly has return type 'any'`
+  on the cyclic rule(s).
+- Grammar authors who want literal-type discriminators (e.g.
+  `type: "Block"` rather than `type: string`) can now write
+  `type: "Block" as const` in the handler return — the IIFE's inferred
+  return type flows out as the rule's return type.
+
 ## [0.9.2] - 2026-04-26
 
 ### Fixed
