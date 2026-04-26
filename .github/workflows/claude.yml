@@ -44,7 +44,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          prompt: "This is the Civet programming language compiler. Source is in source/ written in .civet files, compiled to dist/. Run `pnpm build` before `pnpm test`."
+          prompt: "This is Hera, a PEG parser generator. Run `pnpm build` before `pnpm test`."
 
           additional_permissions: |
             actions: read
@@ -56,3 +56,11 @@ jobs:
           claude_args: |
             --allowedTools Edit,MultiEdit,Write,Read,Glob,Grep,LS,Bash(git:*),Bash(pnpm build:*),Bash(pnpm test:*),Bash(gh pr:*),Bash(gh issue:*)
             --max-turns 100
+
+      - name: Upload Claude log
+        if: always() && steps.claude.outputs.execution_file
+        run: aws s3 cp "${{ steps.claude.outputs.execution_file }}" "s3://${{ secrets.CLAUDE_LOG_BUCKET }}/claude-logs/${{ github.repository }}/${{ github.run_id }}-${{ github.run_attempt }}.log"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
