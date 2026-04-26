@@ -147,6 +147,26 @@ describe "Hera", ->
     code := compile grammar, types: true
     assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
 
+  it "should allow a type annotation with no handler followed by comment", ->
+    grammar := """
+      Rule
+        Inner ::any
+        # Comment
+        Another
+
+      Inner
+        "x" -> 42
+      Another
+        "x" -> 43
+    """
+    parser := generate grammar
+    assert.equal parser.parse("x"), 42
+
+    // With `types: true`, the annotation should flow into the emitted
+    // rule's return type so recursive grammars don't fall back to `unknown`.
+    code := compile grammar, types: true
+    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
+
   it "should compile multi-line inline handler bodies", ->
     // Regression: an inline handler body that spans multiple lines
     // (`-> { ... }` with the object contents below) must emit code that's

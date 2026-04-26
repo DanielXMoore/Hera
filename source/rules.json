@@ -358,12 +358,12 @@
               },
               "TypeAnnotation"
             ],
-            "NonCommentEOS"
+            "EOS"
           ],
           {
             "f": "    return { t } as Handler",
             "$loc": {
-              "pos": 1975,
+              "pos": 1965,
               "length": 29
             }
           }
@@ -386,7 +386,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 2210,
+              "pos": 2200,
               "length": 49
             },
             "inline": true
@@ -400,7 +400,7 @@
           {
             "f": "    return {\n      f: $1.trimEnd(),\n      $loc,\n      inline: true,\n    }",
             "$loc": {
-              "pos": 2300,
+              "pos": 2290,
               "length": 75
             },
             "t": " Handler "
@@ -414,7 +414,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 2438,
+          "pos": 2428,
           "length": 64
         },
         "t": " Handler "
@@ -467,7 +467,7 @@
       {
         "f": "    return $1 + $2.join(\"\") + ($3 ?? \"\")",
         "$loc": {
-          "pos": 2985,
+          "pos": 2975,
           "length": 42
         },
         "t": " string "
@@ -509,7 +509,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 3291,
+          "pos": 3281,
           "length": 4
         },
         "inline": true
@@ -546,7 +546,7 @@
       {
         "f": "[\"L\", $1]",
         "$loc": {
-          "pos": 3411,
+          "pos": 3401,
           "length": 11
         },
         "inline": true
@@ -581,7 +581,7 @@
           {
             "f": "[\"R\", $3]",
             "$loc": {
-              "pos": 3474,
+              "pos": 3464,
               "length": 10
             },
             "inline": true
@@ -593,7 +593,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3515,
+              "pos": 3505,
               "length": 10
             },
             "inline": true
@@ -605,7 +605,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3534,
+              "pos": 3524,
               "length": 11
             },
             "inline": true
@@ -749,7 +749,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 4705,
+          "pos": 4695,
           "length": 4
         },
         "inline": true
@@ -764,7 +764,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 4765,
+          "pos": 4755,
           "length": 73
         },
         "t": " CodeBlockNode "

@@ -95,7 +95,7 @@ Handling
     return handler as Handler
   # Type annotation without a handler: declares the rule's return type
   # while leaving the sub-parser's result to flow through verbatim.
-  Space* TypeAnnotation:t NonCommentEOS ->
+  Space* TypeAnnotation:t EOS ->
     return { t } as Handler
 
 HandlingExpression
