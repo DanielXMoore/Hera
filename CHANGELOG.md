@@ -2,6 +2,12 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.2] - 2026-04-26
+
+### Fixed
+- Grammar: `Name ::Type` rules without handlers now allow following `#`
+  comment lines (#74)
+
 ## [0.9.1] - 2026-04-23
 
 ### Fixed
