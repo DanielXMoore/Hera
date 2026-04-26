@@ -50,7 +50,8 @@ describe "util", ->
     assert.deepEqual normalizeHandlerLocs(parsedRules), normalizeHandlerLocs(heraGrammarAST.rules)
 
     src := readFile("source/hera.hera")
-    assert.equal normalizeGrammarSource(grammar), normalizeGrammarSource(src)
+    assert.equal normalizeGrammarSource(grammar), normalizeGrammarSource(src),
+      "Do you need to run `pnpm build:rules` to update source/rules.json?"
 
   it "should convert grammar rules to ebnf", ->
     grammarToEBNF(heraGrammarAST.rules)
