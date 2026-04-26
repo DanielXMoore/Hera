@@ -290,6 +290,11 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // surfaces the declared type onto the rule function signature.
   typeOnlyHandler := rule.length is 3 and rule[2] and ("t" in rule[2]) and not ("f" in rule[2])
   if rule.length !== 3 or typeOnlyHandler
+    // `Choice` wraps a rule with a type-only handler in a sequence ("S"),
+    // which will wrap the result in an array.
+    // Avoid this array wrapper if the length is 1, like the no-handler case.
+    if typeOnlyHandler and rule[0] is "S" and rule[1].length is 1
+      rule = rule[1][0]
     parserExpr := compileOp(rule, name, true, types)
     helpers.push `const ${fnName}$parser = ${parserExpr};`
     body := if wrapEvent

@@ -147,6 +147,16 @@ describe "Hera", ->
     code := compile grammar, types: true
     assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
 
+  it "should keep a single typed expression's default return value", ->
+    parser := generate """
+      Rule
+        Inner ::string
+
+      Inner
+        "x" -> "value"
+    """
+    assert.equal parser.parse("x"), "value"
+
   it "should allow a type annotation with no handler followed by comment", ->
     grammar := """
       Rule
