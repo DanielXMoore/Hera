@@ -28,7 +28,8 @@ jobs:
         pnpm test
         pnpm benchmark
 
-    - name: Coveralls
-      uses: coverallsapp/github-action@master
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage/lcov.info
