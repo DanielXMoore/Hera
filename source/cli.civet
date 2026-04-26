@@ -24,6 +24,8 @@ getOptValue := (opt: string) ->
   if index > -1
     process.argv[index + 1]
 
+language := getOptValue('--language') as 'javascript' | 'typescript' | 'civet' | undefined
+
 process.stdout.write compile ast,
   types:     process.argv.includes '--types'
   inlineMap: process.argv.includes '--inlineMap'
@@ -31,6 +33,7 @@ process.stdout.write compile ast,
   filename: filename
   source: input
   libPath: getOptValue('--libPath')
+  language: language
 
 // Write out cli io
 if process.argv.includes '--cli'

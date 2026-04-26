@@ -15,7 +15,7 @@ Content
   Expression
 
 Expression
-  Applied
+  Applied ::any -> $1
 
 # Function application:
 # a b

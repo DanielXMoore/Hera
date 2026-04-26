@@ -184,10 +184,12 @@ describe "Hera", ->
     parser := generate grammar
     assert.equal parser.parse("x"), 42
 
-    // With `types: true`, the annotation should flow into the emitted
-    // rule's return type so recursive grammars don't fall back to `unknown`.
+    // With `types: true`: this is a top-level choice where only one
+    // alternative carries a `::Type`, so no rule-level annotation is emitted
+    // (TS infers the union from the body via `??` chaining instead).
     code := compile grammar, types: true
-    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<any>/
+    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\) \{/
+    assert.doesNotMatch code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult/
 
   it "should compile multi-line inline handler bodies", ->
     // Regression: an inline handler body that spans multiple lines

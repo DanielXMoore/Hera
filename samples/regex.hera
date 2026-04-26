@@ -7,9 +7,9 @@ RegexCharacter
   EscapeSequence
 
 Primary
-  CharacterClass
-  Group
-  RegexCharacter
+  CharacterClass ::any -> $1
+  Group ::any -> $1
+  RegexCharacter ::any -> $1
 
 Group
   "(" GroupPrefix? Primary* ")"
