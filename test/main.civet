@@ -157,6 +157,18 @@ describe "Hera", ->
     """
     assert.equal parser.parse("x"), "value"
 
+  it "should keep a typed sequence's default return value", ->
+    parser := generate """
+      Rule
+        A B ::[string, string]
+
+      A
+        "a"
+      B
+        "b"
+    """
+    assert.deepEqual parser.parse("ab"), ["a", "b"]
+
   it "should allow a type annotation with no handler followed by comment", ->
     grammar := """
       Rule
