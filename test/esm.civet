@@ -1,8 +1,11 @@
 assert from assert
+{ resolve as resolvePath } from node:path
 { pathToFileURL } from node:url
 { initialize, load, resolve } from ../source/esm.civet
 
 describe "esm loader hook", ->
+  fixtureURL := (name: string) -> pathToFileURL(resolvePath(name)).href
+
   // Reset module-level heraOptions before each test so tests don't leak
   // state into one another. esm.civet's defaults are { module: true }.
   beforeEach -> initialize {}
@@ -61,7 +64,7 @@ describe "esm loader hook", ->
         assert.equal context.format, 'module'
         { source: heraSource }
 
-      result := await load "file:///grammar.hera", {}, next
+      result := await load fixtureURL("grammar.hera"), {}, next
       assert.equal nextCalls, 1
       assert.equal result.format, "module"
       assert result.shortCircuit
@@ -70,7 +73,7 @@ describe "esm loader hook", ->
     it "should emit commonjs format when initialized with module: false", ->
       initialize { module: false }
       next := (url, context) -> { source: 'Rule\n  "a" -> return "ok"\n' }
-      result := await load "file:///g.hera", {}, next
+      result := await load fixtureURL("g.hera"), {}, next
       assert.equal result.format, "commonjs"
 
     it "should throw if next() returns no source", ->

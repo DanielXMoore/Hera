@@ -2,6 +2,12 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.4] - 2026-04-27
+
+### Fixed
+- Type-annotation-only rules caching behavior (no longer emit exit events
+  while probing failed alternatives) (#82)
+
 ## [0.9.3] - 2026-04-26
 
 ### Fixed
