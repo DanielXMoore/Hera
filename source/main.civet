@@ -42,7 +42,18 @@ parse := parser.parse
 let _tokenParser: { parse(input: string, options?: ParserOptions<HeraGrammar>): Token } | undefined
 tokenParserPath := `./hera-tokens.js`
 parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
-  (_tokenParser ??= require(tokenParserPath).default)!.parse(input, options)
+  unless _tokenParser
+    mod := require(tokenParserPath)
+    // Hera's CJS tail emits `exports.default = parser`; fall back to the
+    // namespace itself in case the artifact's export shape ever changes
+    // (otherwise `??=` would silently leave _tokenParser undefined and we'd
+    // loop on require() until a parse() call confused the caller).
+    /* c8 ignore next */
+    _tokenParser = mod.default ?? mod
+    /* c8 ignore next 2 */
+    unless _tokenParser?.parse
+      throw new Error `Tokenize parser at ${tokenParserPath} is missing a .parse function`
+  _tokenParser.parse(input, options)
 
 interface GenerateOptions
   transpile: (src: string) => string
@@ -52,14 +63,22 @@ defaultGenerateOptions: GenerateOptions :=
   transpile: (src) => src
   tokenize: false
 
-generate := <T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {}) =>
+// Tokenize-mode `generate` returns a parser that yields a Token tree, while
+// the regular path returns whatever the user grammar's handlers produce.
+// The two overloads let TS pick the right shape from `options.tokenize`.
+type GeneratedParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => unknown }
+type GeneratedTokenParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => Token }
+
+function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> & { tokenize: true }): GeneratedTokenParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options?: Partial<GenerateOptions>): GeneratedParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {})
   { transpile, tokenize } := { ...defaultGenerateOptions, ...options }
 
   heraSrc
     |> parse
     |> compile ., { tokenize }
     |> transpile
-    |> execMod(.) as { parse: (input: string, options?: ParserOptions<T>) => ??? }
+    |> execMod(.) as GeneratedParser<T>
 
 modImport := async <T extends HeraGrammar>(src: string) =>
   fs := await import('node:fs/promises')
