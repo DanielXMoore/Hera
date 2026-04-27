@@ -1,48 +1,7 @@
-#!/usr/bin/env node
-
 { compile, parse, grammarToEBNF } from ./main.civet
-encoding := "utf8"
-fs from fs
-path from path
+type { CompilerOptions } from ./compiler.civet
 
-argv := process.argv
-valueFlags := new Set ['--language', '--libPath', '-o', '--output']
-
-positional: string[] := []
-i .= 2
-while i < argv.length
-  arg := argv[i]
-  if valueFlags.has arg
-    i += 2
-  else if arg.startsWith '-'
-    i += 1
-  else
-    positional.push arg
-    i += 1
-
-getOptValue := (opt: string) ->
-  index := argv.indexOf opt
-  if index > -1
-    argv[index + 1]
-
-language := getOptValue('--language') as 'javascript' | 'typescript' | 'civet' | undefined
-outputDir := getOptValue('-o') ?? getOptValue('--output')
-
-cliPostscript := """
-
-
-  if (require.main === module) {
-    const encoding = "utf8"
-    const fs = require("fs")
-
-    const input = fs.readFileSync(process.stdin.fd, encoding)
-    const ast = parse(input)
-
-    process.stdout.write(JSON.stringify(ast, null, 2))
-  }
-"""
-
-processInput := (input: string, filename: string) ->
+export main := (argv: string[], input: string, filename: string = "<stdin>"): string ->
   ast := parse input
 
   if argv.includes '--ast'
@@ -51,36 +10,39 @@ processInput := (input: string, filename: string) ->
   if argv.includes '--ebnf'
     return grammarToEBNF(ast)
 
-  result .= compile ast,
+  getOptValue := (opt: string) ->
+    index := argv.indexOf opt
+    if index > -1
+      argv[index + 1]
+
+  language := getOptValue('--language') as 'javascript' | 'typescript' | 'civet' | undefined
+
+  options: CompilerOptions := {
     types:     argv.includes '--types'
     inlineMap: argv.includes '--inlineMap'
     module:    argv.includes '--module'
     filename: filename
     source: input
     libPath: getOptValue('--libPath')
-    language: language
+  }
+  if language
+    options.language = language
+
+  output .= compile ast, options
 
   if argv.includes '--cli'
-    result += cliPostscript
+    output += """
 
-  result
 
-if positional.length > 0
-  unless outputDir
-    process.stderr.write "Error: -o/--output DIR is required when input files are provided\n"
-    process.exit 1
-  fs.mkdirSync outputDir, { recursive: true }
-  for file of positional
-    src := fs.readFileSync file, encoding
-    realPath .= file
-    try
-      realPath = fs.realpathSync file
-    out := processInput src, realPath
-    target := path.join outputDir, `${ path.basename file }.ts`
-    fs.writeFileSync target, out
-else
-  input := fs.readFileSync process.stdin.fd, encoding
-  filename .= "<stdin>"
-  try
-    filename = fs.realpathSync '/dev/stdin'
-  process.stdout.write processInput(input, filename)
+      if (require.main === module) {
+        const encoding = "utf8"
+        const fs = require("fs")
+
+        const input = fs.readFileSync(process.stdin.fd, encoding)
+        const ast = parse(input)
+
+        process.stdout.write(JSON.stringify(ast, null, 2))
+      }
+    """
+
+  return output

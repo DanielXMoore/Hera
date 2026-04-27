@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+
+fs from fs
+path from path
+{ main } from ./cli.civet
+
+argv := process.argv
+encoding := "utf8"
+valueFlags := new Set ['--language', '--libPath', '-o', '--output']
+
+positional: string[] := []
+i .= 2
+while i < argv.length
+  arg := argv[i]
+  if valueFlags.has arg
+    i += 2
+  else if arg.startsWith '-'
+    i += 1
+  else
+    positional.push arg
+    i += 1
+
+getOptValue := (opt: string) ->
+  index := argv.indexOf opt
+  if index > -1
+    argv[index + 1]
+
+outputDir := getOptValue('-o') ?? getOptValue('--output')
+
+reportError := (err: unknown, file?: string): never ->
+  msg := if err instanceof Error then err.message else String(err)
+  prefix := if file then `${file}: ` else ""
+  process.stderr.write `Error: ${prefix}${msg}\n`
+  process.exit 1
+
+if positional.length > 0
+  unless outputDir
+    process.stderr.write "Error: -o/--output DIR is required when input files are provided\n"
+    process.exit 1
+  fs.mkdirSync outputDir, { recursive: true }
+  for file of positional
+    try
+      src := fs.readFileSync file, encoding
+      realPath .= file
+      try
+        realPath = fs.realpathSync file
+      out := main argv, src, realPath
+      target := path.join outputDir, `${ path.basename file }.ts`
+      fs.writeFileSync target, out
+    catch err
+      reportError err, file
+else
+  try
+    input := fs.readFileSync process.stdin.fd, encoding
+    filename .= "<stdin>"
+    try
+      filename = fs.realpathSync '/dev/stdin'
+    process.stdout.write main argv, input, filename
+  catch err
+    reportError err

@@ -23,7 +23,7 @@ civet --civet 'rewriteCivetImports=.js' --compile source/hera-types.civet --outp
 # `--module` is required for the inference fixture (issue #73): its paired
 # inference.test-d.ts uses `import { Mini } from './inference.fixture.hera'`
 # which only resolves against ES exports.
-civet source/cli.civet --types --module --libPath ./machine.js -o parsers \
+civet source/cli-bin.civet --types --module --libPath ./machine.js -o parsers \
   source/hera.hera \
   samples/code.hera \
   samples/regex.hera \

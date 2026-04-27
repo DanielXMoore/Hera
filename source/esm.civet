@@ -1,6 +1,6 @@
 assert from node:assert
 { fileURLToPath, pathToFileURL } from node:url
-{ ResolveHook, LoadHook } from node:module
+type { ResolveHook, LoadHook } from node:module
 
 { compile } from ./main.civet
 type { CompilerOptions } from ./compiler.civet
