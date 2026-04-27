@@ -23,6 +23,10 @@ buildOrWatch({
   minify
   platform: 'node'
   outdir: 'dist/'
+  // Shim `import.meta.url` for the CJS bundle.
+  define:
+    'import.meta.url': 'import_meta_url'
+  inject: ['build/import-meta-url.js']
   plugins: [
     heraPlugin
       loader: 'ts'
