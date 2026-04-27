@@ -1157,6 +1157,32 @@ describe "Hera", ->
         }, "the data"]
       ]
 
+    it "should not emit parent-rule events from typed choice alternatives", ->
+      {parse} := generate """
+        Rule
+          A ::string
+          B ::string
+
+        A
+          "a"
+        B
+          "b"
+      """
+
+      eventLog: unknown[] := []
+      events :=
+        enter: (rule, state) ->
+          eventLog.push ["enter", rule, state.pos]
+          return undefined
+        exit: (rule, state, result) ->
+          eventLog.push ["exit", rule, state.pos, result?.value]
+
+      assert.equal parse("b", { events }), "b"
+      assert.deepEqual eventLog.filter((event) -> event[1] is "Rule"), [
+        ["enter", "Rule", 0]
+        ["exit", "Rule", 0, "b"]
+      ]
+
   describe "modImport", ->
     it "should generate module", ->
       {parse} := await modImport """
