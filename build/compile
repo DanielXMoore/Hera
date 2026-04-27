@@ -15,9 +15,9 @@ cp dist/machine.js source/machine.js
 # Assumes that the last parameter is the file being modified
 #
 # Usage:
-#   sed_i -e '/import_meta/d' -e '/import_module/d' dist/main.js
+#   sed_i 's/foo/bar/g' file.js
 #     is equivalent to
-#   sed -i '' -e '/import_meta/d' -e '/import_module/d' dist/main.js
+#   sed -i '' 's/foo/bar/g' file.js
 #
 # Why? GNU and BSD sed don't both support -i in the same way.
 # See: https://stackoverflow.com/questions/5694228/sed-in-place-flag-that-works-both-on-mac-bsd-and-linux
@@ -35,9 +35,6 @@ for f in dist/**/*.js dist/**/*.d.ts dist/hera; do
   # replace all .civet imports with .js
   sed_i 's/\.civet"/.js"/g' "$f"
 done
-
-# hack to remove import_meta and just use existing require/__dirname
-sed_i -e '/import_meta/d' -e '/import_module/d' -e 's/require2/require/' -e 's/__dirname2/__dirname/g' dist/main.js
 
 # Mark 'hera' cli as executable
 chmod +x dist/hera
