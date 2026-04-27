@@ -1281,6 +1281,18 @@ describe "Hera", ->
       assert.doesNotMatch result, /\$\$value = \$\$r\.value/
       assert.doesNotMatch result, /void[^;]*\$0;/
 
+    it "should not match internal $$ names as handler parameters", ->
+      grammar := """
+        Rule
+          "a" ->
+            return $$loc
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(\) \{/m
+      assert.match result, /\}\)\(\)/m
+      assert.doesNotMatch result, /\(function\(\$loc/
+      assert.doesNotMatch result, /\}\)\(\$\$r\.loc\)/
+
     it "should cache parser value when value arguments are used", ->
       grammar := """
         Rule

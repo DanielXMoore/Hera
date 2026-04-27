@@ -121,9 +121,15 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
 regExpHandlerParams := ["$loc", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"]
 regularHandlerParams := ["$loc", "$0", "$1"]
 
+identifierREs := new Map<string, RegExp>()
+
 usesIdentifier := (text: string, identifier: string): boolean ->
-  escaped := identifier.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
-  new RegExp(`(?<!\\p{ID_Continue})${escaped}(?!\\p{ID_Continue})`, "u").test text
+  re .= identifierREs.get identifier
+  unless re
+    escaped := identifier.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
+    re = new RegExp(`(?<![\\p{ID_Continue}$])${escaped}(?![\\p{ID_Continue}$])`, "u")
+    identifierREs.set identifier, re
+  re.test text
 
 // Compute the declared return type of a rule, if any.
 // For top-level choice: union of sub-rule types (only if all are annotated).
@@ -349,6 +355,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   addNamedParameter := (name: string | undefined, paramType: string, callArg: string) ->
     return unless name
     if parameters.includes(name)
+      /* c8 ignore next 2 */
+      if name.startsWith "$"
+        throw new Error `named parameter "${name}" conflicts with reserved positional parameter`
       throw new Error `duplicate named parameter: ${name}`
     parameters.push name
     paramTypes.push paramType
@@ -356,13 +365,13 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
 
   if rule[0] is "S"
     n := rule[1].length
-    parameters = ["$loc", "$0"].concat rule[1].map (_, i) => `$${i+1}`
+    parameters = ["$loc", "$0"]
     paramTypes = ["Loc", "typeof $$value"]
     callArgs = ["$$r.loc", "$$value"]
-    for (let i = 0; i < n; i++)
+    for i of [0...n]
+      parameters.push `$${i+1}`
       paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
-    for i of [0...n]
       addNamedParameter getNamedVariable(rule[1][i][0]), `typeof $$value[${i}]`, `$$value[${i}]`
   else if rule[0] is "R"
     parameters = regExpHandlerParams.slice()
