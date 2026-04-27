@@ -287,6 +287,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // (wrapEvent=true); choice-alternative string references are short-circuited
   // in compileRule directly, before we get here.
   if typeof rule is "string"
+    /* c8 ignore next 2 */
+    unless wrapEvent
+      throw new Error "unexpected choice-alternative rule reference"
     return {
       helpers
       body: [
