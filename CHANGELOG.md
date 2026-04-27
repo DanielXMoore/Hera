@@ -2,7 +2,12 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
-## Unreleased
+## [0.9.3] - 2026-04-26
+
+### Fixed
+- Type-annotation-only rules now preserve the wrapped parser result shape when
+  the rule is not a sequence, so `Foo ::Type` behaves like `Foo` instead of
+  introducing an array wrapper (#77).
 
 ### Changed
 - Rules without an explicit `::Type` are no longer emitted with a
@@ -20,6 +25,13 @@ All notable changes to `@danielx/hera` will be documented in this file.
   `type: "Block"` rather than `type: string`) can now write
   `type: "Block" as const` in the handler return — the IIFE's inferred
   return type flows out as the rule's return type.
+
+### Performance
+- Generated handler IIFEs now omit unused positional arguments, capture `$skip`
+  from a module-scope constant, pass named `:foo` parts as direct parameters,
+  and only cache `$$value` when retained handler arguments need it.  This
+  reduces generated parser size while keeping parse throughput roughly flat
+  across sample grammars (#79).
 
 ## [0.9.2] - 2026-04-26
 

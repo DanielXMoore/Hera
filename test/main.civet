@@ -1010,6 +1010,67 @@ describe "Hera", ->
 
       assert.deepEqual parse("ab"), ["a", "b"]
 
+    it "should emit named parameters directly", ->
+      grammar := """
+        Rule
+          A:a B:b -> a
+
+        A
+          "a"
+
+        B
+          "b"
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(a\) \{/m
+      assert.match result, /\}\)\(\$\$value\[0\]\)/m
+      assert.doesNotMatch result, /var a = \$1/
+
+    it "should not void named parameters", ->
+      grammar := """
+        Rule
+          "a":a -> a
+      """
+      result := compile(parse(grammar), language: 'typescript')
+      assert.match result, /\(function\(a: typeof \$\$value\) \{/m
+      assert.doesNotMatch result, /void[^;]*a;/
+
+    it "should reject duplicate named parameters", ->
+      assert.throws ->
+        compile parse """
+          Rule
+            A:x B:x -> x
+
+          A
+            "a"
+
+          B
+            "b"
+        """
+      , /duplicate named parameter: x/
+
+    it "should reject names reserved for positional parameters", ->
+      assert.throws ->
+        compile parse """
+          Rule
+            "a":$0 -> $0
+        """
+      , /Failed to parse/
+
+      assert.throws ->
+        compile parse """
+          Rule
+            "a":$loc -> $loc
+        """
+      , /Failed to parse/
+
+      assert.throws ->
+        compile parse """
+          Rule
+            "a":$skip -> $skip
+        """
+      , /Failed to parse/
+
     it "should provide named parameters for a single string", ->
       {parse} := generate """
         A
@@ -1152,7 +1213,8 @@ describe "Hera", ->
       // by bodyIndent (4 extra spaces) past the grammar's original indent
       // so downstream indent-sensitive parsers read them as the object
       // body rather than separate statements.
-      assert.match result, /\n    var t = \$0;\n    return \{\n        type: "TypeSuffix",/m
+      assert.match result, /\(function\(t:/m
+      assert.match result, /\n    return \{\n        type: "TypeSuffix",/m
       // The handler IIFE closes with `  })(...)` at 2-space indent.
       assert.match result, /\n  \}\)\(/m
 
@@ -1206,3 +1268,39 @@ describe "Hera", ->
       // so it must not leak into JS output.
       assert.match result, /\$\$value\[1\]/
       assert.doesNotMatch result, /as any\[\]/
+
+    it "should omit unused handler arguments and cached locals", ->
+      grammar := """
+        Rule
+          "a" ->
+            return 1
+      """
+      result := compile(parse(grammar), language: 'typescript')
+      assert.match result, /\(function\(\) \{/m
+      assert.match result, /\}\)\(\)/m
+      assert.doesNotMatch result, /\$\$value = \$\$r\.value/
+      assert.doesNotMatch result, /void[^;]*\$0;/
+
+    it "should not match internal $$ names as handler parameters", ->
+      grammar := """
+        Rule
+          "a" ->
+            return $$loc
+      """
+      result := compile(parse(grammar), language: 'javascript')
+      assert.match result, /\(function\(\) \{/m
+      assert.match result, /\}\)\(\)/m
+      assert.doesNotMatch result, /\(function\(\$loc/
+      assert.doesNotMatch result, /\}\)\(\$\$r\.loc\)/
+
+    it "should cache parser value when value arguments are used", ->
+      grammar := """
+        Rule
+          "a" ->
+            return $0
+      """
+      result := compile(parse(grammar), language: 'typescript')
+      assert.match result, /\(function\(\$0:/m
+      assert.match result, /\}\)\(\$\$value\)/m
+      assert.match result, /\$\$value = \$\$r\.value/
+      assert.match result, /void \$0;/
