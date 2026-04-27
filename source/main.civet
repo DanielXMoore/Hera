@@ -3,6 +3,7 @@ import type {
   HeraRules,
   ParserOptions,
 } from ./hera-types.civet
+import type { Token } from ./machine.civet
 
 import { createRequire } from "module"
 
@@ -32,18 +33,31 @@ compile := (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
 
 parse := parser.parse
 
+// Lazy load the prebuilt tokenize-variant of the Hera grammar parser.
+// `dist/hera-tokens.js` is generated post-build by re-running the new
+// compiler on `source/hera.hera` with `tokenize: true`, and lives next to
+// `dist/main.js` (mirrored to `source/hera-tokens.js` for tests running
+// through the civet/register hook).  The path indirection keeps esbuild
+// from trying to bundle a file that doesn't exist yet at bundle time.
+let _tokenParser: { parse(input: string, options?: ParserOptions<HeraGrammar>): Token } | undefined
+tokenParserPath := `./hera-tokens.js`
+parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
+  (_tokenParser ??= require(tokenParserPath).default)!.parse(input, options)
+
 interface GenerateOptions
   transpile: (src: string) => string
+  tokenize: boolean
 
 defaultGenerateOptions: GenerateOptions :=
   transpile: (src) => src
+  tokenize: false
 
 generate := <T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {}) =>
-  { transpile } := { ...defaultGenerateOptions, ...options }
+  { transpile, tokenize } := { ...defaultGenerateOptions, ...options }
 
   heraSrc
     |> parse
-    |> compile
+    |> compile ., { tokenize }
     |> transpile
     |> execMod(.) as { parse: (input: string, options?: ParserOptions<T>) => ??? }
 
@@ -71,6 +85,7 @@ modImport := async <T extends HeraGrammar>(src: string) =>
 
 export {
   parse
+  parseTokens
   compile
   execMod
   modImport
@@ -80,6 +95,7 @@ export {
 
 hera := {
   parse
+  parseTokens
   compile
   generate
 }

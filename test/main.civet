@@ -1,6 +1,6 @@
 assert from assert
 { readFile } from ./helper.civet
-hera, { compile, generate, modImport, parse } from ../source/main.civet
+hera, { compile, generate, modImport, parse, parseTokens } from ../source/main.civet
 { transpileTsToJs } from ../source/register/tsc/transpile.civet
 
 describe "Hera", ->
@@ -784,7 +784,7 @@ describe "Hera", ->
       , /Could not find rule/
 
   it "should tokenize", ->
-    {parse} := generate """
+    grammar := """
       Rule
         &"D" /D/ -> "d"
         !"C" A+ -> "a"
@@ -792,20 +792,42 @@ describe "Hera", ->
 
       A
         "A"
-    """
 
-    result .= parse("AAAAAA", tokenize: true)
+      Wrapped
+        "X" -> "wrapped"
+    """
+    {parse: parseTokens} := generate grammar, { tokenize: true }
+    {parse} := generate grammar
+
+    result .= parseTokens("AAAAAA")
     assert.equal result.children[1].length, 6
 
-    result = parse("BBB", tokenize: true)
+    result = parseTokens("BBB")
     assert.equal result.children.length, 3
 
-    result = parse("D", tokenize: true)
+    result = parseTokens("D")
     // TODO: Regex tokenize?
     // assert.deepEqual result.children[1], 1
 
-    // tokenize shouldn't blow up regular parsing
+    // Top-level rule with a handler — tokenize compile must skip the handler
+    // and wrap the result in a Token.
+    wrapped := parseTokens("X", startRule: "Wrapped")
+    assert.equal wrapped.type, "Wrapped"
+    assert.equal wrapped.token, "X"
+    assert.equal parse("X", startRule: "Wrapped"), "wrapped"
+
+    // tokenize compile shouldn't affect a non-tokenize parser of the same grammar
     assert.equal parse("BBB"), "b"
+
+  it "should expose parseTokens for the bundled hera grammar", ->
+    // The lazy-loaded prebuilt tokenize hera parser. Token tree of a tiny
+    // grammar must surface the rule names so LSP-style consumers can walk it.
+    tokens := parseTokens """
+      Rule
+        "x"
+    """
+    assert.equal tokens.type, "Grammar"
+    assert.ok tokens.children.length > 0
 
   it "should skip infinite zero width loops", ->
     {parse} := generate """

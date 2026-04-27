@@ -34,18 +34,15 @@ a `file://` URL via `pathToFileURL`.
 Tokenize Mode
 -------------
 
-Currently there is an automatic tokenization in Hera passed in as a parser
-option. It doesn't allow for handlers to return $skip or other handler
-code to run.
+Tokenize is a compile-time choice (`compile(grammar, { tokenize: true })`,
+`hera --tokenize`).  The compiler emits a separate parser that returns a
+Token tree (`{ type, children, token, loc }`) per rule instead of running
+the grammar's handlers — there is no runtime branch on a `tokenize` flag.
 
-The transforms were previously skipped by checking the flag in the transform
-handler wrappers $T, $TR, $TV but instead I plan to have the parser
-generation handle it.
-
-We have to skip the handlers because we are returning token nodes instead of
-what the handler expects. In theory we may be able to build a parallel token
-tree at the same time to completely match the behavior of the non-tokenize
-parse.
+Handlers, `$skip`, and user code blocks (the ``` blocks in a `.hera`
+source) are all skipped in the tokenize variant: they're dead in this
+mode and TS-only code blocks would otherwise break plain-JS execution of
+the bundled token parser.
 
 $EXPECT
 -------

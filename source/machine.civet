@@ -23,7 +23,6 @@ export interface ParseState {
 export type ParserContext = {
   expectation: string
   fail: Fail
-  tokenize?: boolean
   enter?(name: string, state: ParseState): {
     /**
      * If a key named `cache` is present then its value is returned immediately
@@ -384,8 +383,6 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
-    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
-    if (ctx.tokenize) return result as unknown as ParseResult<B>
 
     const { value } = result
     const mappedValue = fn(value)
@@ -416,9 +413,6 @@ export function $TR<A extends unknown[], T>(
     const result = parser(ctx, state);
     if (!result) return
 
-    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
-    if (ctx.tokenize) return result as unknown as ParseResult<T>
-
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, ...(value as TupleOrArrayAsArgs<A>))
 
@@ -445,9 +439,6 @@ export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SK
     const result = parser(ctx, state);
     if (!result) return
 
-    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
-    if (ctx.tokenize) return result as unknown as ParseResult<B>
-
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, ...value)
 
@@ -467,9 +458,6 @@ export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc,
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
-
-    // NOTE: This is a lie to make TS happy, tokenize returns an unmodified result
-    if (ctx.tokenize) return result as unknown as ParseResult<B>
 
     const { loc, value } = result
     const mappedValue = fn(SKIP, loc, value, value)
@@ -516,12 +504,7 @@ export function $EVENT<T>(ctx: ParserContext, state: ParseState, name: string, f
       eventData = result.data;
     }
   }
-  let result = fn(ctx, state);
-  if (result && ctx.tokenize) {
-    // When tokenizing we ignore the existing types
-    //@ts-ignore
-    result = $TOKEN(name, state, result)
-  }
+  const result = fn(ctx, state);
   if (exit = ctx.exit) exit(name, state, result, eventData);
   return result;
 }
@@ -549,28 +532,8 @@ export function $EVENT_C<T extends Parser<any>[]>(ctx: ParserContext, state: Par
     i++;
   }
 
-  if (result && ctx.tokenize) {
-    result = $TOKEN(name, state, result)
-  }
-
   if (exit = ctx.exit) exit(name, state, result, eventData);
   return result as ParserReturnTypes<T>;
-}
-
-/**
- * Replace the result value with a token object.
- */
-function $TOKEN(name: string, state: ParseState, newState: MaybeResult<Token | string>): MaybeResult<Token> {
-  if (!newState) return
-
-  newState.value = {
-    type: name,
-    children: [newState.value].flat(),
-    token: state.input.substring(state.pos, newState.pos),
-    loc: newState.loc
-  }
-
-  return newState as ParseResult<Token>
 }
 
 /**
@@ -711,6 +674,5 @@ export interface ParserOptions<T extends HeraGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T
-  tokenize?: boolean
   events?: ParserEvents
 }
