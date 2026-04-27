@@ -1,9 +1,12 @@
 import type {
+  HeraAST,
   HeraGrammar,
   HeraRules,
   ParserOptions,
 } from ./hera-types.civet
-import type { Token } from ./machine.civet
+import type { Loc, Token } from ./machine.civet
+
+export type HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
 
 import { createRequire } from "module"
 
