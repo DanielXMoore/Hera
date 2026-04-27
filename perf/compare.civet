@@ -129,7 +129,7 @@ makeRow := (cells) ->
   cells.map((c, i) -> fmt.pad(c, widths[i])).join("  ")
 
 lines := [
-  `Hera benchmark: prev vs current (hybrid-compiler)`
+  `Hera benchmark: prev vs current (dist/main.js)`
   `  prev: ${prevRoot} ${prevVersion}`
   `  curr: working tree ${currVersion}`
   `  ran:  ${timestamp}`
