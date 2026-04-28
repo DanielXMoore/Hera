@@ -1,9 +1,9 @@
 { type Position, TextDocument } from vscode-languageserver-textdocument
 { CompletionItem, CompletionItemKind, DocumentLink, DocumentSymbol, Location, SymbolKind, type URI } from vscode-languageserver
 
-{ type HeraAST, type Loc, parse, type Token } from @danielx/hera
+{ type HeraAST, type Loc, parse, parseTokens, type Token } from @danielx/hera
 
-export { parse }
+export { parse, parseTokens }
 
 // TODO: Combine all of these into some kind of cached "DocumentInfo"
 sourceCache := new Map<URI, string>()
@@ -131,7 +131,7 @@ function* symbols(doc: TextDocument, grammar: Token): Iterable<DocumentSymbol>
 
 export function parseDocument(textDocument: TextDocument): void
   text := textDocument.getText()
-  tokens := parse(text, { tokenize: true })
+  tokens := parseTokens(text)
 
   sourceCache.set(textDocument.uri, text)
   declarationsCache.set(textDocument.uri, declarations(tokens.children))

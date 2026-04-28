@@ -11,6 +11,20 @@ civet build/esbuild.civet
 # runs via the civet/register hook.
 cp dist/machine.js source/machine.js
 
+# Build the tokenize variant of the Hera grammar parser using the just-built
+# compiler (the bootstrap, hera-previous, predates the `tokenize` compile
+# option).  The output drives `parseTokens` in main.civet.  Mirrored into
+# source/ so test runs through the civet/register hook resolve the file too.
+node -e "
+const fs = require('fs');
+const { compile } = require('./dist/main.js');
+fs.writeFileSync(
+  'dist/hera-tokens.js',
+  compile(fs.readFileSync('source/hera.hera', 'utf8'), { tokenize: true })
+);
+"
+cp dist/hera-tokens.js source/hera-tokens.js
+
 # Cross-platform version of `sed -i`
 # Assumes that the last parameter is the file being modified
 #

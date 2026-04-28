@@ -21,6 +21,7 @@ export main := (argv: string[], input: string, filename: string = "<stdin>"): st
     types:     argv.includes '--types'
     inlineMap: argv.includes '--inlineMap'
     module:    argv.includes '--module'
+    tokenize:  argv.includes '--tokenize'
     filename: filename
     source: input
     libPath: getOptValue('--libPath')

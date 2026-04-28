@@ -39,3 +39,11 @@ describe "cli main", ->
     // Smoke check — main should not throw when filename is omitted.
     out := main ['node', 'hera'], grammar
     assert typeof out is 'string'
+
+  it "should emit a tokenize parser with --tokenize", ->
+    // The tokenize variant skips handler invocation entirely, so the IIFE
+    // helper assignment that the regular compile emits should be absent.
+    regular := main ['node', 'hera'], grammar
+    tokenized := main ['node', 'hera', '--tokenize'], grammar
+    assert.match regular, /\$\$m = \(function/
+    assert.doesNotMatch tokenized, /\$\$m = \(function/

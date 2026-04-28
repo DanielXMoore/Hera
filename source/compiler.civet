@@ -11,6 +11,14 @@ export type CompilerOptions = {
   libPath?: string | undefined
   module?: boolean
   language?: 'javascript' | 'typescript' | 'civet'
+  /**
+   * When true, compile the grammar so that every rule returns a Token tree
+   * (`{ type, children, token, loc }`) instead of running its handlers.  This
+   * is a compile-time alternative to the old runtime `ctx.tokenize` flag —
+   * the resulting parser is dedicated to tokenizing and is generated without
+   * any handler bodies.
+   */
+  tokenize?: boolean
 }
 
 strDefs: string[] := []
@@ -177,19 +185,20 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   + "\n"
 
 // Emit the inline $EVENT exit hook. Assumes `$$final` holds the result.
-// Also inlines the $TOKEN wrap that $EVENT applies when `ctx.tokenize` is set,
-// rewriting `$$final.value` into a `{ type, children, token, loc }` object.
+// In tokenize-compiled output, also rewrites `$$final.value` into a
+// `{ type, children, token, loc }` object before the exit hook runs.
 //
 // The `\ ` on the first content line of the template is a "dedent
 // anchor" — it renders as one literal space but counts as non-whitespace
 // for civet's auto-dedent, which prevents the dedent from swallowing the
 // explicit 2- and 4-space indentation we want in the output.
 emitEventExit := (options: CompilerOptions, name: string): string ->
-  { types } := options
+  { types, tokenize } := options
   nameLit := JSON.stringify(name)
   finalCast := types ? " as any" : ""
-  ```
-\  if ($$final && $$ctx.tokenize) {
+  tokenWrap := if tokenize
+    ```
+\  if ($$final) {
     ($$final${finalCast}).value = {
       type: ${nameLit},
       children: [$$final.value].flat(),
@@ -197,8 +206,9 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
       loc: $$final.loc
     };
   }
-  if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, $$final, $$eventData);
   ```
+  else ""
+  tokenWrap + `  if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, $$final, $$eventData);\n`
 
 // Emit an inline IIFE that applies the handler to the parser result.
 //
@@ -278,7 +288,7 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
 // Returns { helpers, body }: top-level helper declarations to emit before
 // the rule function, and the rule function body statements.
 compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean) ->
-  { types } := options
+  { types, tokenize } := options
   retType := ruleReturnType(rule)
 
   helpers: any[] := []
@@ -300,13 +310,17 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       ]
     }
 
-  // No handler: return the parser's result verbatim.  Two shapes land
-  // here: (a) `rule.length === 2`, no handler slot at all, and (b) the
-  // type-annotation-only form (`Name ::Type` without `->`) where rule[2]
-  // carries a `t` but no `f`.  In the latter case `ruleReturnType` already
-  // surfaces the declared type onto the rule function signature.
+  // No handler emission: return the parser's result verbatim (top-level
+  // rules still flow through the event hooks, which also wrap as a Token in
+  // tokenize mode).  Three shapes land here:
+  //   (a) `rule.length === 2` — no handler slot at all
+  //   (b) `Name ::Type` (rule[2] has `t` but no `f`) — type-annotation-only
+  //   (c) any rule when compiling for tokenize, since the handler is dead
+  // For (b), `ruleReturnType` already surfaces the declared type onto the
+  // rule function signature.
   typeOnlyHandler := rule.length is 3 and rule[2] <? "object" and "t" in rule[2] and "f" not in rule[2]
-  if rule.length !== 3 or typeOnlyHandler
+  noHandler := rule.length !== 3 or typeOnlyHandler
+  if noHandler or tokenize
     // `Choice` wraps a rule reference with a type-only handler in a sequence
     // ("S"), which will wrap the result in an array.  Avoid this array wrapper
     // if the length is 1, like the no-handler case.
@@ -337,14 +351,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parserExpr := compileOp(rule, name, false, types)
   helpers.push `const ${fnName}$parser = ${parserExpr};`
 
-  tokenizeCast := types ? " as any" : ""
-  // Tokenize-branch return: when no explicit ::Type, cast to `never` so the
-  // branch doesn't widen the function's inferred return type.  With an
-  // explicit ::Type, the outer return annotation already pins the type, so
-  // keep the existing `as any` (the tokenize value's tuple shape doesn't
-  // overlap with the declared SequenceNode/etc., which would reject a
-  // tighter cast).
-  tokenReturnCast := if types and not retType then " as never" else tokenizeCast
+  skipCast := types ? " as any" : ""
 
   // Per-shape: params, their types, and call args.  If any retained arg needs
   // parser value access, cache `$$r.value` into `$$value` before building the
@@ -413,29 +420,16 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // needs that for block vs object-literal disambiguation.
   iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
 
-  // Compose the rule body with early returns for the null / tokenize /
-  // skip paths; all exits route through a single exit-hook helper.  The
-  // hook only fires for the top-level dispatcher (`wrapEvent=true`);
-  // choice sub-rules leave event plumbing to their parent.
+  // Compose the rule body with early returns for the null / skip paths;
+  // all exits route through a single exit-hook helper.  The hook only fires
+  // for the top-level dispatcher (`wrapEvent=true`); choice sub-rules leave
+  // event plumbing to their parent.
   nameLit := JSON.stringify(name)
   exitHook := (retExpr: string): string ->
     if wrapEvent
       `if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, ${retExpr}, $$eventData);`
     else
       ""
-
-  // Tokenize branch: the top-level rule rewrites $$r.value into a Token
-  // object; sub-rules pass $$r through so the dispatcher wraps once.
-  tokenBranch := if wrapEvent
-    tokTokenType := types ? ": any" : ""
-    `  if ($$ctx.tokenize) {
-    const $$tok${tokTokenType} = $$r;
-    $$tok.value = { type: ${nameLit}, children: [$$r.value].flat(), token: $$state.input.substring($$state.pos, $$r.pos), loc: $$r.loc };
-    ${exitHook("$$tok")}
-    return $$tok${tokenReturnCast};
-  }\n`
-  else
-    `  if ($$ctx.tokenize) return $$r${tokenReturnCast};\n`
 
   body := []
   if wrapEvent
@@ -445,7 +439,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     ${exitHook("undefined")}
     return undefined;
   }
-${tokenBranch}${valueDecl}  const $$m = `
+${valueDecl}  const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit
@@ -460,7 +454,7 @@ ${tokenBranch}${valueDecl}  const $$m = `
   rValueCast := types ? " as any" : ""
   body.push `;
   let $$final${finalAnno} = undefined;
-  if (($$m${tokenizeCast}) !== SKIP) {
+  if (($$m${skipCast}) !== SKIP) {
     ($$r${rValueCast}).value = $$m;
     $$final = $$r${rValueCast};
   }
@@ -630,6 +624,14 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   tail := types ? tsTail : jsTail
   exp := (module ? mjsExport : cjsExport)
 
+  // User code blocks (the ``` blocks in a .hera file) are appended verbatim
+  // for handler-side imports/types.  In tokenize mode handlers are never
+  // invoked, so these blocks are dead weight — and can carry TS-only syntax
+  // (`import type ...`) that breaks plain-JS execution of the bundled
+  // tokenize parser.  Skip them.
+  codeBlocks := if options.tokenize then [] else
+    //@ts-ignore
+    rules[Symbol.for("code")]
   code := generate [
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
@@ -647,8 +649,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     "\n\n"
     compileExports(ruleNames, !!module)
     "\n\n"
-    //@ts-ignore
-    rules[Symbol.for("code")]
+    codeBlocks
   ], genOpts
 
   if options.inlineMap
@@ -750,7 +751,7 @@ jsTail := """
       const filename = options.filename || "<anonymous>";
 
       reset()
-      Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+      Object.assign(ctx, { ...options.events });
 
       return validate(input, parser(ctx, {
         input,
@@ -831,7 +832,7 @@ tsTail := """
         const filename = options.filename || "<anonymous>";
 
         reset()
-        Object.assign(ctx, { ...options.events, tokenize: options.tokenize });
+        Object.assign(ctx, { ...options.events });
 
         return validate(input, parser(ctx, {
           input,

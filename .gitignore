@@ -6,5 +6,6 @@ perf/report.txt
 perf/*.cpuprofile
 perf/*.generated.js
 source/machine.js
+source/hera-tokens.js
 parsers/
 tmp/

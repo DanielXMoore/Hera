@@ -1,8 +1,12 @@
 import type {
+  HeraAST,
   HeraGrammar,
   HeraRules,
   ParserOptions,
 } from ./hera-types.civet
+import type { Loc, Token } from ./machine.civet
+
+export type HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
 
 import { createRequire } from "module"
 
@@ -32,20 +36,52 @@ compile := (rulesOrString: HeraRules | string, options?: CompilerOptions) =>
 
 parse := parser.parse
 
+// Lazy load the prebuilt tokenize-variant of the Hera grammar parser.
+// `dist/hera-tokens.js` is generated post-build by re-running the new
+// compiler on `source/hera.hera` with `tokenize: true`, and lives next to
+// `dist/main.js` (mirrored to `source/hera-tokens.js` for tests running
+// through the civet/register hook).  The path indirection keeps esbuild
+// from trying to bundle a file that doesn't exist yet at bundle time.
+let _tokenParser: { parse(input: string, options?: ParserOptions<HeraGrammar>): Token } | undefined
+tokenParserPath := `./hera-tokens.js`
+parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
+  unless _tokenParser
+    mod := require(tokenParserPath)
+    // Hera's CJS tail emits `exports.default = parser`; fall back to the
+    // namespace itself in case the artifact's export shape ever changes
+    // (otherwise `??=` would silently leave _tokenParser undefined and we'd
+    // loop on require() until a parse() call confused the caller).
+    /* c8 ignore next */
+    _tokenParser = mod.default ?? mod
+    /* c8 ignore next 2 */
+    unless _tokenParser?.parse
+      throw new Error `Tokenize parser at ${tokenParserPath} is missing a .parse function`
+  _tokenParser.parse(input, options)
+
 interface GenerateOptions
   transpile: (src: string) => string
+  tokenize: boolean
 
 defaultGenerateOptions: GenerateOptions :=
   transpile: (src) => src
+  tokenize: false
 
-generate := <T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {}) =>
-  { transpile } := { ...defaultGenerateOptions, ...options }
+// Tokenize-mode `generate` returns a parser that yields a Token tree, while
+// the regular path returns whatever the user grammar's handlers produce.
+// The two overloads let TS pick the right shape from `options.tokenize`.
+type GeneratedParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => unknown }
+type GeneratedTokenParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => Token }
+
+function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> & { tokenize: true }): GeneratedTokenParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options?: Partial<GenerateOptions>): GeneratedParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {})
+  { transpile, tokenize } := { ...defaultGenerateOptions, ...options }
 
   heraSrc
     |> parse
-    |> compile
+    |> compile ., { tokenize }
     |> transpile
-    |> execMod(.) as { parse: (input: string, options?: ParserOptions<T>) => ??? }
+    |> execMod(.) as GeneratedParser<T>
 
 modImport := async <T extends HeraGrammar>(src: string) =>
   fs := await import('node:fs/promises')
@@ -71,6 +107,7 @@ modImport := async <T extends HeraGrammar>(src: string) =>
 
 export {
   parse
+  parseTokens
   compile
   execMod
   modImport
@@ -80,6 +117,7 @@ export {
 
 hera := {
   parse
+  parseTokens
   compile
   generate
 }

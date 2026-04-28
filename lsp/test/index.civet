@@ -3,7 +3,7 @@ assert from assert
 { fileURLToPath } from url
 path from path
 
-{ parse, declarations, getDocumentSymbols, parseDocument } from ../source/util.civet
+{ parse, parseTokens, declarations, getDocumentSymbols, parseDocument } from ../source/util.civet
 
 __dirname := path.dirname fileURLToPath
   //@ts-expect-error this file gets run as a module, but the extension is built as commonjs
@@ -19,7 +19,7 @@ sampleDocument :=
   lineCount: 0
   getText: () => sampleText
 
-sampleTokens := parse(sampleText, { tokenize: true })
+sampleTokens := parseTokens(sampleText)
 
 describe "utils", =>
   it "tranducers", =>
