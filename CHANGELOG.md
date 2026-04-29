@@ -2,6 +2,24 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.5] - 2026-04-29
+
+### Changed
+- `tokenize` is now a compile-time option instead of a runtime parser
+  option.  Pass it via `compile(grammar, { tokenize: true })`,
+  `generate(grammar, { tokenize: true })`, or `hera --tokenize` to
+  produce a dedicated tokenize parser with no handler bodies emitted;
+  the regular parsing path no longer carries a per-rule
+  `if (ctx.tokenize)` branch.  The bundled tokenize variant of the
+  Hera grammar is exposed via `parseTokens` (e.g. for the LSP) (#84).
+- `generate` has overloads so the return type narrows to a
+  Token-yielding parser when called with `{ tokenize: true }`.
+
+### Added
+- Re-export `Token`, `HeraAST`, `Loc`, and related types from the main
+  entry point so `import type { Token } from "@danielx/hera"` resolves
+  without sub-path tricks.
+
 ## [0.9.4] - 2026-04-27
 
 ### Fixed
