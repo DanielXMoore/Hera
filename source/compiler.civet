@@ -527,10 +527,10 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   // ruleReturnType).  Otherwise let TS infer the union from the body.
   retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
 
-  // Declare $$final at a union type so the `||` chain normalizes to
-  // `MaybeResult<X | Y>` instead of `ParseResult<X> | MaybeResult<Y>`.
-  // With an explicit ::Type, use it directly.  Without one, build
-  // `MaybeResult<Unwrap<ReturnType<typeof X$0>> | ...>` from each
+  // Declare $$final at a wide union type so successive `??=` reassignments
+  // (each returning unrelated literal types) don't collide on a let binding's
+  // narrow initial type.  With an explicit ::Type, use it directly.  Without
+  // one, build `MaybeResult<Unwrap<ReturnType<typeof X$0>> | ...>` from each
   // alternative — Unwrap strips the ParseResult wrapper so the union is on
   // the inner value types, which lets TS keep `Parser<T>` inference clean
   // when the rule is used inside `$S(...)` etc.
@@ -541,11 +541,17 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
       altUnion := args.map((_, i) -> `Unwrap<ReturnType<typeof ${name}$${i}>>`).join(" | ")
       `: MaybeResult<${altUnion}>`
   else ""
-  tryBlock := [
-    `  const $$final${finalWideDecl} = `
-    args.map((_, i) -> `${name}$${i}($$ctx, $$state)`).join("\n    || ")
-    `;\n`
-  ]
+  // Statement-form `??=` rather than `const = X || Y || …`: a chained-`||`
+  // const initializer puts every alternative call into one contextually-typed
+  // expression that TS resolves all-at-once, which (combined with rule bodies
+  // that materialize `typeof $$r`) blows TS's stack on heavily mutually-
+  // recursive grammars like Civet's parser.hera.  Per-statement `??=` lets
+  // each call's return type be resolved independently.
+  tryBlock := args.map (_, i) ->
+    if i is 0
+      `  let $$final${finalWideDecl} = ${name}$${i}($$ctx, $$state);\n`
+    else
+      `  $$final ??= ${name}$${i}($$ctx, $$state);\n`
 
   [
     ...allHelpers.flatMap((h) -> [h, "\n\n"])
