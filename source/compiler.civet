@@ -175,12 +175,10 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   retAnno := if types
     if retType then ` as MaybeResult<${retType.trim()}>` else " as never"
   else ""
-  enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
-  eventDataType := if types then ": unknown" else ""
   ```
-\  const $$entered${enteredType} = $$ctx.enter?.(${JSON.stringify(name)}, $$state);
+\  const $$entered = $$ctx.enter?.(${JSON.stringify(name)}, $$state);
   if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
-  const $$eventData${eventDataType} = $$entered?.data;
+  const $$eventData = $$entered?.data;
   ```
   + "\n"
 
