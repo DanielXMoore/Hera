@@ -2,6 +2,19 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [0.9.6] - 2026-04-30
+
+### Performance
+- Generated parsers are smaller thanks to more compact codegen
+
+### Fixed
+- Generated TypeScript now excludes the `$skip` sentinel from handler result
+  types, matching the runtime behavior where `$skip` turns a rule into a failed
+  match rather than a returned value.
+
+### Changed
+- Internally, `$skip` is now a unique symbol rather than an object sentinel.
+
 ## [0.9.5] - 2026-04-29
 
 ### Changed
