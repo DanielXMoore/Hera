@@ -538,7 +538,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
-    `  ${name}: ${name}`
+    `  ${name}`
   .join(",\n")
 
   return `{\n${meat}}`
