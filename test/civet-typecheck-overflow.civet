@@ -1,0 +1,82 @@
+import assert from 'assert'
+import { mkdtempSync, writeFileSync, rmSync, copyFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { execFileSync } from 'child_process'
+
+import { compile, parse } from '../source/main.civet'
+import { compile as civetCompile } from '@danielx/civet'
+
+// Civet's parser.hera exposes a TS-side regression in the compiled parser:
+// the `||`-chain dispatcher's contextually-typed expression (combined with
+// the const-ternary-with-comma rule body for `$skip` handlers) blows TS's
+// stack on a deep mutually-recursive rule graph.  The overflow lands in a
+// few different TS internals (`isConstContext`, `resolveEntityName`,
+// `instantiateTypeWithSingleGenericCallSignature`, …) depending on which
+// frame happens to run out of stack first; the underlying recursion loop
+// is consistent.  Bug repros at ~N=175 rules with the broken compiler;
+// we test at N=200 so a small TS-version drift can't make this flaky.
+buildRecursiveGrammar := (n: number): string ->
+  rules := ['Leaf\n  /[a-z]+/ -> $1\n']
+  for i of [0...n]
+    a := (i + 1) % n
+    b := (i + 2) % n
+    rules.push `R${i}
+  R${a}:p R${b}:q ->
+    if (!p) return $skip
+    return [p, q]
+  R${b}
+  Leaf -> $1
+`
+  rules.join("\n")
+
+describe "Regression: tsc stack overflow on heavily mutually-recursive grammars (PR #86)", ->
+  it "compiles + typechecks a 200-rule recursive grammar without exceeding TS's call stack", ->
+    @timeout 30000
+
+    grammar := buildRecursiveGrammar(200)
+
+    // Stage 1: Hera grammar → Civet code (matches Civet's plugin path,
+    // which calls `hera.compile(source, { module: true, sourceMap: true })`
+    // — no `types`, no `language`).
+    heraOut := compile(parse(grammar), { module: true })
+
+    // Stage 2: Civet code → TS.
+    civetOut := civetCompile(heraOut, { filename: 'fixture.hera', js: false, sync: true }) as string
+
+    // Stage 3: tsc on the result.  Spawn rather than embed so a stack
+    // overflow stays contained in the child process.
+    dir := mkdtempSync(join(tmpdir(), 'hera-overflow-'))
+    try
+      copyFileSync('dist/machine.js', join(dir, 'machine.js'))
+      copyFileSync('dist/machine.d.ts', join(dir, 'machine.d.ts'))
+      writeFileSync(join(dir, 'parser.ts'), civetOut)
+      tsconfig := """
+        {
+          "compilerOptions": {
+            "target": "ES2022",
+            "module": "ESNext",
+            "moduleResolution": "Bundler",
+            "strict": false,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "esModuleInterop": true,
+            "noImplicitAny": false
+          },
+          "include": ["parser.ts", "machine.d.ts"]
+        }
+        """
+      writeFileSync(join(dir, 'tsconfig.json'), tsconfig)
+
+      tsc := join(process.cwd(), 'node_modules', '.bin', 'tsc')
+      let out: string = ""
+      try
+        out = execFileSync(tsc, ['-p', 'tsconfig.json'], { cwd: dir, encoding: 'utf8' })
+      catch err
+        e := err as { stdout?: string, stderr?: string, message?: string }
+        out = (e.stdout ?? "") + (e.stderr ?? "") + (e.message ?? "")
+
+      assert.doesNotMatch out, /Maximum call stack size exceeded/,
+        "tsc stack-overflowed on a 200-rule recursive grammar — the dispatcher's `||` chain (or another aggregating-expression form) is back."
+    finally
+      rmSync dir, { recursive: true, force: true }
