@@ -38,3 +38,4 @@ civet source/cli-bin.civet --types --module --libPath ./machine.js -o parsers \
   test/inference.fixture.hera
 
 cp test/inference.test-d.ts parsers/inference.test-d.ts
+cp test/skip.test-d.ts parsers/skip.test-d.ts

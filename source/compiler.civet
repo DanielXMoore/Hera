@@ -448,20 +448,22 @@ ${valueDecl}  const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit
-  // ::Type is present, annotate $$final as `MaybeResult<typeof $$m>` so the
+  // ::Type is present, annotate $$final from `typeof $$m` so the
   // IIFE's inferred return type flows out as the rule function's return
   // type.  $$final's annotation does the typing work — the `as any` on the
   // assignment from $$r is just to bypass the structural mismatch (TS still
   // believes $$r.value has its old shape pre-mutation).
-  finalAnno := if types
-    if retType then `: MaybeResult<${retType.trim()}>` else ": MaybeResult<typeof $$m>"
+  finalType := if types
+    `MaybeResult<Exclude<${
+      if retType then retType.trim() else "typeof $$m"
+    }, typeof SKIP>>`
   else ""
   rValueCast := types ? " as any" : ""
   body.push ";\n"
   if handlerUsesSkip
     skipCast := types ? " as any" : ""
     body.push ```
-    \  const $$final${finalAnno} = ${conditionalExpression options,
+    \  const $$final${finalType && `: ${finalType}`} = ${conditionalExpression options,
         `($$m${skipCast}) !== SKIP`
         `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
         "undefined"
@@ -473,7 +475,7 @@ ${valueDecl}  const $$m = `
     body.push ```
     \  ($$r${rValueCast}).value = $$m;
       ${exitHook("$$r")}
-      return $$r${finalAnno && ` as unknown as ${finalAnno.replace(/^: /, "")}`};
+      return $$r${finalType && ` as unknown as ${finalType}`};
     ```
   return { helpers, body }
 
@@ -649,7 +651,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
     `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
-    "const $skip = SKIP; void $skip;\n\n"
+    `const $skip${types ? ": (typeof SKIP)" : ""} = SKIP; void $skip;\n\n`
     strDefSource
     "\n\n"
     reDefSource
