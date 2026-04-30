@@ -178,9 +178,9 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
   eventDataType := if types then ": unknown" else ""
   ```
-\  const $$entered${enteredType} = $$ctx.enter && $$ctx.enter(${JSON.stringify(name)}, $$state);
+\  const $$entered${enteredType} = $$ctx.enter?.(${JSON.stringify(name)}, $$state);
   if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
-  const $$eventData${eventDataType} = $$entered && $$entered.data;
+  const $$eventData${eventDataType} = $$entered?.data;
   ```
   + "\n"
 
@@ -208,7 +208,7 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   }
   ```
   else ""
-  tokenWrap + `  if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, $$final, $$eventData);\n`
+  tokenWrap + `  $$ctx.exit?.(${nameLit}, $$state, $$final, $$eventData);\n`
 
 // Emit an inline IIFE that applies the handler to the parser result.
 //
@@ -432,7 +432,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   nameLit := JSON.stringify(name)
   exitHook := (retExpr: string): string ->
     if wrapEvent
-      `if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, ${retExpr}, $$eventData);`
+      `$$ctx.exit?.(${nameLit}, $$state, ${retExpr}, $$eventData);`
     else
       ""
 
