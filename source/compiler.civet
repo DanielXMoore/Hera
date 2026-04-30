@@ -357,9 +357,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parserExpr := compileOp(rule, name, false, types)
   helpers.push `const ${fnName}$parser = ${parserExpr};`
 
-  // Per-shape: params, their types, and call args.  If any retained arg needs
-  // parser value access, cache `$$r.value` into `$$value` before building the
-  // handler call, so V8 sees direct variable reads instead of repeated
+  // Per-shape: params, their types, and call args.  If multiple retained args
+  // need parser value access, cache `$$r.value` into `$$value` before building
+  // the handler call, so V8 sees direct variable reads instead of repeated
   // `$$r.value[i]` property lookups.
   let parameters: string[], paramTypes: string[], callArgs: string[]
 
@@ -417,7 +417,13 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parameters = usedParameterIndexes.map (i) -> parameters[i]
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
-  valueDecl := if callArgs.some((arg) -> usesIdentifier(arg, "$$value")) then "  const $$value = $$r.value;\n" else ""
+  valueUseCount := (callArgs.filter usesIdentifier ., "$$value")#
+  valueDecl := if valueUseCount > 1
+    "  const $$value = $$r.value;\n"
+  else
+    paramTypes = paramTypes.map .replace /\$\$value/g, => "$$r.value"
+    callArgs = callArgs.map .replace /\$\$value/g, => "$$r.value"
+    ""
 
   // Emit the IIFE at the rule function's top-level indent (2-space) so the
   // handler body (which comes in at 4-space from the grammar source) is
