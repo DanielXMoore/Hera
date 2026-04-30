@@ -175,12 +175,10 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   retAnno := if types
     if retType then ` as MaybeResult<${retType.trim()}>` else " as never"
   else ""
-  enteredType := if types then ": { cache?: unknown, data?: unknown } | undefined" else ""
-  eventDataType := if types then ": unknown" else ""
   ```
-\  const $$entered${enteredType} = $$ctx.enter && $$ctx.enter(${JSON.stringify(name)}, $$state);
+\  const $$entered = $$ctx.enter?.(${JSON.stringify(name)}, $$state);
   if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
-  const $$eventData${eventDataType} = $$entered && $$entered.data;
+  const $$eventData = $$entered?.data;
   ```
   + "\n"
 
@@ -208,7 +206,7 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   }
   ```
   else ""
-  tokenWrap + `  if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, $$final, $$eventData);\n`
+  tokenWrap + `  $$ctx.exit?.(${nameLit}, $$state, $$final, $$eventData);\n`
 
 // Emit an inline IIFE that applies the handler to the parser result.
 //
@@ -276,6 +274,12 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
     handlerBody
     `\n${baseIndent}})(${callArgs.join(", ")})`
   ]
+
+conditionalExpression := (options: CompilerOptions, condition: string, consequent: string, alternate: string) =>
+  if options.language is 'civet'
+    `if ${condition} then ${consequent} else ${alternate}`
+  else
+    `${condition} ? ${consequent} : ${alternate}`
 
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
@@ -351,11 +355,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parserExpr := compileOp(rule, name, false, types)
   helpers.push `const ${fnName}$parser = ${parserExpr};`
 
-  skipCast := types ? " as any" : ""
-
-  // Per-shape: params, their types, and call args.  If any retained arg needs
-  // parser value access, cache `$$r.value` into `$$value` before building the
-  // handler call, so V8 sees direct variable reads instead of repeated
+  // Per-shape: params, their types, and call args.  If multiple retained args
+  // need parser value access, cache `$$r.value` into `$$value` before building
+  // the handler call, so V8 sees direct variable reads instead of repeated
   // `$$r.value[i]` property lookups.
   let parameters: string[], paramTypes: string[], callArgs: string[]
 
@@ -404,6 +406,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // We use a lexical regex rather than parsing to keep things fast/simple.
   // Comments and strings will count as usage, but this is mostly harmless
   // (just reduces optimization).
+  handlerUsesSkip := usesIdentifier(h.f, "$skip")
   usedParameterIndexes := parameters.flatMap (p, i) ->
     if usesIdentifier(h.f, p)
       [i]
@@ -412,7 +415,13 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parameters = usedParameterIndexes.map (i) -> parameters[i]
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
-  valueDecl := if callArgs.some((arg) -> usesIdentifier(arg, "$$value")) then "  const $$value = $$r.value;\n" else ""
+  valueUseCount := (callArgs.filter usesIdentifier ., "$$value")#
+  valueDecl := if valueUseCount > 1
+    "  const $$value = $$r.value;\n"
+  else
+    paramTypes = paramTypes.map .replace /\$\$value/g, => "$$r.value"
+    callArgs = callArgs.map .replace /\$\$value/g, => "$$r.value"
+    ""
 
   // Emit the IIFE at the rule function's top-level indent (2-space) so the
   // handler body (which comes in at 4-space from the grammar source) is
@@ -427,7 +436,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   nameLit := JSON.stringify(name)
   exitHook := (retExpr: string): string ->
     if wrapEvent
-      `if ($$ctx.exit) $$ctx.exit(${nameLit}, $$state, ${retExpr}, $$eventData);`
+      `$$ctx.exit?.(${nameLit}, $$state, ${retExpr}, $$eventData);`
     else
       ""
 
@@ -443,23 +452,35 @@ ${valueDecl}  const $$m = `
   body.push iife
   // Mutate $$r.value in place instead of allocating a fresh ParseResult,
   // saving a heap allocation per successful rule match.  When no explicit
-  // ::Type is present, annotate $$final as `MaybeResult<typeof $$m>` so the
+  // ::Type is present, annotate $$final from `typeof $$m` so the
   // IIFE's inferred return type flows out as the rule function's return
   // type.  $$final's annotation does the typing work — the `as any` on the
   // assignment from $$r is just to bypass the structural mismatch (TS still
   // believes $$r.value has its old shape pre-mutation).
-  finalAnno := if types
-    if retType then `: MaybeResult<${retType.trim()}>` else ": MaybeResult<typeof $$m>"
+  finalType := if types
+    `MaybeResult<Exclude<${
+      if retType then retType.trim() else "typeof $$m"
+    }, typeof SKIP>>`
   else ""
   rValueCast := types ? " as any" : ""
-  body.push `;
-  let $$final${finalAnno} = undefined;
-  if (($$m${skipCast}) !== SKIP) {
-    ($$r${rValueCast}).value = $$m;
-    $$final = $$r${rValueCast};
-  }
-  ${exitHook("$$final")}
-  return $$final;`
+  body.push ";\n"
+  if handlerUsesSkip
+    skipCast := types ? " as any" : ""
+    body.push ```
+    \  const $$final${finalType && `: ${finalType}`} = ${conditionalExpression options,
+        `($$m${skipCast}) !== SKIP`
+        `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
+        "undefined"
+      };
+      ${exitHook("$$final")}
+      return $$final;
+    ```
+  else
+    body.push ```
+    \  ($$r${rValueCast}).value = $$m;
+      ${exitHook("$$r")}
+      return $$r${finalType && ` as unknown as ${finalType}`};
+    ```
   return { helpers, body }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
@@ -506,15 +527,13 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   // ruleReturnType).  Otherwise let TS infer the union from the body.
   retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
 
-  // Declare $$final at a union type so successive alternatives (which may
-  // return unrelated literal types) don't collide on a let binding's narrow
-  // type.  With an explicit ::Type, use it directly.  Without one, build
+  // Declare $$final at a union type so the `||` chain normalizes to
+  // `MaybeResult<X | Y>` instead of `ParseResult<X> | MaybeResult<Y>`.
+  // With an explicit ::Type, use it directly.  Without one, build
   // `MaybeResult<Unwrap<ReturnType<typeof X$0>> | ...>` from each
   // alternative — Unwrap strips the ParseResult wrapper so the union is on
   // the inner value types, which lets TS keep `Parser<T>` inference clean
-  // when the rule is used inside `$S(...)` etc.  A bare `??` chain produces
-  // `MaybeResult<X> | MaybeResult<Y>` which TS does not normalize to
-  // `MaybeResult<X | Y>`, breaking that downstream inference.
+  // when the rule is used inside `$S(...)` etc.
   finalWideDecl := if types
     if retType
       `: MaybeResult<${retType.trim()}>`
@@ -522,11 +541,11 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
       altUnion := args.map((_, i) -> `Unwrap<ReturnType<typeof ${name}$${i}>>`).join(" | ")
       `: MaybeResult<${altUnion}>`
   else ""
-  tryBlock := args.map (_, i) ->
-    if i is 0
-      `  let $$final${finalWideDecl} = ${name}$${i}($$ctx, $$state);\n`
-    else
-      `  if (!$$final) $$final = ${name}$${i}($$ctx, $$state);\n`
+  tryBlock := [
+    `  const $$final${finalWideDecl} = `
+    args.map((_, i) -> `${name}$${i}($$ctx, $$state)`).join("\n    || ")
+    `;\n`
+  ]
 
   [
     ...allHelpers.flatMap((h) -> [h, "\n\n"])
@@ -541,7 +560,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
 compileRulesObject := (ruleNames: string[]) ->
   meat := ruleNames.map (name) ->
-    `  ${name}: ${name}`
+    `  ${name}`
   .join(",\n")
 
   return `{\n${meat}}`
@@ -636,7 +655,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     head
     `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
     `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
-    "const $skip = SKIP; void $skip;\n\n"
+    `const $skip${types ? ": (typeof SKIP)" : ""} = SKIP; void $skip;\n\n`
     strDefSource
     "\n\n"
     reDefSource

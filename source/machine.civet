@@ -408,7 +408,7 @@ export function $TR<A extends unknown[], T>(
     // If A is an array (e.g. RegExpMatchArray, which extends string[]), then
     //   $0...$9 will be the type of the array's elements (e.g. string)
   ) => T
-): Parser<T> {
+): Parser<Exclude<T, typeof SKIP>> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
@@ -423,7 +423,7 @@ export function $TR<A extends unknown[], T>(
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<T>
+    return result as unknown as ParseResult<Exclude<T, typeof SKIP>>
   }
 }
 
@@ -434,7 +434,7 @@ type TupleOrArrayAsArgs<A extends unknown[]> =
 
 
 // Transform sequence
-export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
+export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<Exclude<B, typeof SKIP>> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
@@ -449,12 +449,12 @@ export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SK
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<B>
+    return result as unknown as ParseResult<Exclude<B, typeof SKIP>>
   }
 }
 
 // Transform value $0 and $1 are both singular value
-export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, $0: A, $1: A) => B): Parser<B> {
+export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, $0: A, $1: A) => B): Parser<Exclude<B, typeof SKIP>> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
@@ -469,7 +469,7 @@ export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc,
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<B>
+    return result as unknown as ParseResult<Exclude<B, typeof SKIP>>
   }
 }
 
@@ -540,7 +540,7 @@ export function $EVENT_C<T extends Parser<any>[]>(ctx: ParserContext, state: Par
  * Sentinel returned from inlined rule handlers to signal "treat this rule as a
  * failed match" (reachable via the `$skip` parameter in hera grammars).
  */
-export const SKIP = {}
+export const SKIP: unique symbol = Symbol("SKIP")
 
 // End of machinery
 // Parser specific things below
