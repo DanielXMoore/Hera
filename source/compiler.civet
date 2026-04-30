@@ -277,6 +277,12 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
     `\n${baseIndent}})(${callArgs.join(", ")})`
   ]
 
+conditionalExpression := (options: CompilerOptions, condition: string, consequent: string, alternate: string) =>
+  if options.language is 'civet'
+    `if ${condition} then ${consequent} else ${alternate}`
+  else
+    `${condition} ? ${consequent} : ${alternate}`
+
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
 //   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
@@ -452,11 +458,11 @@ ${valueDecl}  const $$m = `
   skipCast := types ? " as any" : ""
   rValueCast := types ? " as any" : ""
   body.push `;
-  let $$final${finalAnno} = undefined;
-  if (($$m${skipCast}) !== SKIP) {
-    ($$r${rValueCast}).value = $$m;
-    $$final = $$r${rValueCast};
-  }
+  const $$final${finalAnno} = ${conditionalExpression options,
+    `($$m${skipCast}) !== SKIP`
+    `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
+    "undefined"
+  };
   ${exitHook("$$final")}
   return $$final;`
   return { helpers, body }
