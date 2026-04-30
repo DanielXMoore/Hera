@@ -1,0 +1,5 @@
+Rule
+  "a"+:as ->
+    if (as.length % 2) return $skip
+    return "even"
+  "a" -> "one"

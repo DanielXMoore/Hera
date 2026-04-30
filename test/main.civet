@@ -1011,10 +1011,10 @@ describe "Hera", ->
           return $skip
 
       V
-        "" -> true
+        "" -> "ok"
     """
 
-    assert parse ""
+    assert.equal parse(""), "ok"
 
   describe "named parameters", ->
     it "should provide named parameters for a sequence", ->
@@ -1243,6 +1243,14 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), language: 'civet')
       assert.match result, /: ParseState/
+
+    it "should use Civet if expression for skip handlers", ->
+      grammar := """
+        Rule
+          "a" -> $skip
+      """
+      result := compile(parse(grammar), language: 'civet')
+      assert.match result, / = if \(\$\$m as any\) !== SKIP then /m
 
     it "should indent inline civet handlers by two spaces", ->
       grammar := """

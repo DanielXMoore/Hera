@@ -32,6 +32,7 @@ civet source/cli-bin.civet --types --module --libPath ./machine.js -o parsers \
   samples/structural-mapping.hera \
   samples/math.hera \
   samples/named-params.hera \
+  samples/skip.hera \
   samples/unary-subtract.hera \
   samples/types.hera \
   test/inference.fixture.hera

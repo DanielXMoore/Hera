@@ -408,6 +408,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // We use a lexical regex rather than parsing to keep things fast/simple.
   // Comments and strings will count as usage, but this is mostly harmless
   // (just reduces optimization).
+  handlerUsesSkip := usesIdentifier(h.f, "$skip")
   usedParameterIndexes := parameters.flatMap (p, i) ->
     if usesIdentifier(h.f, p)
       [i]
@@ -455,16 +456,25 @@ ${valueDecl}  const $$m = `
   finalAnno := if types
     if retType then `: MaybeResult<${retType.trim()}>` else ": MaybeResult<typeof $$m>"
   else ""
-  skipCast := types ? " as any" : ""
   rValueCast := types ? " as any" : ""
-  body.push `;
-  const $$final${finalAnno} = ${conditionalExpression options,
-    `($$m${skipCast}) !== SKIP`
-    `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
-    "undefined"
-  };
-  ${exitHook("$$final")}
-  return $$final;`
+  body.push ";\n"
+  if handlerUsesSkip
+    skipCast := types ? " as any" : ""
+    body.push ```
+    \  const $$final${finalAnno} = ${conditionalExpression options,
+        `($$m${skipCast}) !== SKIP`
+        `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
+        "undefined"
+      };
+      ${exitHook("$$final")}
+      return $$final;
+    ```
+  else
+    body.push ```
+    \  ($$r${rValueCast}).value = $$m;
+      ${exitHook("$$r")}
+      return $$r${finalAnno && ` as unknown as ${finalAnno.replace(/^: /, "")}`};
+    ```
   return { helpers, body }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
