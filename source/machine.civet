@@ -400,7 +400,7 @@ export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
 export function $TR<A extends unknown[], T>(
   parser: Parser<A>,
   fn: (
-    $skip: typeof SKIP,
+    $skip: never,
     $loc: Loc,
     ...args: TupleOrArrayAsArgs<A> // This properly assigns the types of the arguments.
     // If A is a tuple, e.g. ['a'|'b', 'foo'|'bar'] then $0 will be 'a'|'b' and
@@ -408,22 +408,22 @@ export function $TR<A extends unknown[], T>(
     // If A is an array (e.g. RegExpMatchArray, which extends string[]), then
     //   $0...$9 will be the type of the array's elements (e.g. string)
   ) => T
-): Parser<Exclude<T, typeof SKIP>> {
+): Parser<T> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(SKIP, loc, ...(value as TupleOrArrayAsArgs<A>))
+    const mappedValue = fn(SKIP as never, loc, ...(value as TupleOrArrayAsArgs<A>))
 
-    if (mappedValue === SKIP) {
+    if (mappedValue as unknown === SKIP) {
       // TODO track fail?
       return
     }
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<Exclude<T, typeof SKIP>>
+    return result as unknown as ParseResult<T>
   }
 }
 
@@ -434,42 +434,42 @@ type TupleOrArrayAsArgs<A extends unknown[]> =
 
 
 // Transform sequence
-export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, value: A, ...args: A) => B): Parser<Exclude<B, typeof SKIP>> {
+export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: never, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(SKIP, loc, value, ...value)
+    const mappedValue = fn(SKIP as never, loc, value, ...value)
 
-    if (mappedValue === SKIP) {
+    if (mappedValue as unknown === SKIP) {
       // TODO track fail?
       return
     }
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<Exclude<B, typeof SKIP>>
+    return result as unknown as ParseResult<B>
   }
 }
 
 // Transform value $0 and $1 are both singular value
-export function $TV<A, B>(parser: Parser<A>, fn: ($skip: typeof SKIP, $loc: Loc, $0: A, $1: A) => B): Parser<Exclude<B, typeof SKIP>> {
+export function $TV<A, B>(parser: Parser<A>, fn: ($skip: never, $loc: Loc, $0: A, $1: A) => B): Parser<B> {
   return function (ctx, state) {
     const result = parser(ctx, state);
     if (!result) return
 
     const { loc, value } = result
-    const mappedValue = fn(SKIP, loc, value, value)
+    const mappedValue = fn(SKIP as never, loc, value, value)
 
-    if (mappedValue === SKIP) {
+    if (mappedValue as unknown === SKIP) {
       // TODO track fail?
       return
     }
 
     //@ts-ignore
     result.value = mappedValue
-    return result as unknown as ParseResult<Exclude<B, typeof SKIP>>
+    return result as unknown as ParseResult<B>
   }
 }
 

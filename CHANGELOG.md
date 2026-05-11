@@ -2,6 +2,16 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- `$skip` is typed as `never` in handler signatures, eliminating the
+  `Exclude<T, typeof SKIP>` wrappers on `$TR`/`$TS`/`$TV` return types and
+  on the rule function's `$$final` annotation.  Returning `$skip` still
+  marks the rule as a failed match at runtime, but no longer widens the
+  handler's inferred return type — so the cleanup wrappers become
+  unnecessary.
+
 ## [0.9.6] - 2026-04-30
 
 ### Performance
