@@ -134,18 +134,22 @@ AnonymousRule
 
 **Sequence** (` `): One thing after another, separated by spaces. For example, `"(" Expr ")"` matches the character `"("` followed by a match of `Expr` followed by the character `")"`. Sequences with more than one part return an array of the parts.
 
-**Terminal** (`"..."`, `/.../`):
-A string literal (surrounded by double quotes)
-or a regular expression (normally surrounded by forward slashes).
+**Terminal string** (`"..."`):
+A string literal (surrounded by double quotes).
+The entire string must be matched at the exact position.
+Terminal strings return the matched string when they match.
+
+**Terminal regular expression** (`/.../`):
+A regular expression, normally surrounded by forward slashes.
 Simple regular expressions consisting of just `.` or character classes
 like `[A-Z][a-z]*` do not need surrounding slashes.
-In any case, the entire terminal must be matched at the exact position.
-(For regular expressions, this is as if the expressions started with `^`
-and it was applied to the rest of the string.)
-Terminals return a string when they match.
-If the entire choice of a rule is a regular expression, then
-the groups of the regular expression are available as `$1`, `$2`, ...
-and the matching string is available as `$0`.
+The entire regular expression must be matched at the exact position
+(as if the regular expression started with `^`
+and it was applied to the rest of the string).
+Terminal regular expressions return the
+[`match`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match)
+array: the matched string, followed by any matched groups
+(strings or `undefined` for unmatched optional groups).
 
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
@@ -167,14 +171,14 @@ The most general handler is JavaScript, TypeScript, or Civet code indented
 beneath the choice, which `return`s the desired value for the matched choice.
 Alternatively, a single expression can start on the same line as `->`, and it will be implicitly `return`ed.
 In either case, the handler code can refer to the default value
-(strings for terminals, arrays for sequences or repetitions) via `$0`,
+(strings for terminal strings, arrays for sequences or repetitions) via `$0`,
 which is what the choice returns if you don't provide a handler.
 The `n`th matching item in the topmost sequence can be accessed via `$n`;
 each item in the topmost sequence can also be named via a `:name` suffix
 (for example, `Block:name`), and then the code can also refer to it as `name`.
-If the expansion is a single regular expression,
-`$n` instead refers to the `n`th group in the regex
-(and `$0` is the full matching string).
+As a special case, if the expansion is a single regular expression,
+`$0` refers to the full matching string (instead of the match array) and
+`$n` refers to the `n`th group in the regex.
 The handler code can return the special value `$skip`
 to indicate a failed match.
 
