@@ -148,7 +148,8 @@ The entire regular expression must be matched at the exact position
 and it was applied to the rest of the string).
 Terminal regular expressions return the
 [`match`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match)
-array: the matched string, followed by any matched group strings.
+array: the matched string, followed by any matched groups
+(strings or `undefined` for unmatched optional groups).
 
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
