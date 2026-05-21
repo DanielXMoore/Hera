@@ -2,7 +2,7 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
-## [Unreleased]
+## [0.9.7] - 2026-05-21
 
 ### Changed
 - `$skip` is typed as `never` in handler signatures, eliminating the
