@@ -34,6 +34,10 @@ handler to source
 hToS := (h: Handler | undefined): string ->
   return "" unless h?
 
+  // Type annotation without handler, e.g. `Rule ::Type`
+  if "t" in h and !("f" in h)
+    return ` :: ${h.t.trim()}`
+
   unless h is like { f } and h.f <? "string"
     throw new Error "Unknown handler format"
 

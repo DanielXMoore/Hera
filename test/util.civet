@@ -120,6 +120,16 @@ describe "util", ->
 
     assert.equal decompile(rules), grammar
 
+  it "should decompile type annotations without handlers", ->
+    grammar := """
+      Rule
+        N:x :: number
+
+    """
+    rules := parse grammar
+
+    assert.equal decompile(rules), grammar
+
   it "should throw an error when decompiling an unknown format", ->
     rules := parse """
       Rule
