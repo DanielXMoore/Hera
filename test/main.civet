@@ -493,6 +493,67 @@ describe "Hera", ->
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
 
+  it "should parse static triple-slash regexes", ->
+    rules := parse """
+      Rule
+        ///  ab c / [ # ]  ///
+
+      EscapedSpace
+        ///\\ ///
+    """
+
+    assert.deepEqual rules.Rule, ["R", "abc\\/[ # ]"]
+    assert.deepEqual rules.EscapedSpace, ["R", " "]
+
+  it "should compile interpolated triple-slash regexes", ->
+    {parse} := generate """
+      ```
+      const shared = "[0-9]+"
+      ```
+
+      Rule
+        /// x y ${shared} /// -> $0
+
+      Another
+        /// a b ${shared} /// -> $0
+    """
+
+    assert.equal parse("xy123"), "xy123"
+    assert.equal parse("ab456", startRule: "Another"), "ab456"
+    assert.throws ->
+      parse("xyabc")
+    , /Rule \/xy\[0-9\]\+\//
+
+  it "should reuse duplicated interpolated triple-slash regexes", ->
+    code := compile parse """
+      ```
+      const shared = "[a-z]+"
+      ```
+
+      Rule
+        /// ${shared} ///
+        /// ${shared} ///
+    """
+
+    assert.match code, /const \$RD0 = /
+    assert.doesNotMatch code, /const \$RD1 = /
+    assert.match code, /\$EXPECT\(\$RD0, \(\) => `Rule \/\$\{\$RD0\.source\}\/`\)/
+
+    typedCode := compile parse("""
+      Rule
+        /// ${shared} ///
+    """), types: true
+    assert.match typedCode, /let \$\$parser: Parser<RegExpMatchArray> \| undefined;/
+    assert.match typedCode, /\{ source\?: string \}/
+
+  it "should treat hash interpolation syntax as static text in triple-slash regexes", ->
+    {parse} := generate """
+      Rule
+        /// #\\{shared\\} ///
+    """
+
+    assert.equal parse("#{shared}"), "#{shared}"
+
   it "should parse simple grammars", ->
     {parse} := generate """
       Rule

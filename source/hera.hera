@@ -6,6 +6,8 @@ import type {
   Handler,
   CodeBlockNode,
 } from './hera-types'
+
+const heregexEscapes: Record<string, string> = { "\n": "\\n", "\r": "\\r", " ": " " }
 ```
 
 Grammar
@@ -162,9 +164,30 @@ StringLiteral
   StringValue -> ["L", $1]
 
 RegExpLiteral
+  TripleSlash HeregexBody:body TripleSlash ->
+    // Static heregexes use the normal RegExp path; only interpolated ones need RD.
+    if (body.every((part) => typeof part === "string"))
+      return ["R", body.join("")]
+    return ["RD", body]
   "/" !Space $RegExpCharacter* "/" -> ["R", $3]
   $CharacterClassExpression -> ["R", $1]
   "." -> ["R", $1]
+
+HeregexBody
+  !TripleSlash HeregexPart* -> $2
+
+HeregexPart
+  $CharacterClass -> $1
+  "${" $HeregexSubstitutionCharacter* "}" -> { expression: $2 }
+  /(?:\\.)/ -> heregexEscapes[$0[1]] ?? $0
+  /\/\/(?!\/)[^\n\r]*/ -> ""
+  [\s]+ -> ""
+  /\/(?!\/\/)/ -> "\\/"
+  /[^[\/\s#$\\]+|[#$]/ -> $0
+
+HeregexSubstitutionCharacter
+  [^}\\]+
+  EscapeSequence
 
 CharacterClassExpression
   CharacterClass+
@@ -191,6 +214,9 @@ Arrow
 
 Backslash
   "\\"
+
+TripleSlash
+  "///"
 
 OpenBrace
   /\{\s*/

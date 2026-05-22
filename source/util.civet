@@ -73,6 +73,13 @@ toS := (rule: HeraAST, depth=0): string ->
             v + hToS(h)
           catch
             '/' + v + '/' + hToS(h)
+      when "RD"
+        "///" + rule[1].map((part) ->
+          if part <? "string"
+            part
+          else
+            "${" + part.expression + "}"
+        ).join("") + "///" + hToS(h)
 
       when "S"
         terms := rule[1].map (i) ->
@@ -137,6 +144,13 @@ ruleToEBNF := (rule: HeraAST, depth=0): string ->
             quote v
           catch
             quote('/' + v + '/')
+      when "RD"
+        quote("///" + rule[1].map((part) ->
+          if part <? "string"
+            part
+          else
+            "${" + part.expression + "}"
+        ).join("") + "///")
 
       when "S"
         terms := rule[1].map (rule) ->

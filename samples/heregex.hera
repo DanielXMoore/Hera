@@ -1,0 +1,24 @@
+# Static triple-slash regexes compile like ordinary regexes. Triple-slash
+# regexes with `${}` substitutions are dynamic: the generated parser
+# re-evaluates the interpolation expression when the rule runs and reuses the
+# cached RegExp while the resulting source string is unchanged.
+#
+# This example mutates parser state. If result caching is enabled, state like
+# `closing` must be part of the cache key/state, and rules that mutate it
+# should not be cached.
+
+```
+let closing = "\\)"
+```
+
+Pair
+  Open Close -> $1 + $2
+
+Open
+  /// [\(\[] /// ->
+    if ($0 === "(") closing = "\\)"
+    else closing = "\\]"
+    return $0
+
+Close
+  /// ${closing} /// -> $0

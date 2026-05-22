@@ -109,6 +109,19 @@ describe "util", ->
 
     assert.equal decompile(rules), grammar
 
+  it "should decompile interpolated triple-slash regexes", ->
+    rules := parse """
+      Rule
+        /// a ${shared} ///
+    """
+
+    assert.equal decompile(rules), """
+      Rule
+        ///a${shared}///
+
+    """
+    assert.equal grammarToEBNF(rules), 'Rule ::= "///a${shared}///"\n'
+
   it "should decompile type annotated rule", ->
     grammar := """
       Rule

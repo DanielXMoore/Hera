@@ -27,6 +27,7 @@ civet source/cli-bin.civet --types --module --libPath ./machine.js -o parsers \
   source/hera.hera \
   samples/code.hera \
   samples/regex.hera \
+  samples/heregex.hera \
   samples/url.hera \
   samples/coffee.hera \
   samples/structural-mapping.hera \

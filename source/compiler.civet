@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules } from ./hera-types.civet
+import type { HeraAST, HeraRules, RegExpPart } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -23,6 +23,7 @@ export type CompilerOptions = {
 
 strDefs: string[] := []
 reDefs: string[] := []
+dynamicReDefs: RegExpPart[][] := []
 
 /**
 Define a literal string terminal
@@ -54,6 +55,26 @@ defineRe := (re: string) ->
 
   return id
 
+defineDynamicRe := (parts: RegExpPart[]) ->
+  index := dynamicReDefs.findIndex((entry) -> JSON.stringify(entry) is JSON.stringify(parts))
+  let id
+
+  if index >= 0
+    id = `$RD${index}`
+  else
+    id = `$RD${dynamicReDefs#}`
+    dynamicReDefs.push parts
+
+  return id
+
+regExpPartToTemplate := (part: RegExpPart): string ->
+  if part <? "string"
+    return part.replace(/`|\\|\$/g, "\\$&")
+  return "${" + part.expression + "}"
+
+regExpSourceToExpression := (parts: RegExpPart[]): string ->
+  `\`${parts.map(regExpPartToTemplate).join("")}\``
+
 /**
 Pretty print a string or RegExp literal
 */
@@ -82,6 +103,16 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
         {
           args := tuple[1]
           let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
+          if defaultHandler
+            f =`$R$0(${f})`
+
+          f
+        }
+      when "RD"
+        {
+          args := tuple[1]
+          id := defineDynamicRe(args)
+          let f = `$EXPECT(${id}, () => \`${name} /\${${id}.source}/\`)`
           if defaultHandler
             f =`$R$0(${f})`
 
@@ -382,7 +413,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
       addNamedParameter getNamedVariable(rule[1][i][0]), `typeof $$value[${i}]`, `$$value[${i}]`
-  else if rule[0] is "R"
+  else if rule[0] <? "string" and rule[0].startsWith "R"
     parameters = regExpHandlerParams.slice()
     // RegExpMatchArray positional typing (and reTupleType short tuples) don't
     // pass cleanly through .reduce/.filter; keep positional args as `any`.
@@ -602,6 +633,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   strDefs.length = 0
   reDefs.length = 0
+  dynamicReDefs.length = 0
 
   { language, module } := options
   types := options.types || language === 'typescript' || language === 'civet'
@@ -618,6 +650,27 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R${reTupleType(types, r)}(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
+
+  dynamicReDefSource := dynamicReDefs.map (r, i) ->
+    parserType := types ? ": Parser<RegExpMatchArray> | undefined" : ""
+    rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
+    ctxType := types ? ": ParserContext" : ""
+    stateType := types ? ": ParseState" : ""
+    nonNullAssert := types ? "!" : ""
+    ```
+    const $RD${i} = (() => {
+      let $$parser${parserType};
+      const $$rd = (($$ctx${ctxType}, $$state${stateType}) => {
+        const $$source = ${regExpSourceToExpression(r)};
+        if ($$source !== $$rd.source) {
+          $$rd.source = $$source;
+          $$parser = $R(new RegExp($$source, 'suy'));
+        }
+        return $$parser${nonNullAssert}($$ctx, $$state);
+      })${rdType};
+      return $$rd;
+    })();
+    ```
 
   genOpts: GenerateOptions := {}
 
@@ -659,6 +712,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     strDefSource
     "\n\n"
     reDefSource
+    "\n\n"
+    dynamicReDefSource
     "\n\n"
     body
     "\n\n"

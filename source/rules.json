@@ -2,10 +2,10 @@
   "code": [
     {
       "type": "CodeBlock",
-      "token": "\nimport type {\n  HeraAST,\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n} from './hera-types'\n",
+      "token": "\nimport type {\n  HeraAST,\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n} from './hera-types'\n\nconst heregexEscapes: Record<string, string> = { \"\\n\": \"\\\\n\", \"\\r\": \"\\\\r\", \" \": \" \" }\n",
       "$loc": {
         "pos": 3,
-        "length": 104
+        "length": 191
       }
     }
   ],
@@ -16,7 +16,7 @@
       {
         "f": "    const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\n    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\n    rules[Symbol.for(\"code\")] = code\n    return rules",
         "$loc": {
-          "pos": 136,
+          "pos": 223,
           "length": 236
         }
       }
@@ -36,7 +36,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 402,
+              "pos": 489,
               "length": 3
             },
             "inline": true
@@ -54,7 +54,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 420,
+              "pos": 507,
               "length": 4
             },
             "inline": true
@@ -72,7 +72,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 478,
+          "pos": 565,
           "length": 4
         },
         "inline": true
@@ -87,7 +87,7 @@
       {
         "f": "[$1, $2]",
         "$loc": {
-          "pos": 506,
+          "pos": 593,
           "length": 10
         },
         "inline": true
@@ -105,7 +105,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 562,
+          "pos": 649,
           "length": 4
         },
         "inline": true
@@ -143,7 +143,7 @@
       {
         "f": "    var r: HeraAST[] = choices.map((a) => a[1] as HeraAST)\n    if (t) r = r.map((a): HeraAST => {\n      if (typeof a === \"string\") return [\"S\", [a], { t }] as unknown as HeraAST\n      const handler = a[2]\n      if (handler) {\n        if (\"t\" in handler) return a\n        return [a[0], a[1], { ...handler, t }] as unknown as HeraAST\n      }\n      return [a[0], a[1], { t }] as unknown as HeraAST\n    })\n    if (r.length === 1) return r[0];\n    return [\"/\", r] as HeraAST",
         "$loc": {
-          "pos": 644,
+          "pos": 731,
           "length": 471
         },
         "t": " HeraAST "
@@ -158,7 +158,7 @@
       {
         "f": "    if ($2 !== undefined) {\n      if (!$1.push)\n        $1 = [\"S\", [$1], $2]\n      else\n        $1.push($2)\n    }\n    return $1",
         "$loc": {
-          "pos": 1145,
+          "pos": 1232,
           "length": 129
         }
       }
@@ -178,7 +178,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"S\", $2]",
             "$loc": {
-              "pos": 1335,
+              "pos": 1422,
               "length": 40
             },
             "t": " SequenceNode "
@@ -196,7 +196,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"/\", $2]",
             "$loc": {
-              "pos": 1425,
+              "pos": 1512,
               "length": 40
             },
             "t": " SequenceNode "
@@ -214,7 +214,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 1520,
+          "pos": 1607,
           "length": 4
         },
         "inline": true
@@ -234,7 +234,7 @@
       {
         "f": "$4",
         "$loc": {
-          "pos": 1573,
+          "pos": 1660,
           "length": 4
         },
         "inline": true
@@ -252,7 +252,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 1605,
+          "pos": 1692,
           "length": 4
         },
         "inline": true
@@ -274,7 +274,7 @@
       {
         "f": "    var result = null\n    if ($1) result = [$1, $2]\n    else result = $2\n    if ($3)\n      return [{name: $3}, result] as NameNode\n    return result as SequenceNode",
         "$loc": {
-          "pos": 1690,
+          "pos": 1777,
           "length": 166
         },
         "t": " SequenceNode | NameNode "
@@ -296,7 +296,7 @@
       {
         "f": "    if ($2) return [$2, $1]\n    else return $1",
         "$loc": {
-          "pos": 1916,
+          "pos": 2003,
           "length": 48
         }
       }
@@ -320,7 +320,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 2060,
+              "pos": 2147,
               "length": 4
             },
             "inline": true
@@ -346,7 +346,7 @@
           {
             "f": "    return undefined",
             "$loc": {
-              "pos": 2123,
+              "pos": 2210,
               "length": 21
             }
           }
@@ -378,7 +378,7 @@
           {
             "f": "    if (t) handler = { ...handler, t }\n    return handler as Handler",
             "$loc": {
-              "pos": 2207,
+              "pos": 2294,
               "length": 69
             }
           }
@@ -401,7 +401,7 @@
           {
             "f": "    return { t } as Handler",
             "$loc": {
-              "pos": 2448,
+              "pos": 2535,
               "length": 29
             }
           }
@@ -424,7 +424,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 2683,
+              "pos": 2770,
               "length": 49
             },
             "inline": true
@@ -438,7 +438,7 @@
           {
             "f": "    return {\n      f: $1.trimEnd(),\n      $loc,\n      inline: true,\n    }",
             "$loc": {
-              "pos": 2773,
+              "pos": 2860,
               "length": 75
             },
             "t": " Handler "
@@ -452,7 +452,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 2911,
+          "pos": 2998,
           "length": 64
         },
         "t": " Handler "
@@ -505,7 +505,7 @@
       {
         "f": "    return $1 + $2.join(\"\") + ($3 ?? \"\")",
         "$loc": {
-          "pos": 3458,
+          "pos": 3545,
           "length": 42
         },
         "t": " string "
@@ -547,7 +547,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 3764,
+          "pos": 3851,
           "length": 4
         },
         "inline": true
@@ -584,7 +584,7 @@
       {
         "f": "[\"L\", $1]",
         "$loc": {
-          "pos": 3884,
+          "pos": 3971,
           "length": 11
         },
         "inline": true
@@ -593,6 +593,26 @@
     "RegExpLiteral": [
       "/",
       [
+        [
+          "S",
+          [
+            "TripleSlash",
+            [
+              {
+                "name": "body"
+              },
+              "HeregexBody"
+            ],
+            "TripleSlash"
+          ],
+          {
+            "f": "    // Static heregexes use the normal RegExp path; only interpolated ones need RD.\n    if (body.every((part) => typeof part === \"string\"))\n      return [\"R\", body.join(\"\")]\n    return [\"RD\", body]",
+            "$loc": {
+              "pos": 4042,
+              "length": 198
+            }
+          }
+        ],
         [
           "S",
           [
@@ -619,7 +639,7 @@
           {
             "f": "[\"R\", $3]",
             "$loc": {
-              "pos": 3947,
+              "pos": 4278,
               "length": 10
             },
             "inline": true
@@ -631,7 +651,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 3988,
+              "pos": 4319,
               "length": 10
             },
             "inline": true
@@ -643,12 +663,148 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 4007,
+              "pos": 4338,
               "length": 11
             },
             "inline": true
           }
         ]
+      ]
+    ],
+    "HeregexBody": [
+      "S",
+      [
+        [
+          "!",
+          "TripleSlash"
+        ],
+        [
+          "*",
+          "HeregexPart"
+        ]
+      ],
+      {
+        "f": "$2",
+        "$loc": {
+          "pos": 4392,
+          "length": 4
+        },
+        "inline": true
+      }
+    ],
+    "HeregexPart": [
+      "/",
+      [
+        [
+          "$",
+          "CharacterClass",
+          {
+            "f": "$1",
+            "$loc": {
+              "pos": 4429,
+              "length": 3
+            },
+            "inline": true
+          }
+        ],
+        [
+          "S",
+          [
+            [
+              "L",
+              "${"
+            ],
+            [
+              "$",
+              [
+                "*",
+                "HeregexSubstitutionCharacter"
+              ]
+            ],
+            [
+              "L",
+              "}"
+            ]
+          ],
+          {
+            "f": "{ expression: $2 }",
+            "$loc": {
+              "pos": 4477,
+              "length": 19
+            },
+            "inline": true
+          }
+        ],
+        [
+          "R",
+          "(?:\\\\.)",
+          {
+            "f": "heregexEscapes[$0[1]] ?? $0",
+            "$loc": {
+              "pos": 4511,
+              "length": 28
+            },
+            "inline": true
+          }
+        ],
+        [
+          "R",
+          "\\/\\/(?!\\/)[^\\n\\r]*",
+          {
+            "f": "\"\"",
+            "$loc": {
+              "pos": 4565,
+              "length": 3
+            },
+            "inline": true
+          }
+        ],
+        [
+          "R",
+          "[\\s]+",
+          {
+            "f": "\"\"",
+            "$loc": {
+              "pos": 4579,
+              "length": 3
+            },
+            "inline": true
+          }
+        ],
+        [
+          "R",
+          "\\/(?!\\/\\/)",
+          {
+            "f": "\"\\\\/\"",
+            "$loc": {
+              "pos": 4600,
+              "length": 6
+            },
+            "inline": true
+          }
+        ],
+        [
+          "R",
+          "[^[\\/\\s#$\\\\]+|[#$]",
+          {
+            "f": "$0",
+            "$loc": {
+              "pos": 4632,
+              "length": 4
+            },
+            "inline": true
+          }
+        ]
+      ]
+    ],
+    "HeregexSubstitutionCharacter": [
+      "/",
+      [
+        [
+          "R",
+          "[^}\\\\]+"
+        ],
+        "EscapeSequence"
       ]
     ],
     "CharacterClassExpression": [
@@ -721,6 +877,10 @@
       "L",
       "\\\\"
     ],
+    "TripleSlash": [
+      "L",
+      "///"
+    ],
     "OpenBrace": [
       "R",
       "\\{\\s*"
@@ -787,7 +947,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 5178,
+          "pos": 5874,
           "length": 4
         },
         "inline": true
@@ -802,7 +962,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 5238,
+          "pos": 5934,
           "length": 73
         },
         "t": " CodeBlockNode "
