@@ -152,7 +152,7 @@ ruleReturnType := (rule: HeraAST): string | undefined ->
       return arg[2].t if arg.length is 3 and arg[2]
       return undefined
     if subTypes.every((t) -> t?)
-      return subTypes.map((t) -> t!.trim()).join(" | ")
+      return [...new Set(subTypes.map((t) -> t!.trim()))].join(" | ")
     return undefined
   if rule.length is 3 and rule[2]
     return rule[2].t

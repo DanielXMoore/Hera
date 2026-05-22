@@ -164,6 +164,8 @@ Both `&` and `!` predicates returns `true`, so that matching vs. not can be dist
 can be specified explicitly using `::type` after the choice and before the
 handler (if any — otherwise, it returns the default value).
 This return type gets emitted when generating TypeScript or Civet output.
+You can also write `RuleName ::type` on a rule header to use that type as the
+default for every choice in the rule.
 
 **Handler**: A mapping from the matched choice to a language primitive.
 Handlers are attached to rule choices by adding `->` after the choice.

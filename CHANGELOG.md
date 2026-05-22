@@ -2,6 +2,13 @@
 
 All notable changes to `@danielx/hera` will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Grammar: `RuleName ::Type` sets a default return type for every untyped
+  choice in that rule.  A `::Type` on an individual choice still overrides
+  the rule-level default (#91).
+
 ## [0.9.7] - 2026-05-21
 
 ### Changed

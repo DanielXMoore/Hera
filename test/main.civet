@@ -191,6 +191,39 @@ describe "Hera", ->
     assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\) \{/
     assert.doesNotMatch code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult/
 
+  it "should apply a rule-level type annotation to untyped alternatives", ->
+    grammar := """
+      Rule ::Default
+        "a" -> "a"
+        "b" ::Specific -> "b"
+        Inner
+        "d"
+
+      Inner
+        "c" -> "c"
+    """
+    rules := parse grammar
+
+    assert.equal rules.Rule[1][0][2].t.trim(), "Default"
+    assert.equal rules.Rule[1][1][2].t.trim(), "Specific"
+    assert.equal rules.Rule[1][2][2].t.trim(), "Default"
+    assert.equal rules.Rule[1][3][2].t.trim(), "Default"
+
+    parser := generate grammar
+    assert.equal parser.parse("a"), "a"
+    assert.equal parser.parse("b"), "b"
+    assert.equal parser.parse("c"), "c"
+    assert.equal parser.parse("d"), "d"
+
+    code := compile grammar, types: true
+    assert.match code, /function Rule\(\$\$ctx: ParserContext, \$\$state: ParseState\): MaybeResult<Default \| Specific>/
+
+    singleRules := parse """
+      Single ::Only
+        "s"
+    """
+    assert.equal singleRules.Single[2].t.trim(), "Only"
+
   it "should compile multi-line inline handler bodies", ->
     // Regression: an inline handler body that spans multiple lines
     // (`-> { ... }` with the object contents below) must emit code that's
