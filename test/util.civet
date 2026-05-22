@@ -122,6 +122,19 @@ describe "util", ->
     """
     assert.equal grammarToEBNF(rules), 'Rule ::= "///a${shared}///"\n'
 
+  it "should decompile const interpolated triple-slash regexes", ->
+    rules := parse """
+      Rule
+        /// a ${const shared} ${dynamic} ///
+    """
+
+    assert.equal decompile(rules), """
+      Rule
+        ///a${const shared}${dynamic}///
+
+    """
+    assert.equal grammarToEBNF(rules), 'Rule ::= "///a${const shared}${dynamic}///"\n'
+
   it "should decompile type annotated rule", ->
     grammar := """
       Rule

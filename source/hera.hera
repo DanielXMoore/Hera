@@ -178,7 +178,8 @@ HeregexBody
 
 HeregexPart
   $CharacterClass -> $1
-  "${" $HeregexSubstitutionCharacter* "}" -> { expression: $2 }
+  "${" Space* "const" Space $HeregexSubstitutionCharacter*:expression "}" -> { expression, constant: true }
+  "${" $HeregexSubstitutionCharacter*:expression "}" -> { expression }
   /(?:\\.)/ -> heregexEscapes[$0[1]] ?? $0
   /\/\/(?!\/)[^\n\r]*/ -> ""
   [\s]+ -> ""

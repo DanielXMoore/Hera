@@ -524,6 +524,50 @@ describe "Hera", ->
       parse("xyabc")
     , /Rule \/xy\[0-9\]\+\//
 
+  it "should compile const interpolated triple-slash regex parts", ->
+    (globalThis as any).__heraConstPart = "[0-9]+"
+    (globalThis as any).__heraDynamicPart = "a"
+    try
+      {parse} := generate """
+        ```
+        globalThis.__heraConstPart = "[0-9]+"
+        globalThis.__heraDynamicPart = "a"
+        ```
+
+        Rule
+          /// token-${ const globalThis.__heraConstPart}-${globalThis.__heraDynamicPart} /// -> $0
+      """
+
+      assert.equal parse("token-123-a"), "token-123-a"
+      (globalThis as any).__heraConstPart = "[a-z]+"
+      (globalThis as any).__heraDynamicPart = "b"
+      assert.equal parse("token-456-b"), "token-456-b"
+      assert.throws ->
+        parse("token-abc-b")
+      , /Rule \/token-\[0-9\]\+-b\//
+
+      {parse: parseLexical} := generate """
+        ```
+        const lexicalConst = "[a-z]+"
+        let lexicalDynamic = "x"
+        ```
+
+        Rule
+          Lexical Set Lexical -> $1 + "|" + $3
+
+        Lexical
+          /// lexical-${const lexicalConst}-${lexicalDynamic} /// -> $0
+
+        Set
+          "" ->
+            lexicalDynamic = "y"
+            return ""
+      """
+      assert.equal parseLexical("lexical-abc-xlexical-abc-y"), "lexical-abc-x|lexical-abc-y"
+    finally
+      delete (globalThis as any).__heraConstPart
+      delete (globalThis as any).__heraDynamicPart
+
   it "should reuse duplicated interpolated triple-slash regexes", ->
     code := compile parse """
       ```
@@ -538,13 +582,69 @@ describe "Hera", ->
     assert.match code, /const \$RD0 = /
     assert.doesNotMatch code, /const \$RD1 = /
     assert.match code, /\$EXPECT\(\$RD0, \(\) => `Rule \/\$\{\$RD0\.source\}\/`\)/
+    constOnlyCode := compile parse """
+      Rule
+        /// ${const shared} ///
+    """
+    assert.match constOnlyCode, /let \$RD0 = /
+    assert.match constOnlyCode, /\$RD0 = \$R\(new RegExp/
+    assert.match constOnlyCode, /return \$RD0\(\$\$ctx, \$\$state\)/
+    assert.doesNotMatch constOnlyCode, /const \$\$parser = \$RD0 = /
+    assert.match constOnlyCode, /const \$\$source = `\$\{shared\}`/
+    assert.doesNotMatch constOnlyCode, /\$\$const0/
+
+    mixedConstCode := compile parse """
+      Rule
+        /// ${ const shared }${dynamic} ///
+    """
+    assert.match mixedConstCode, /`\$\{shared\s*\}\$\{dynamic\}`/
+    assert.doesNotMatch mixedConstCode, /\$\$const0/
+
+    unicodeIdentifierConstCode := compile parse """
+      ```
+      const café = "[a-z]+"
+      ```
+
+      Rule
+        /// ${ const café }${dynamic} ///
+    """
+    assert.match unicodeIdentifierConstCode, /`\$\{café\s*\}\$\{dynamic\}`/
+    assert.doesNotMatch unicodeIdentifierConstCode, /\$\$const0/
+
+    mixedComplexConstCode := compile parse """
+      Rule
+        /// ${const shared.slice(0)}${dynamic} ///
+    """
+    assert.match mixedComplexConstCode, /\$RD0\.const0 \?\?= shared\.slice\(0\);[\s\S]*`\$\{\$RD0\.const0\}\$\{dynamic\}`/
+    assert.doesNotMatch mixedComplexConstCode, /\(\(\) =>/
+    assert.doesNotMatch mixedComplexConstCode, /\$\$const0/
 
     typedCode := compile parse("""
       Rule
         /// ${shared} ///
     """), types: true
-    assert.match typedCode, /let \$\$parser: Parser<RegExpMatchArray> \| undefined;/
-    assert.match typedCode, /\{ source\?: string \}/
+    assert.match typedCode, /parser\?: Parser<RegExpMatchArray>/
+    assert.match typedCode, /\{ source\?: string, parser\?: Parser<RegExpMatchArray> \}/
+
+    typedConstCode := compile parse("""
+      Rule
+        /// ${const shared}${dynamic} ///
+    """), types: true
+    assert.doesNotMatch typedConstCode, /\$\$const0/
+
+    typedComplexConstCode := compile parse("""
+      Rule
+        /// ${const shared.slice(0)}${dynamic} ///
+    """), types: true
+    assert.match typedComplexConstCode, /const0\?: string/
+    assert.doesNotMatch typedComplexConstCode, /\$\$const0/
+
+    typedConstOnlyCode := compile parse("""
+      Rule
+        /// ${const shared} ///
+    """), types: true
+    assert.match typedConstOnlyCode, /let \$RD0: Parser<RegExpMatchArray> & \{ source\?: string \}/
+    assert.doesNotMatch typedConstOnlyCode, /\$\$const0/
 
   it "should treat hash interpolation syntax as static text in triple-slash regexes", ->
     {parse} := generate """

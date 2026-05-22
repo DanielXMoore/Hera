@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, RegExpPart } from ./hera-types.civet
+import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -55,8 +55,8 @@ defineRe := (re: string) ->
 
   return id
 
-defineDynamicRe := (parts: RegExpPart[]) ->
-  index := dynamicReDefs.findIndex((entry) -> JSON.stringify(entry) is JSON.stringify(parts))
+defineDynamicRe := (parts: RegExpPart[]) =>
+  index := dynamicReDefs.findIndex((entry) => JSON.stringify(entry) is JSON.stringify(parts))
   let id
 
   if index >= 0
@@ -67,13 +67,24 @@ defineDynamicRe := (parts: RegExpPart[]) ->
 
   return id
 
-regExpPartToTemplate := (part: RegExpPart): string ->
-  if part <? "string"
-    return part.replace(/`|\\|\$/g, "\\$&")
-  return "${" + part.expression + "}"
+isIdentifierExpression := (expression: string): boolean =>
+  /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
 
-regExpSourceToExpression := (parts: RegExpPart[]): string ->
-  `\`${parts.map(regExpPartToTemplate).join("")}\``
+regExpSourceToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
+  let constIndex = 0
+  `\`${parts.map((part) =>
+    if part <? "string"
+      part.replace(/[`\\$]/g, "\\$&")
+    else if part.constant and constantPrefix?
+      if isIdentifierExpression(part.expression)
+        "${" + part.expression + "}"
+      else
+        index := constIndex
+        constIndex += 1
+        "${" + constantPrefix + index + "}"
+    else
+      "${" + part.expression + "}"
+  ).join("")}\``
 
 /**
 Pretty print a string or RegExp literal
@@ -651,26 +662,43 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R${reTupleType(types, r)}(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
 
-  dynamicReDefSource := dynamicReDefs.map (r, i) ->
-    parserType := types ? ": Parser<RegExpMatchArray> | undefined" : ""
+  dynamicReDefSource := dynamicReDefs.map (r, i) =>
     rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
     ctxType := types ? ": ParserContext" : ""
     stateType := types ? ": ParseState" : ""
     nonNullAssert := types ? "!" : ""
-    ```
-    const $RD${i} = (() => {
-      let $$parser${parserType};
-      const $$rd = (($$ctx${ctxType}, $$state${stateType}) => {
-        const $$source = ${regExpSourceToExpression(r)};
-        if ($$source !== $$rd.source) {
-          $$rd.source = $$source;
-          $$parser = $R(new RegExp($$source, 'suy'));
-        }
-        return $$parser${nonNullAssert}($$ctx, $$state);
-      })${rdType};
-      return $$rd;
-    })();
-    ```
+    if r.every((part) => part <? "string" or part.constant)
+      rdParserType := types ? ": Parser<RegExpMatchArray> & { source?: string }" : ""
+      return [
+        `let $RD${i}${rdParserType} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
+        `  const $$source = ${regExpSourceToExpression(r)};\n`
+        `  $RD${i} = $R(new RegExp($$source, 'suy'))${rdType};\n`
+        `  $RD${i}.source = $$source;\n`
+        `  return $RD${i}($$ctx, $$state);\n`
+        `})${rdType};\n`
+      ].join("")
+
+    constantParts := r.flatMap((part): RegExpExpression[] =>
+      if part <? "string" or not part.constant or isIdentifierExpression(part.expression) then [] else [part]
+    )
+    cacheProps := types ? [
+      "source?: string"
+      "parser?: Parser<RegExpMatchArray>"
+      ...constantParts.map((_, index) => `const${index}?: string`)
+    ].join(", ") : ""
+    cacheType := types ? ` as Parser<RegExpMatchArray> & { ${cacheProps} }` : ""
+    constInits := constantParts.map((part, index) => `  $RD${i}.const${index} ??= ${part.expression};\n`).join("")
+    [
+      `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
+      constInits
+      `  const $$source = ${regExpSourceToExpression(r, `$RD${i}.const`)};\n`
+      `  if ($$source !== $RD${i}.source) {\n`
+      `    $RD${i}.source = $$source;\n`
+      `    $RD${i}.parser = $R(new RegExp($$source, 'suy'));\n`
+      "  }\n"
+      `  return $RD${i}.parser${nonNullAssert}($$ctx, $$state);\n`
+      `})${cacheType};\n`
+    ].join("")
 
   genOpts: GenerateOptions := {}
 
