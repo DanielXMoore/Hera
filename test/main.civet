@@ -505,6 +505,12 @@ describe "Hera", ->
     assert.deepEqual rules.Rule, ["R", "abc\\/[ # ]"]
     assert.deepEqual rules.EscapedSpace, ["R", " "]
 
+    assert.throws ->
+      parse """
+        Empty
+          //////
+      """
+
   it "should compile interpolated triple-slash regexes", ->
     {parse} := generate """
       ```
