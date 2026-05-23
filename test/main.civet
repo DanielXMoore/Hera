@@ -475,6 +475,7 @@ describe "Hera", ->
         //
     """
     assert.deepEqual rules.Empty, ["R", ""]
+    assert.match compile(rules), /const \$R0 = \$R\(\/\(\?:\)\/suy\);/
 
     parser := generate """
       Empty
@@ -498,6 +499,9 @@ describe "Hera", ->
 
       Quant2
         [a]{2}
+
+      EscapedSpace
+        [\\ ]
     """
 
     assert.deepEqual rules.Rule, ["R", "[a-z]+[1-9]*"]
@@ -505,18 +509,85 @@ describe "Hera", ->
     assert.deepEqual rules.Name, ["R", "[_a-zA-Z][_a-zA-Z0-9]*"]
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
+    assert.deepEqual rules.EscapedSpace, ["R", "[ ]"]
+    assert.match compile(rules), /const \$R0 = \$R\(\/\[a-z\]\+\[1-9\]\*\/suy\);/
+
+  it "should normalize regexp source whitespace for JS literals", ->
+    tab := "\t"
+    lineSeparator := "\u2028"
+    paragraphSeparator := "\u2029"
+    grammar := ```
+      SlashSpace
+        /\\ /
+      SlashTab
+        /\\${tab}/
+      SlashLineSeparator
+        /a${lineSeparator}b/
+      ClassSpace
+        [\\ ]
+      ClassTab
+        [\\${tab}]
+      ClassParagraphSeparator
+        [a${paragraphSeparator}b]
+    ```
+    rules := parse grammar
+
+    assert.deepEqual rules.SlashSpace, ["R", " "]
+    assert.deepEqual rules.SlashTab, ["R", "\\t"]
+    assert.deepEqual rules.SlashLineSeparator, ["R", "a\\u2028b"]
+    assert.deepEqual rules.ClassSpace, ["R", "[ ]"]
+    assert.deepEqual rules.ClassTab, ["R", "[\\t]"]
+    assert.deepEqual rules.ClassParagraphSeparator, ["R", "[a\\u2029b]"]
+
+    parser := generate grammar.replace(/(\n  [^\n]+)/g, "$1 -> $0")
+    assert.equal parser.parse(" ", startRule: "SlashSpace"), " "
+    assert.equal parser.parse(tab, startRule: "SlashTab"), tab
+    assert.equal parser.parse("a" + lineSeparator + "b", startRule: "SlashLineSeparator"), "a" + lineSeparator + "b"
+    assert.equal parser.parse(" ", startRule: "ClassSpace"), " "
+    assert.equal parser.parse(tab, startRule: "ClassTab"), tab
+    assert.equal parser.parse(paragraphSeparator, startRule: "ClassParagraphSeparator"), paragraphSeparator
 
   it "should parse static triple-slash regexes", ->
-    rules := parse """
+    tab := "\t"
+    lineSeparator := "\u2028"
+    paragraphSeparator := "\u2029"
+    grammar := ```
       Rule
         ///  ab c / [ # ]  ///
 
       EscapedSpace
         ///\\ ///
-    """
+      EscapedTab
+        ///\\${tab}///
+      EscapedLineSeparator
+        ///\\${lineSeparator}///
+      EscapedParagraphSeparator
+        ///\\${paragraphSeparator}///
+      UnescapedWhitespace
+        ///a${tab}b${lineSeparator}c${paragraphSeparator}d///
+
+      Identifier
+        ///
+          [A-Za-z_]
+          [A-Za-z0-9_]*
+        ///
+    ```
+    rules := parse grammar
 
     assert.deepEqual rules.Rule, ["R", "abc\\/[ # ]"]
     assert.deepEqual rules.EscapedSpace, ["R", " "]
+    assert.deepEqual rules.EscapedTab, ["R", "\\t"]
+    assert.deepEqual rules.EscapedLineSeparator, ["R", "\\u2028"]
+    assert.deepEqual rules.EscapedParagraphSeparator, ["R", "\\u2029"]
+    assert.deepEqual rules.UnescapedWhitespace, ["R", "abcd"]
+    assert.deepEqual rules.Identifier, ["R", "[A-Za-z_][A-Za-z0-9_]*"]
+
+    parser := generate grammar.replace(/(\n  [^\n]+)/g, "$1 -> $0")
+    assert.equal parser.parse(" ", startRule: "EscapedSpace"), " "
+    assert.equal parser.parse(tab, startRule: "EscapedTab"), tab
+    assert.equal parser.parse(lineSeparator, startRule: "EscapedLineSeparator"), lineSeparator
+    assert.equal parser.parse(paragraphSeparator, startRule: "EscapedParagraphSeparator"), paragraphSeparator
+    assert.equal parser.parse("abcd", startRule: "UnescapedWhitespace"), "abcd"
 
     empty := parse """
       Empty
@@ -524,11 +595,11 @@ describe "Hera", ->
     """
     assert.deepEqual empty.Empty, ["R", ""]
 
-    parser := generate """
+    emptyParser := generate """
       Empty
         ////// -> "empty"
     """
-    assert.equal parser.parse(""), "empty"
+    assert.equal emptyParser.parse(""), "empty"
 
   it "should compile interpolated triple-slash regexes", ->
     {parse} := generate """
@@ -1180,7 +1251,7 @@ describe "Hera", ->
     , /EOF/
 
   it "should give accurate error message with multiline input", ->
-    {parse} := generate """
+    grammar := """
       Rule
         Line+
       Line
@@ -1188,9 +1259,11 @@ describe "Hera", ->
       EOL
         /\r\n|\n/
     """
+    assert.match compile(parse(grammar)), /\/\\r\\n\|\\n\/suy/
+    parser := generate grammar
 
     assert.throws ->
-      parse """
+      parser.parse """
         aaaa
         aaaa
         aaaa

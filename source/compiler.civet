@@ -70,7 +70,7 @@ defineDynamicRe := (parts: RegExpPart[]) =>
 isIdentifierExpression := (expression: string): boolean =>
   /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
 
-regExpSourceToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
+heregexToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
   let constIndex = 0
   `\`${parts.map((part) =>
     if part <? "string"
@@ -660,7 +660,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $L${i} = $L("${str}");\n`
 
   reDefSource := reDefs.map (r, i) ->
-    `const $R${i} = $R${reTupleType(types, r)}(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
+    `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
 
   dynamicReDefSource := dynamicReDefs.map (r, i) =>
     rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
@@ -671,7 +671,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       rdParserType := types ? ": Parser<RegExpMatchArray> & { source?: string }" : ""
       return [
         `let $RD${i}${rdParserType} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
-        `  const $$source = ${regExpSourceToExpression(r)};\n`
+        `  const $$source = ${heregexToExpression(r)};\n`
         `  $RD${i} = $R(new RegExp($$source, 'suy'))${rdType};\n`
         `  $RD${i}.source = $$source;\n`
         `  return $RD${i}($$ctx, $$state);\n`
@@ -691,7 +691,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     [
       `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
       constInits
-      `  const $$source = ${regExpSourceToExpression(r, `$RD${i}.const`)};\n`
+      `  const $$source = ${heregexToExpression(r, `$RD${i}.const`)};\n`
       `  if ($$source !== $RD${i}.source) {\n`
       `    $RD${i}.source = $$source;\n`
       `    $RD${i}.parser = $R(new RegExp($$source, 'suy'));\n`
