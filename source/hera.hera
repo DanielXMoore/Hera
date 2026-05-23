@@ -174,18 +174,29 @@ RegExpLiteral
   "." -> ["R", $1]
 
 HeregexBody
-  # Same guard as Civet's heregex grammar: forbid `//////`.
-  !TripleSlash HeregexPart* -> $2
+  HeregexPart*
 
 HeregexPart
-  $CharacterClass -> $1
+  $CharacterClass
+  # `const` substitution specifies that the expression is constant,
+  # so only needs to be evaluated once.
   "${" Space* "const" Space $HeregexSubstitutionContent*:expression "}" -> { expression, constant: true }
+  # Otherwise, substitution is treated as a dynamic expression,
+  # re-evaluated every match.
   "${" $HeregexSubstitutionContent*:expression "}" -> { expression }
-  /(?:\\.)/ -> heregexEscapes[$0[1]] ?? $0
+  /\\(.)/ -> heregexEscapes[$1] ?? $0
+  # JS-style // comments
   /\/\/(?!\/)[^\n\r]*/ -> ""
+  # NOTE: CoffeeScript strips out all unescaped whitespace chars
+  # but Python doesn't strip out whitespace inside character classes
+  # or inside '(?' groups and assertions.
+  # We keep spaces only inside character classes, following Civet.
   [\s]+ -> ""
+  # Escape forward slashes (that aren't part of a triple slash)
   /\/(?!\/\/)/ -> "\\/"
-  /[^[\/\s#$\\]+|[#$]/ -> $0
+  # Don't swallow up $ which might be interpolations,
+  # but handle them as single characters if they're not
+  /[^[\/\s$\\]+|[$]/ -> $0
 
 HeregexSubstitutionContent
   [^{}"']+
