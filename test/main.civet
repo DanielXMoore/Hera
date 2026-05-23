@@ -469,6 +469,19 @@ describe "Hera", ->
     assert.deepEqual parse("ab"), ["ab"]
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
+  it "should parse and match empty slash regexes", ->
+    rules := parse """
+      Empty
+        //
+    """
+    assert.deepEqual rules.Empty, ["R", ""]
+
+    parser := generate """
+      Empty
+        // -> "empty"
+    """
+    assert.equal parser.parse(""), "empty"
+
   it "should parse bare character classes as regexes", ->
     rules := parse """
       Rule
@@ -505,11 +518,17 @@ describe "Hera", ->
     assert.deepEqual rules.Rule, ["R", "abc\\/[ # ]"]
     assert.deepEqual rules.EscapedSpace, ["R", " "]
 
-    assert.throws ->
-      parse """
-        Empty
-          //////
-      """
+    empty := parse """
+      Empty
+        //////
+    """
+    assert.deepEqual empty.Empty, ["R", ""]
+
+    parser := generate """
+      Empty
+        ////// -> "empty"
+    """
+    assert.equal parser.parse(""), "empty"
 
   it "should compile interpolated triple-slash regexes", ->
     {parse} := generate """
