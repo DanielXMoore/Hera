@@ -564,6 +564,16 @@ describe "Hera", ->
             return ""
       """
       assert.equal parseLexical("lexical-abc-xlexical-abc-y"), "lexical-abc-x|lexical-abc-y"
+
+      {parse: parseBalanced} := generate """
+        ```
+        const dynamic = "b"
+        ```
+
+        Rule
+          /// token-${const ({ pattern: "[0-9]+" }).pattern}-${"}".replace("}", dynamic)} /// -> $0
+      """
+      assert.equal parseBalanced("token-123-b"), "token-123-b"
     finally
       delete (globalThis as any).__heraConstPart
       delete (globalThis as any).__heraDynamicPart
@@ -615,7 +625,7 @@ describe "Hera", ->
       Rule
         /// ${const shared.slice(0)}${dynamic} ///
     """
-    assert.match mixedComplexConstCode, /\$RD0\.const0 \?\?= shared\.slice\(0\);[\s\S]*`\$\{\$RD0\.const0\}\$\{dynamic\}`/
+    assert.match mixedComplexConstCode, /\$RD0\.const0 \?\?= String\(shared\.slice\(0\)\);[\s\S]*`\$\{\$RD0\.const0\}\$\{dynamic\}`/
     assert.doesNotMatch mixedComplexConstCode, /\(\(\) =>/
     assert.doesNotMatch mixedComplexConstCode, /\$\$const0/
 

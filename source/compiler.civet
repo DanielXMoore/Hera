@@ -687,7 +687,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       ...constantParts.map((_, index) => `const${index}?: string`)
     ].join(", ") : ""
     cacheType := types ? ` as Parser<RegExpMatchArray> & { ${cacheProps} }` : ""
-    constInits := constantParts.map((part, index) => `  $RD${i}.const${index} ??= ${part.expression};\n`).join("")
+    constInits := constantParts.map((part, index) => `  $RD${i}.const${index} ??= String(${part.expression});\n`).join("")
     [
       `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
       constInits

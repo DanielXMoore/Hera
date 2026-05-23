@@ -686,7 +686,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 4392,
+          "pos": 4466,
           "length": 4
         },
         "inline": true
@@ -701,7 +701,7 @@
           {
             "f": "$1",
             "$loc": {
-              "pos": 4429,
+              "pos": 4503,
               "length": 3
             },
             "inline": true
@@ -731,7 +731,7 @@
                 "$",
                 [
                   "*",
-                  "HeregexSubstitutionCharacter"
+                  "HeregexSubstitutionContent"
                 ]
               ]
             ],
@@ -743,7 +743,7 @@
           {
             "f": "{ expression, constant: true }",
             "$loc": {
-              "pos": 4509,
+              "pos": 4581,
               "length": 31
             },
             "inline": true
@@ -764,7 +764,7 @@
                 "$",
                 [
                   "*",
-                  "HeregexSubstitutionCharacter"
+                  "HeregexSubstitutionContent"
                 ]
               ]
             ],
@@ -776,7 +776,7 @@
           {
             "f": "{ expression }",
             "$loc": {
-              "pos": 4596,
+              "pos": 4666,
               "length": 15
             },
             "inline": true
@@ -788,7 +788,7 @@
           {
             "f": "heregexEscapes[$0[1]] ?? $0",
             "$loc": {
-              "pos": 4626,
+              "pos": 4696,
               "length": 28
             },
             "inline": true
@@ -800,7 +800,7 @@
           {
             "f": "\"\"",
             "$loc": {
-              "pos": 4680,
+              "pos": 4750,
               "length": 3
             },
             "inline": true
@@ -812,7 +812,7 @@
           {
             "f": "\"\"",
             "$loc": {
-              "pos": 4694,
+              "pos": 4764,
               "length": 3
             },
             "inline": true
@@ -824,7 +824,7 @@
           {
             "f": "\"\\\\/\"",
             "$loc": {
-              "pos": 4715,
+              "pos": 4785,
               "length": 6
             },
             "inline": true
@@ -836,7 +836,7 @@
           {
             "f": "$0",
             "$loc": {
-              "pos": 4747,
+              "pos": 4817,
               "length": 4
             },
             "inline": true
@@ -844,14 +844,91 @@
         ]
       ]
     ],
-    "HeregexSubstitutionCharacter": [
+    "HeregexSubstitutionContent": [
       "/",
       [
         [
           "R",
-          "[^}\\\\]+"
+          "[^{}\"']+"
         ],
-        "EscapeSequence"
+        [
+          "$",
+          [
+            "S",
+            [
+              [
+                "L",
+                "\\\""
+              ],
+              [
+                "*",
+                [
+                  "/",
+                  [
+                    [
+                      "R",
+                      "[^\"\\\\]+"
+                    ],
+                    "EscapeSequence"
+                  ]
+                ]
+              ],
+              [
+                "L",
+                "\\\""
+              ]
+            ]
+          ]
+        ],
+        [
+          "$",
+          [
+            "S",
+            [
+              [
+                "L",
+                "'"
+              ],
+              [
+                "*",
+                [
+                  "/",
+                  [
+                    [
+                      "R",
+                      "[^'\\\\]+"
+                    ],
+                    "EscapeSequence"
+                  ]
+                ]
+              ],
+              [
+                "L",
+                "'"
+              ]
+            ]
+          ]
+        ],
+        [
+          "$",
+          [
+            "S",
+            [
+              [
+                "L",
+                "{"
+              ],
+              [
+                "*",
+                "HeregexSubstitutionContent"
+              ],
+              [
+                "L",
+                "}"
+              ]
+            ]
+          ]
+        ]
       ]
     ],
     "CharacterClassExpression": [
@@ -994,7 +1071,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 5989,
+          "pos": 6176,
           "length": 4
         },
         "inline": true
@@ -1009,7 +1086,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 6049,
+          "pos": 6236,
           "length": 73
         },
         "t": " CodeBlockNode "

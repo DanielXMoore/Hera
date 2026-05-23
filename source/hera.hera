@@ -174,21 +174,24 @@ RegExpLiteral
   "." -> ["R", $1]
 
 HeregexBody
+  # Same guard as Civet's heregex grammar: forbid `//////`.
   !TripleSlash HeregexPart* -> $2
 
 HeregexPart
   $CharacterClass -> $1
-  "${" Space* "const" Space $HeregexSubstitutionCharacter*:expression "}" -> { expression, constant: true }
-  "${" $HeregexSubstitutionCharacter*:expression "}" -> { expression }
+  "${" Space* "const" Space $HeregexSubstitutionContent*:expression "}" -> { expression, constant: true }
+  "${" $HeregexSubstitutionContent*:expression "}" -> { expression }
   /(?:\\.)/ -> heregexEscapes[$0[1]] ?? $0
   /\/\/(?!\/)[^\n\r]*/ -> ""
   [\s]+ -> ""
   /\/(?!\/\/)/ -> "\\/"
   /[^[\/\s#$\\]+|[#$]/ -> $0
 
-HeregexSubstitutionCharacter
-  [^}\\]+
-  EscapeSequence
+HeregexSubstitutionContent
+  [^{}"']+
+  $( "\"" ( [^"\\]+ / EscapeSequence )* "\"" )
+  $( "'" ( [^'\\]+ / EscapeSequence )* "'" )
+  $( "{" HeregexSubstitutionContent* "}" )
 
 CharacterClassExpression
   CharacterClass+
