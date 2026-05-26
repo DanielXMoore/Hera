@@ -469,6 +469,20 @@ describe "Hera", ->
     assert.deepEqual parse("ab"), ["ab"]
     assert.deepEqual parse("ababccbc"), ["ab", "abcc", "bc"]
 
+  it "should parse and match empty slash regexes", ->
+    rules := parse """
+      Empty
+        //
+    """
+    assert.deepEqual rules.Empty, ["R", ""]
+    assert.match compile(rules), /const \$R0 = \$R\(\/\(\?:\)\/suy\);/
+
+    parser := generate """
+      Empty
+        // -> "empty"
+    """
+    assert.equal parser.parse(""), "empty"
+
   it "should parse bare character classes as regexes", ->
     rules := parse """
       Rule
@@ -485,6 +499,9 @@ describe "Hera", ->
 
       Quant2
         [a]{2}
+
+      EscapedSpace
+        [\\ ]
     """
 
     assert.deepEqual rules.Rule, ["R", "[a-z]+[1-9]*"]
@@ -492,6 +509,256 @@ describe "Hera", ->
     assert.deepEqual rules.Name, ["R", "[_a-zA-Z][_a-zA-Z0-9]*"]
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
+    assert.deepEqual rules.EscapedSpace, ["R", "[ ]"]
+    assert.match compile(rules), /const \$R0 = \$R\(\/\[a-z\]\+\[1-9\]\*\/suy\);/
+
+  it "should normalize regexp source whitespace for JS literals", ->
+    tab := "\t"
+    lineSeparator := "\u2028"
+    paragraphSeparator := "\u2029"
+    grammar := ```
+      SlashSpace
+        /\\ /
+      SlashTab
+        /\\${tab}/
+      SlashLineSeparator
+        /a${lineSeparator}b/
+      ClassSpace
+        [\\ ]
+      ClassTab
+        [\\${tab}]
+      ClassParagraphSeparator
+        [a${paragraphSeparator}b]
+    ```
+    rules := parse grammar
+
+    assert.deepEqual rules.SlashSpace, ["R", " "]
+    assert.deepEqual rules.SlashTab, ["R", "\\t"]
+    assert.deepEqual rules.SlashLineSeparator, ["R", "a\\u2028b"]
+    assert.deepEqual rules.ClassSpace, ["R", "[ ]"]
+    assert.deepEqual rules.ClassTab, ["R", "[\\t]"]
+    assert.deepEqual rules.ClassParagraphSeparator, ["R", "[a\\u2029b]"]
+
+    parser := generate grammar.replace(/(\n  [^\n]+)/g, "$1 -> $0")
+    assert.equal parser.parse(" ", startRule: "SlashSpace"), " "
+    assert.equal parser.parse(tab, startRule: "SlashTab"), tab
+    assert.equal parser.parse("a" + lineSeparator + "b", startRule: "SlashLineSeparator"), "a" + lineSeparator + "b"
+    assert.equal parser.parse(" ", startRule: "ClassSpace"), " "
+    assert.equal parser.parse(tab, startRule: "ClassTab"), tab
+    assert.equal parser.parse(paragraphSeparator, startRule: "ClassParagraphSeparator"), paragraphSeparator
+
+  it "should parse static triple-slash regexes", ->
+    tab := "\t"
+    lineSeparator := "\u2028"
+    paragraphSeparator := "\u2029"
+    grammar := ```
+      Rule
+        ///  ab c / [ # ]  ///
+
+      EscapedSpace
+        ///\\ ///
+      EscapedTab
+        ///\\${tab}///
+      EscapedLineSeparator
+        ///\\${lineSeparator}///
+      EscapedParagraphSeparator
+        ///\\${paragraphSeparator}///
+      UnescapedWhitespace
+        ///a${tab}b${lineSeparator}c${paragraphSeparator}d///
+
+      Identifier
+        ///
+          [A-Za-z_]
+          [A-Za-z0-9_]*
+        ///
+    ```
+    rules := parse grammar
+
+    assert.deepEqual rules.Rule, ["R", "abc\\/[ # ]"]
+    assert.deepEqual rules.EscapedSpace, ["R", " "]
+    assert.deepEqual rules.EscapedTab, ["R", "\\t"]
+    assert.deepEqual rules.EscapedLineSeparator, ["R", "\\u2028"]
+    assert.deepEqual rules.EscapedParagraphSeparator, ["R", "\\u2029"]
+    assert.deepEqual rules.UnescapedWhitespace, ["R", "abcd"]
+    assert.deepEqual rules.Identifier, ["R", "[A-Za-z_][A-Za-z0-9_]*"]
+
+    parser := generate grammar.replace(/(\n  [^\n]+)/g, "$1 -> $0")
+    assert.equal parser.parse(" ", startRule: "EscapedSpace"), " "
+    assert.equal parser.parse(tab, startRule: "EscapedTab"), tab
+    assert.equal parser.parse(lineSeparator, startRule: "EscapedLineSeparator"), lineSeparator
+    assert.equal parser.parse(paragraphSeparator, startRule: "EscapedParagraphSeparator"), paragraphSeparator
+    assert.equal parser.parse("abcd", startRule: "UnescapedWhitespace"), "abcd"
+
+    empty := parse """
+      Empty
+        //////
+    """
+    assert.deepEqual empty.Empty, ["R", ""]
+
+    emptyParser := generate """
+      Empty
+        ////// -> "empty"
+    """
+    assert.equal emptyParser.parse(""), "empty"
+
+  it "should compile interpolated triple-slash regexes", ->
+    {parse} := generate """
+      ```
+      const shared = "[0-9]+"
+      ```
+
+      Rule
+        /// x y ${shared} /// -> $0
+
+      Another
+        /// a b ${shared} /// -> $0
+    """
+
+    assert.equal parse("xy123"), "xy123"
+    assert.equal parse("ab456", startRule: "Another"), "ab456"
+    assert.throws ->
+      parse("xyabc")
+    , /Rule \/xy\[0-9\]\+\//
+
+  it "should compile const interpolated triple-slash regex parts", ->
+    (globalThis as any).__heraConstPart = "[0-9]+"
+    (globalThis as any).__heraDynamicPart = "a"
+    try
+      {parse} := generate """
+        ```
+        globalThis.__heraConstPart = "[0-9]+"
+        globalThis.__heraDynamicPart = "a"
+        ```
+
+        Rule
+          /// token-${ const globalThis.__heraConstPart}-${globalThis.__heraDynamicPart} /// -> $0
+      """
+
+      assert.equal parse("token-123-a"), "token-123-a"
+      (globalThis as any).__heraConstPart = "[a-z]+"
+      (globalThis as any).__heraDynamicPart = "b"
+      assert.equal parse("token-456-b"), "token-456-b"
+      assert.throws ->
+        parse("token-abc-b")
+      , /Rule \/token-\[0-9\]\+-b\//
+
+      {parse: parseLexical} := generate """
+        ```
+        const lexicalConst = "[a-z]+"
+        let lexicalDynamic = "x"
+        ```
+
+        Rule
+          Lexical Set Lexical -> $1 + "|" + $3
+
+        Lexical
+          /// lexical-${const lexicalConst}-${lexicalDynamic} /// -> $0
+
+        Set
+          "" ->
+            lexicalDynamic = "y"
+            return ""
+      """
+      assert.equal parseLexical("lexical-abc-xlexical-abc-y"), "lexical-abc-x|lexical-abc-y"
+
+      {parse: parseBalanced} := generate """
+        ```
+        const dynamic = "b"
+        ```
+
+        Rule
+          /// token-${const ({ pattern: "[0-9]+" }).pattern}-${"}".replace("}", dynamic)} /// -> $0
+      """
+      assert.equal parseBalanced("token-123-b"), "token-123-b"
+    finally
+      delete (globalThis as any).__heraConstPart
+      delete (globalThis as any).__heraDynamicPart
+
+  it "should reuse duplicated interpolated triple-slash regexes", ->
+    code := compile parse """
+      ```
+      const shared = "[a-z]+"
+      ```
+
+      Rule
+        /// ${shared} ///
+        /// ${shared} ///
+    """
+
+    assert.match code, /const \$RD0 = /
+    assert.doesNotMatch code, /const \$RD1 = /
+    assert.match code, /\$EXPECT\(\$RD0, \(\) => `Rule \/\$\{\$RD0\.source\}\/`\)/
+    constOnlyCode := compile parse """
+      Rule
+        /// ${const shared} ///
+    """
+    assert.match constOnlyCode, /let \$RD0 = /
+    assert.match constOnlyCode, /\$RD0 = \$R\(new RegExp/
+    assert.match constOnlyCode, /return \$RD0\(\$\$ctx, \$\$state\)/
+    assert.doesNotMatch constOnlyCode, /const \$\$parser = \$RD0 = /
+    assert.match constOnlyCode, /const \$\$source = `\$\{shared\}`/
+    assert.doesNotMatch constOnlyCode, /\$\$const0/
+
+    mixedConstCode := compile parse """
+      Rule
+        /// ${ const shared }${dynamic} ///
+    """
+    assert.match mixedConstCode, /`\$\{shared\s*\}\$\{dynamic\}`/
+    assert.doesNotMatch mixedConstCode, /\$\$const0/
+
+    unicodeIdentifierConstCode := compile parse """
+      ```
+      const café = "[a-z]+"
+      ```
+
+      Rule
+        /// ${ const café }${dynamic} ///
+    """
+    assert.match unicodeIdentifierConstCode, /`\$\{café\s*\}\$\{dynamic\}`/
+    assert.doesNotMatch unicodeIdentifierConstCode, /\$\$const0/
+
+    mixedComplexConstCode := compile parse """
+      Rule
+        /// ${const shared.slice(0)}${dynamic} ///
+    """
+    assert.match mixedComplexConstCode, /\$RD0\.const0 \?\?= String\(shared\.slice\(0\)\);[\s\S]*`\$\{\$RD0\.const0\}\$\{dynamic\}`/
+    assert.doesNotMatch mixedComplexConstCode, /\(\(\) =>/
+    assert.doesNotMatch mixedComplexConstCode, /\$\$const0/
+
+    typedCode := compile parse("""
+      Rule
+        /// ${shared} ///
+    """), types: true
+    assert.match typedCode, /parser\?: Parser<RegExpMatchArray>/
+    assert.match typedCode, /\{ source\?: string, parser\?: Parser<RegExpMatchArray> \}/
+
+    typedConstCode := compile parse("""
+      Rule
+        /// ${const shared}${dynamic} ///
+    """), types: true
+    assert.doesNotMatch typedConstCode, /\$\$const0/
+
+    typedComplexConstCode := compile parse("""
+      Rule
+        /// ${const shared.slice(0)}${dynamic} ///
+    """), types: true
+    assert.match typedComplexConstCode, /const0\?: string/
+    assert.doesNotMatch typedComplexConstCode, /\$\$const0/
+
+    typedConstOnlyCode := compile parse("""
+      Rule
+        /// ${const shared} ///
+    """), types: true
+    assert.match typedConstOnlyCode, /let \$RD0: Parser<RegExpMatchArray> & \{ source\?: string \}/
+    assert.doesNotMatch typedConstOnlyCode, /\$\$const0/
+
+  it "should treat hash interpolation syntax as static text in triple-slash regexes", ->
+    {parse} := generate """
+      Rule
+        /// #\\{shared\\} ///
+    """
+
+    assert.equal parse("#{shared}"), "#{shared}"
 
   it "should parse simple grammars", ->
     {parse} := generate """
@@ -984,7 +1251,7 @@ describe "Hera", ->
     , /EOF/
 
   it "should give accurate error message with multiline input", ->
-    {parse} := generate """
+    grammar := """
       Rule
         Line+
       Line
@@ -992,9 +1259,11 @@ describe "Hera", ->
       EOL
         /\r\n|\n/
     """
+    assert.match compile(parse(grammar)), /\/\\r\\n\|\\n\/suy/
+    parser := generate grammar
 
     assert.throws ->
-      parse """
+      parser.parse """
         aaaa
         aaaa
         aaaa

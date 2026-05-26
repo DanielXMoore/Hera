@@ -1,0 +1,35 @@
+# Triple-slash regexes support `${const ...}` substitutions that are evaluated
+# once and `${...}` substitutions that are dynamic. Dynamic regexes
+# re-evaluate their dynamic interpolation expressions when the rule runs and
+# re-use the cached RegExp while the resulting source string is unchanged.
+#
+# This example mutates parser state. If result caching is enabled, state like
+# `closing` must be part of the cache key/state, and rules that mutate it
+# should not be cached.
+
+```
+const opening = "[\\(\\[]"
+let closing = "\\)"
+```
+
+Main
+  Open Body Close -> $1 + $2 + $3
+
+Open
+  # Example of constant substitution => static regex
+  /// ${const opening} /// ->
+    if ($0 === "(") closing = "\\)"
+    else closing = "\\]"
+    return $0
+
+Close
+  # Example of dynamic substitution => dynamic regex
+  /// ${closing} /// -> $0
+
+Body
+  # Example of no substitution => static regex
+  /// \s+ | \w+ /// -> $0
+  # Example of constant substitution + dynamic substitution => dynamic regex
+  /// (?! ${const opening} | ${closing}) . /// -> $0
+  # Example of same with const caching
+  /// (?! ${const opening + opening} | ${closing}) . /// -> $0

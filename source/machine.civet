@@ -77,6 +77,8 @@ interface Fail {
   (pos: number, expectation: string): void
 }
 
+type Expectation = string | (=> string)
+
 /**
  * A Parser is a function that takes a string and position to check and returns
  * a result if it matches.
@@ -88,12 +90,12 @@ export interface Parser<T> {
 /**
  * $EXPECT sets the friendlier `expectation` name.
  */
-export function $EXPECT<T>(parser: Parser<T>, expectation: string): Parser<T> {
+export function $EXPECT<T>(parser: Parser<T>, expectation: Expectation): Parser<T> {
   return function (ctx, state) {
     // NOTE: we don't need to use a stack because we're only tracking failures on
     // string and regex leaf nodes right now.
     const result = parser(ctx, state);
-    if (!result) ctx.fail(state.pos, expectation)
+    if (!result) ctx.fail(state.pos, typeof expectation === "function" ? expectation() : expectation)
     return result
   }
 }

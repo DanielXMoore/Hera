@@ -4,10 +4,16 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-05-26
+
 ### Added
 - Grammar: `RuleName ::Type` sets a default return type for every untyped
   choice in that rule.  A `::Type` on an individual choice still overrides
   the rule-level default (#91).
+- Grammar: triple-slash regular expressions (`///...///`) support
+  whitespace-insensitive regex bodies with `//` comments, `${...}` dynamic
+  interpolation, and `${const ...}` interpolation for values that should be
+  captured once (#87).
 
 ## [0.9.7] - 2026-05-21
 

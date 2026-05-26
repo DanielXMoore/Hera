@@ -151,6 +151,51 @@ Terminal regular expressions return the
 array: the matched string, followed by any matched groups
 (strings or `undefined` for unmatched optional groups).
 
+**Triple-slash regular expression** (`///...///`):
+A whitespace-insensitive regular expression, similar to
+[Civet heregex syntax](https://civet.dev/reference#regular-expressions).
+Whitespace and `//` comments inside the body are ignored, so larger
+expressions can be split across lines:
+
+```
+Identifier
+  ///
+    [A-Za-z_]  // first character
+    [A-Za-z0-9_]*
+  ///
+```
+
+Triple-slash regular expressions also support interpolation.  `${expr}` is
+dynamic: the generated parser re-evaluates `expr` when the rule runs, rebuilds
+the `RegExp` when the resulting source string changes, and reuses the cached
+parser until the source changes.
+
+```
+Close
+  /// ${closingPattern} /// -> $0
+```
+
+Use `${const expr}` for an interpolation whose value should be captured once.
+If every interpolated part is `const`, the generated parser computes the
+regular expression once and then uses the same parser as a normal regular
+expression.  In mixed static/dynamic expressions, complex `const` expressions
+are cached once, while identifier-only `const` expressions are emitted directly.
+
+```
+Open
+  /// ${const openingPattern} /// ->
+    closingPattern = $0 === "(" ? "\\)" : "\\]"
+    return $0
+
+Close
+  /// ${closingPattern} /// -> $0
+```
+
+Dynamic interpolation that depends on parser state needs the same care as
+handlers that mutate parser state.  If result caching is enabled, that state
+must be part of the cache key/state, and rules that mutate it should not be
+cached.
+
 **Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
 
 **Optional** (`?`): `...?` means "zero or one expansion of `...`". If `...` matches, `...?` returns that value directly. Otherwise it succeeds without consuming input and returns `undefined`. Unlike `*` and `+`, `?` does not wrap its result in an array.

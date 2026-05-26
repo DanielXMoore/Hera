@@ -7,14 +7,16 @@ import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine.c
 export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
-export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean }
+export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean } | { t: string }
 export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
-export type TerminalOp = "L" | "R"
+export type TerminalOp = "L" | "R" | "RD"
 export type SequenceOp = "S" | "/"
 export type PrefixOp = "&" | "!" | "$"
 export type SuffixOp = "+" | "*" | "?"
-export type Literal = [TerminalOp, string]
-export type TerminalNode = [TerminalOp, string, Handler?]
+export type RegExpExpression = { expression: string, constant?: boolean }
+export type RegExpPart = string | RegExpExpression
+export type Literal = ["L", string] | ["R", string] | ["RD", RegExpPart[]]
+export type TerminalNode = [...Literal, Handler?]
 export type SequenceNode = [SequenceOp, HeraAST[], Handler?]
 export type PrefixNode = [PrefixOp, HeraAST, Handler?]
 export type SuffixNode = [SuffixOp, HeraAST, Handler?]

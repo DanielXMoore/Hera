@@ -6,6 +6,24 @@ import type {
   Handler,
   CodeBlockNode,
 } from './hera-types'
+
+const regexEscapes: Record<string, string> = {
+  "\n": "\\n",
+  "\r": "\\r",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+  "\t": "\\t",
+  "\v": "\\v",
+  "\f": "\\f",
+  " ": " ",
+}
+
+// \ followed by whitespace is natural in heregexes,
+// but forbidden in JS regexes with s flag, so rewrite them.
+// Newlines aren't allowed in JS regexes either, so we escape them too.
+function normalizeRegExpSource(source: string) {
+  return source.replace(/\\?([\n\r\u2028\u2029\t\v\f ])/g, (_, char: string) => regexEscapes[char])
+}
 ```
 
 Grammar
@@ -162,9 +180,46 @@ StringLiteral
   StringValue -> ["L", $1]
 
 RegExpLiteral
-  "/" !Space $RegExpCharacter* "/" -> ["R", $3]
-  $CharacterClassExpression -> ["R", $1]
+  TripleSlash HeregexBody:body TripleSlash ->
+    body = body.map((part) => typeof part === "string" ? normalizeRegExpSource(part) : part)
+    // Static heregexes use the normal RegExp path; only interpolated ones need RD.
+    if (body.every((part) => typeof part === "string"))
+      return ["R", body.join("")]
+    return ["RD", body]
+  "/" !Space $RegExpCharacter* "/" -> ["R", normalizeRegExpSource($3)]
+  $CharacterClassExpression -> ["R", normalizeRegExpSource($1)]
   "." -> ["R", $1]
+
+HeregexBody
+  HeregexPart*
+
+HeregexPart
+  $CharacterClass
+  # `const` substitution specifies that the expression is constant,
+  # so only needs to be evaluated once.
+  "${" Space* "const" Space $HeregexSubstitutionContent*:expression "}" -> { expression, constant: true }
+  # Otherwise, substitution is treated as a dynamic expression,
+  # re-evaluated every match.
+  "${" $HeregexSubstitutionContent*:expression "}" -> { expression }
+  EscapeSequence
+  # JS-style // comments
+  /\/\/(?!\/)[^\n\r]*/ -> ""
+  # NOTE: CoffeeScript strips out all unescaped whitespace chars
+  # but Python doesn't strip out whitespace inside character classes
+  # or inside '(?' groups and assertions.
+  # We keep spaces only inside character classes, following Civet.
+  [\s]+ -> ""
+  # Escape forward slashes (that aren't part of a triple slash)
+  /\/(?!\/\/)/ -> "\\/"
+  # Don't swallow up $ which might be interpolations,
+  # but handle them as single characters if they're not
+  /[^[\/\s$\\]+|[$]/ -> $0
+
+HeregexSubstitutionContent
+  [^{}"']+
+  $( "\"" ( [^"\\]+ / EscapeSequence )* "\"" )
+  $( "'" ( [^'\\]+ / EscapeSequence )* "'" )
+  $( "{" HeregexSubstitutionContent* "}" )
 
 CharacterClassExpression
   CharacterClass+
@@ -191,6 +246,9 @@ Arrow
 
 Backslash
   "\\"
+
+TripleSlash
+  "///"
 
 OpenBrace
   /\{\s*/

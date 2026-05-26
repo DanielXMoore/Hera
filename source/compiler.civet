@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules } from ./hera-types.civet
+import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -23,6 +23,7 @@ export type CompilerOptions = {
 
 strDefs: string[] := []
 reDefs: string[] := []
+dynamicReDefs: RegExpPart[][] := []
 
 /**
 Define a literal string terminal
@@ -54,6 +55,37 @@ defineRe := (re: string) ->
 
   return id
 
+defineDynamicRe := (parts: RegExpPart[]) =>
+  index := dynamicReDefs.findIndex((entry) => JSON.stringify(entry) is JSON.stringify(parts))
+  let id
+
+  if index >= 0
+    id = `$RD${index}`
+  else
+    id = `$RD${dynamicReDefs#}`
+    dynamicReDefs.push parts
+
+  return id
+
+isIdentifierExpression := (expression: string): boolean =>
+  /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
+
+heregexToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
+  let constIndex = 0
+  `\`${parts.map((part) =>
+    if part <? "string"
+      part.replace(/[`\\$]/g, "\\$&")
+    else if part.constant and constantPrefix?
+      if isIdentifierExpression(part.expression)
+        "${" + part.expression + "}"
+      else
+        index := constIndex
+        constIndex += 1
+        "${" + constantPrefix + index + "}"
+    else
+      "${" + part.expression + "}"
+  ).join("")}\``
+
 /**
 Pretty print a string or RegExp literal
 */
@@ -82,6 +114,16 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
         {
           args := tuple[1]
           let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
+          if defaultHandler
+            f =`$R$0(${f})`
+
+          f
+        }
+      when "RD"
+        {
+          args := tuple[1]
+          id := defineDynamicRe(args)
+          let f = `$EXPECT(${id}, () => \`${name} /\${${id}.source}/\`)`
           if defaultHandler
             f =`$R$0(${f})`
 
@@ -382,7 +424,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       paramTypes.push `typeof $$value[${i}]`
       callArgs.push `$$value[${i}]`
       addNamedParameter getNamedVariable(rule[1][i][0]), `typeof $$value[${i}]`, `$$value[${i}]`
-  else if rule[0] is "R"
+  else if rule[0] <? "string" and rule[0].startsWith "R"
     parameters = regExpHandlerParams.slice()
     // RegExpMatchArray positional typing (and reTupleType short tuples) don't
     // pass cleanly through .reduce/.filter; keep positional args as `any`.
@@ -602,6 +644,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   strDefs.length = 0
   reDefs.length = 0
+  dynamicReDefs.length = 0
 
   { language, module } := options
   types := options.types || language === 'typescript' || language === 'civet'
@@ -617,7 +660,45 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $L${i} = $L("${str}");\n`
 
   reDefSource := reDefs.map (r, i) ->
-    `const $R${i} = $R${reTupleType(types, r)}(new RegExp(${JSON.stringify(r)}, 'suy'));\n`
+    `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
+
+  dynamicReDefSource := dynamicReDefs.map (r, i) =>
+    rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
+    ctxType := types ? ": ParserContext" : ""
+    stateType := types ? ": ParseState" : ""
+    nonNullAssert := types ? "!" : ""
+    if r.every((part) => part <? "string" or part.constant)
+      rdParserType := types ? ": Parser<RegExpMatchArray> & { source?: string }" : ""
+      return [
+        `let $RD${i}${rdParserType} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
+        `  const $$source = ${heregexToExpression(r)};\n`
+        `  $RD${i} = $R(new RegExp($$source, 'suy'))${rdType};\n`
+        `  $RD${i}.source = $$source;\n`
+        `  return $RD${i}($$ctx, $$state);\n`
+        `})${rdType};\n`
+      ].join("")
+
+    constantParts := r.flatMap((part): RegExpExpression[] =>
+      if part <? "string" or not part.constant or isIdentifierExpression(part.expression) then [] else [part]
+    )
+    cacheProps := types ? [
+      "source?: string"
+      "parser?: Parser<RegExpMatchArray>"
+      ...constantParts.map((_, index) => `const${index}?: string`)
+    ].join(", ") : ""
+    cacheType := types ? ` as Parser<RegExpMatchArray> & { ${cacheProps} }` : ""
+    constInits := constantParts.map((part, index) => `  $RD${i}.const${index} ??= String(${part.expression});\n`).join("")
+    [
+      `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
+      constInits
+      `  const $$source = ${heregexToExpression(r, `$RD${i}.const`)};\n`
+      `  if ($$source !== $RD${i}.source) {\n`
+      `    $RD${i}.source = $$source;\n`
+      `    $RD${i}.parser = $R(new RegExp($$source, 'suy'));\n`
+      "  }\n"
+      `  return $RD${i}.parser${nonNullAssert}($$ctx, $$state);\n`
+      `})${cacheType};\n`
+    ].join("")
 
   genOpts: GenerateOptions := {}
 
@@ -659,6 +740,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     strDefSource
     "\n\n"
     reDefSource
+    "\n\n"
+    dynamicReDefSource
     "\n\n"
     body
     "\n\n"
