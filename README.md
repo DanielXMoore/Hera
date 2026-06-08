@@ -132,7 +132,16 @@ AnonymousRule
   Other
 ```
 
-**Sequence** (` `): One thing after another, separated by spaces. For example, `"(" Expr ")"` matches the character `"("` followed by a match of `Expr` followed by the character `")"`. Sequences with more than one part return an array of the parts.
+Choice expressions returns the (first) expression matched.
+
+**Sequence** (` `): One thing after another, separated by spaces.
+For example, `"(" Expr ")"` matches the character `"("` followed by
+a match of `Expr` followed by the character `")"`.
+Sequences with more than one part return an array of the parts.
+For example, `"(" Expr ")"` returns an array of three items:
+the string `"("`, the return value of `Expr`, and the string `")"`.
+Notably, if an expression is a "sequence" of just one item,
+it does not get wrapped in a length-1 array.
 
 **Terminal string** (`"..."`):
 A string literal (surrounded by double quotes).
@@ -148,8 +157,32 @@ The entire regular expression must be matched at the exact position
 and it was applied to the rest of the string).
 Terminal regular expressions return the
 [`match`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match)
-array: the matched string, followed by any matched groups
+array: the matched string at index `[0]`, followed by any matched groups
+at indices `[1]`, `[2]`, ...
 (strings or `undefined` for unmatched optional groups).
+For example, the following rule accesses the regex match array via `$1`
+and extracts the full match via `$1[0]`:
+
+```
+Name
+  /[A-Za-z][A-Za-z0-9]*/ "=" /\d+/ -> $1[0]
+```
+
+As a special case, if the entire expression is a single regular expression,
+then the return value is the matched string instead of the match array,
+and handler variables are taken from the match array:
+`$0` is the matched string (the default return value),
+and `$1`, `$2`, ... are the captured groups.  For example:
+
+```
+Name
+  # Returns matched string:
+  /([A-Za-z])[A-Za-z0-9]*/
+  # Returns matched string:
+  /([A-Za-z])[A-Za-z0-9]*/ -> $0
+  # Returns matched first letter:
+  /([A-Za-z])[A-Za-z0-9]*/ -> $1
+```
 
 **Triple-slash regular expression** (`///...///`):
 A whitespace-insensitive regular expression, similar to
@@ -172,7 +205,7 @@ parser until the source changes.
 
 ```
 Close
-  /// ${closingPattern} /// -> $0
+  /// ${closingPattern} ///
 ```
 
 Use `${const expr}` for an interpolation whose value should be captured once.
@@ -188,7 +221,8 @@ Open
     return $0
 
 Close
-  /// ${closingPattern} /// -> $0
+  # Returns matched string:
+  /// ${closingPattern} ///
 ```
 
 Dynamic interpolation that depends on parser state needs the same care as
@@ -196,14 +230,17 @@ handlers that mutate parser state.  If result caching is enabled, that state
 must be part of the cache key/state, and rules that mutate it should not be
 cached.
 
-**Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`. Repetitions return an array of the matches.
+**Repetition** (`*`, `+`): `...*` means "zero or more expansions of `...`", and `...+` means one or more repetitions of `Choice`.
+Repetitions return an array of the matches.
+In particular, the length of the array is exactly the number of matches.
 
 **Optional** (`?`): `...?` means "zero or one expansion of `...`". If `...` matches, `...?` returns that value directly. Otherwise it succeeds without consuming input and returns `undefined`. Unlike `*` and `+`, `?` does not wrap its result in an array.
 
 **Lookahead predicates** (`&`, `!`): `&...` and `!...` assert the existence or non-existence, respectively, of a match of `...`, without advancing the position or consuming any input. For example, `&/\s/` is like the look-ahead regular expression `/(?=\s)/`.
-Both `&` and `!` predicates returns `true`, so that matching vs. not can be distinguished when as marked optional with `?` (e.g. `(&Pattern)?`).
+Both `&` and `!` predicates return `true`, so that matching vs. not can be distinguished when marked as optional with `?` (e.g. `(&Pattern)?`).
 
 **Stringify** (`$`): `$...` matches `...` but returns just the string of the input that matched, instead of the computed return value from the matching process (from handlers and the arrays from sequences and repetitions).
+For example, `$/\d+/` returns the matched string of digits instead of the match array, which is useful when the expression is more than just a single regular expression.
 
 **Return type**: The return type of a choice (or more precisely, its handler)
 can be specified explicitly using `::type` after the choice and before the
@@ -224,7 +261,7 @@ The `n`th matching item in the topmost sequence can be accessed via `$n`;
 each item in the topmost sequence can also be named via a `:name` suffix
 (for example, `Block:name`), and then the code can also refer to it as `name`.
 As a special case, if the expansion is a single regular expression,
-`$0` refers to the full matching string (instead of the match array) and
+`$0` refers to the matched string (instead of the match array) and
 `$n` refers to the `n`th group in the regex.
 The handler code can return the special value `$skip`
 to indicate a failed match.
