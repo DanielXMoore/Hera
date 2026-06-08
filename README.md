@@ -132,7 +132,7 @@ AnonymousRule
   Other
 ```
 
-Choice expressions returns the (first) expression matched.
+Choice expressions return the (first) expression matched.
 
 **Sequence** (` `): One thing after another, separated by spaces.
 For example, `"(" Expr ")"` matches the character `"("` followed by
