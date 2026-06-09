@@ -4,6 +4,10 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Type declarations for `$C` and `$S` now support generated parsers with more
+  than 9 choice alternatives or sequence items.
+
 ## [0.9.8] - 2026-05-26
 
 ### Added

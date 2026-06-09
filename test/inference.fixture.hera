@@ -14,3 +14,9 @@ Num
     value: parseInt($1),
     children: [$1],
   }
+
+LongChoice
+  ( "a" / "b" / "c" / "d" / "e" / "f" / "g" / "h" / "i" / "j" ):letter -> letter
+
+LongSequence
+  "a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k"
