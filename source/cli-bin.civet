@@ -3,8 +3,14 @@
 fs from fs
 path from path
 { main } from ./cli.civet
+{ version } from ../package.json
 
 argv := process.argv
+
+if argv.includes '--version'
+  process.stdout.write `${version}\n`
+  process.exit 0
+
 encoding := "utf8"
 valueFlags := new Set ['--language', '--libPath', '-o', '--output']
 
