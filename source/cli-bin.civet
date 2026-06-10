@@ -3,11 +3,10 @@
 fs from fs
 path from path
 { main } from ./cli.civet
-{ version } from ../package.json
-
 argv := process.argv
 
 if argv.includes '--version'
+  { version } := JSON.parse fs.readFileSync path.join(path.dirname(__filename), '../package.json'), 'utf8'
   process.stdout.write `${version}\n`
   process.exit 0
 
@@ -56,11 +55,17 @@ if positional.length > 0
     catch err
       reportError err, file
 else
-  try
-    input := fs.readFileSync process.stdin.fd, encoding
-    filename .= "<stdin>"
-    try
-      filename = fs.realpathSync '/dev/stdin'
-    process.stdout.write main argv, input, filename
-  catch err
-    reportError err
+  readStdin := (): Promise<string> ->
+    new Promise (resolve, reject) ->
+      chunks: Buffer[] := []
+      process.stdin.on 'data', (chunk: Buffer) -> chunks.push chunk
+      process.stdin.on 'end', -> resolve Buffer.concat(chunks).toString encoding
+      process.stdin.on 'error', reject
+
+  readStdin()
+    .then (input) ->
+      filename .= "<stdin>"
+      try
+        filename = fs.realpathSync '/dev/stdin'
+      process.stdout.write main argv, input, filename
+    .catch (err: unknown) -> reportError err
