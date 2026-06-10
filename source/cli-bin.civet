@@ -3,6 +3,7 @@
 fs from fs
 path from path
 { main } from ./cli.civet
+
 argv := process.argv
 
 if argv.includes '--version'
@@ -55,17 +56,11 @@ if positional.length > 0
     catch err
       reportError err, file
 else
-  readStdin := (): Promise<string> ->
-    new Promise (resolve, reject) ->
-      chunks: Buffer[] := []
-      process.stdin.on 'data', (chunk: Buffer) -> chunks.push chunk
-      process.stdin.on 'end', -> resolve Buffer.concat(chunks).toString encoding
-      process.stdin.on 'error', reject
-
-  readStdin()
-    .then (input) ->
-      filename .= "<stdin>"
-      try
-        filename = fs.realpathSync '/dev/stdin'
-      process.stdout.write main argv, input, filename
-    .catch (err: unknown) -> reportError err
+  try
+    input := fs.readFileSync process.stdin.fd, encoding
+    filename .= "<stdin>"
+    try
+      filename = fs.realpathSync '/dev/stdin'
+    process.stdout.write main argv, input, filename
+  catch err
+    reportError err
