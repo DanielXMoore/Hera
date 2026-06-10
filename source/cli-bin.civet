@@ -50,11 +50,19 @@ if positional.length > 0
     catch err
       reportError err, file
 else
-  try
-    input := fs.readFileSync process.stdin.fd, encoding
-    filename .= "<stdin>"
-    try
-      filename = fs.realpathSync '/dev/stdin'
-    process.stdout.write main argv, input, filename
-  catch err
-    reportError err
+  // fs.readFileSync(process.stdin.fd) throws EAGAIN on Node v24 when stdin
+  // is a non-blocking pipe and data isn't available yet; stream it instead.
+  readStdin := (): Promise<string> ->
+    new Promise (resolve, reject) ->
+      chunks: Buffer[] := []
+      process.stdin.on 'data', (chunk: Buffer) -> chunks.push chunk
+      process.stdin.on 'end', -> resolve Buffer.concat(chunks).toString encoding
+      process.stdin.on 'error', reject
+
+  readStdin()
+    .then (input) ->
+      filename .= "<stdin>"
+      try
+        filename = fs.realpathSync '/dev/stdin'
+      process.stdout.write main argv, input, filename
+    .catch (err: unknown) -> reportError err
