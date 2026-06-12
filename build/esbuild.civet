@@ -79,6 +79,7 @@ esbuild.build {
     "source/machine.civet"
     "source/register.civet"
     "source/register/cjs.civet"
+    "source/register/sourcemap.civet"
     "source/register/tsc/cjs.civet"
     "source/register/tsc/esm.civet"
     "source/register/tsc/index.civet"

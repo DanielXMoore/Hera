@@ -1,5 +1,8 @@
 { createRequire } from 'module'
 type { CompileOptions } from '@danielx/civet'
+type { SourceMapInput } from '@jridgewell/remapping'
+
+{ extractInlineMap, composedInlineMapComment } from ../sourcemap.civet
 
 // createRequire needs a base path for peer dep resolution.
 // process.cwd() is available in both ESM (tests) and CJS (production),
@@ -24,11 +27,19 @@ export compileCivetToJs := (src: string, filename?: string, civetOptions?: Compi
         "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
         "Run: npm install @danielx/civet"
       ].join '\n'
-  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true }
-  result := civet.compile(src, options)
+  // If the input carries an inline map (e.g. hera -> Civet from the Hera
+  // compiler) it would be stale after compiling shifts line numbers, so
+  // strip it and have Civet emit a Civet -> JS map to compose with it.
+  { code: civetSource, map: inputMap } := extractInlineMap src
+
+  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true, ...(inputMap and { sourceMap: true }) }
+  // The cast through unknown is because TS infers a Promise result despite sync: true
+  result := civet.compile(civetSource, options) as unknown as string | { code: string, sourceMap?: { json(outFileName: string): unknown } }
 
   if result <? 'string'
     result
+  else if inputMap and result.sourceMap
+    map := result.sourceMap.json(filename ?? "anonymous") as SourceMapInput
+    `${result.code}\n${composedInlineMapComment map, inputMap}\n`
   else
-    // @ts-expect-error TODO: Figure out why it thinks result is a promise and not a string or object even though sync: true
     result.code

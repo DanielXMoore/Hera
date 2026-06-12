@@ -1,6 +1,9 @@
 assert from assert
 { transpileTsToJs } from ../../../source/register/tsc/transpile.civet
 typescript from typescript
+{ compile } from ../../../source/main.civet
+{ readFile } from ../../helper.civet
+{ TraceMap, originalPositionFor } from @jridgewell/trace-mapping
 
 describe "transpileTsToJs", ->
   function removeSourceMap(sourceCode: string)
@@ -36,3 +39,45 @@ describe "transpileTsToJs", ->
     // Multiple erros should be logged
     assert.match logged, /Expression expected/
     assert.match logged, /Unexpected keyword or identifier/
+
+  describe "sourcemap composition", ->
+    // Handler fragments that appear verbatim and uniquely in source/hera.hera
+    probes := [
+      `f: $1.join("").trimEnd(),`
+      `return $1 + $2.join("") + ($3 ?? "")`
+    ]
+
+    lineOf := (text: string, probe: string) ->
+      line := text.split("\n").findIndex(&.includes probe) + 1
+      assert line > 0, `probe ${JSON.stringify probe} not found`
+      line
+
+    it "should compose the hera->TS map with TS emit so JS lines map back to the .hera source", ->
+      heraSource := readFile "source/hera.hera"
+      ts := compile heraSource, { filename: "source/hera.hera", inlineMap: true }
+      js := transpileTsToJs ts
+
+      // exactly one inline map: the stale hera->TS map is stripped and
+      // replaced by the composed hera->JS map
+      assert.equal js.match(/\/\/# sourceMappingURL=/g)?#, 1
+
+      encoded := js.match(/\/\/# sourceMappingURL=data:application\/json;base64,([A-Za-z0-9+/=]+)/)![1]
+      map := JSON.parse Buffer.from(encoded, "base64").toString("utf8")
+      assert.deepEqual map.sources, ["source/hera.hera"]
+
+      tracer := new TraceMap map
+      jsLines := js.split "\n"
+      for probe of probes
+        heraLine := lineOf heraSource, probe
+        tsLine := lineOf ts, probe
+        jsLine := lineOf js, probe
+        // TS emit shifts line numbers; without a shift a stale map would
+        // accidentally pass the alignment check below
+        assert tsLine !== jsLine, "expected TS emit to shift the probe line"
+        pos := originalPositionFor tracer, { line: jsLine, column: jsLines[jsLine-1].indexOf probe }
+        assert.equal pos.source, "source/hera.hera"
+        assert.equal pos.line, heraLine
+
+    it "should not attach a map when the input has none", ->
+      js := transpileTsToJs "const a: number = 1"
+      assert.doesNotMatch js, /sourceMappingURL/
