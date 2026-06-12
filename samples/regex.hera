@@ -10,7 +10,8 @@
 #
 # This grammar is purely syntactic.  Context-dependent early errors are not
 # checked: backreferences to nonexistent groups, duplicate group names or
-# flags, out-of-order ranges like [z-a], or bounds like {3,1}.  Annex B
+# flags, out-of-order ranges like [z-a], bounds like {3,1}, or invalid
+# modifier combinations like (?ii:x), (?i-i:x), and (?-:x).  Annex B
 # (sloppy-mode) extensions such as an unmatched `{`, a lone `]`, or identity
 # escapes like \q are rejected, as in Unicode mode.  The `v` flag is
 # accepted but ClassSetExpression syntax is not (TODO).

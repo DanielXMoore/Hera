@@ -61,7 +61,14 @@ benchOne := (name, meta) ->
   grammarSrc := fs.readFileSync path.join("samples", name), "utf8"
   input := meta.input
 
-  prevParser := compileWith prevHera, grammarSrc
+  // A sample may use grammar syntax newer than the previous release (e.g.
+  // regex.hera's ::any annotations vs 0.9.0); skip it rather than abort.
+  let prevParser
+  try
+    prevParser = compileWith prevHera, grammarSrc
+  catch
+    console.error `  skipping ${name}: previous hera cannot parse it`
+    return undefined
   currParser := compileWith currHera, grammarSrc
 
   prevSize := prevHera.compile(prevHera.parse(grammarSrc), module: false).length
@@ -100,7 +107,8 @@ timestamp := new Date().toISOString()
 
 rows: any[] := []
 for [name, meta] of Object.entries(samples)
-  rows.push benchOne(name, meta)
+  row := benchOne(name, meta)
+  rows.push row if row?
 
 // ---- format report ---------------------------------------------------------
 
