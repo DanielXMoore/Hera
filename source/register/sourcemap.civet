@@ -20,10 +20,15 @@ inlineMapPattern := new RegExp `\\n${"//#"} sourceMappingURL=data:application/js
 export function extractInlineMap(source: string): { code: string, map?: SourceMapInput }
   match := source.match inlineMapPattern
   return { code: source } unless match
-  {
-    code: source.slice 0, match.index
-    map: JSON.parse Buffer.from(match[1], "base64").toString("utf8")
-  }
+  // A malformed map comment degrades to the no-map pass-through rather than
+  // crashing the register hook at file-load time
+  try
+    {
+      code: source.slice 0, match.index
+      map: JSON.parse Buffer.from(match[1], "base64").toString("utf8")
+    }
+  catch
+    { code: source }
 
 /**
  * Compose a second-stage map (e.g. TS -> JS) with a first-stage map

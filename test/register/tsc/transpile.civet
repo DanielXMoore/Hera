@@ -81,3 +81,9 @@ describe "transpileTsToJs", ->
     it "should not attach a map when the input has none", ->
       js := transpileTsToJs "const a: number = 1"
       assert.doesNotMatch js, /sourceMappingURL/
+
+    it "should pass through a malformed inline map rather than throw", ->
+      // "bm90anNvbg==" decodes to "notjson"
+      ts := `const a: number = 1\n//# sourceMappingURL=data:application/json;base64,bm90anNvbg==`
+      js := transpileTsToJs ts
+      assert.match js, /const a = 1/

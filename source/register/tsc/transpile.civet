@@ -58,5 +58,5 @@ export function transpileTsToJs(
 
   // With sourceMap enabled tsc appends a comment pointing at a .js.map file
   // that doesn't exist; replace it with the composed inline map.
-  js := outputText.replace /\n\/\/# sourceMappingURL=\S*\s*$/, ""
+  js := outputText.replace /\r?\n\/\/# sourceMappingURL=\S*\s*$/, ""
   `${js}\n${composedInlineMapComment JSON.parse(sourceMapText), inputMap}\n`
