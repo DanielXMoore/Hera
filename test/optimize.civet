@@ -1,0 +1,209 @@
+assert from assert
+{ readFile } from ./helper.civet
+{ optimize } from ../source/optimizer.civet
+{ compile, execMod, parse } from ../source/main.civet
+{ transpileTsToJs } from ../source/register/tsc/transpile.civet
+import type { HeraRules } from ../source/hera-types.civet
+{ CodeSymbol } from ../source/hera-types.civet
+
+// Generate parse functions for the same rules with and without optimization
+both := (rules: HeraRules) ->
+  // grammars built by parse() always carry a code-block list; hand-built
+  // test rules need one for compile()
+  rules[CodeSymbol] ?= []
+  plain := execMod(transpileTsToJs compile rules, { module: false }) as { parse: (s: string) => unknown }
+  opt := execMod(transpileTsToJs compile rules, { module: false, optimize: true }) as { parse: (s: string) => unknown }
+  [plain, opt]
+
+// Assert optimized and plain parsers agree on an input: same value, or both throw
+agree := (rules: HeraRules, inputs: string[]) ->
+  [plain, opt] := both rules
+  for input of inputs
+    let a: unknown, b: unknown, ea: unknown, eb: unknown
+    try a = plain.parse input catch e then ea = e
+    try b = opt.parse input catch e then eb = e
+    if ea or eb
+      assert ea and eb, `expected both to throw for ${JSON.stringify input}`
+    else
+      assert.deepStrictEqual b, a, JSON.stringify input
+
+describe "optimize", ->
+  it "collapses $ operands to a single regex", ->
+    rules: HeraRules :=
+      Text: ["$", ["S", [["L", "a"], ["*", ["/", [["R", "[0-9]"], ["L", "b"]]]]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Text, ["$", ["R", "a(?:(?:(?:[0-9])|b))*"]]
+    agree rules, ["a", "a0b9", "ab", "", "ax"]
+
+  it "collapses ! and & operands, inlining terminal-only rules", ->
+    rules: HeraRules :=
+      Rule: ["S", [["!", "Digit"], ["&", ["L", "ab"]], ["R", "ab"]]]
+      Digit: ["R", "[0-9]"]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["S", [["!", ["R", "(?:[0-9])"]], ["&", ["L", "ab"]], ["R", "ab"]]]
+    agree rules, ["ab", "0ab", "ba"]
+
+  it "keeps single terminals as they are", ->
+    rules: HeraRules :=
+      Rule: ["S", [["!", ["L", "a"]], ["$", ["R", "[b]+"]]]]
+    assert.deepStrictEqual optimize(rules), rules
+
+  it "collapses assertions and quantifiers, keeping quantifiers final", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["&", ["R", "[a-z]"]], ["+", ["L", "x"]], ["?", ["L", "y"]]]]]
+    optimized := optimize rules
+    // (?:x)+ is variable-width in non-final position, so the sequence does
+    // not merge into one regex; each piece still collapses on its own
+    assert.deepStrictEqual optimized.Rule,
+      ["$", ["S", [["R", "(?=(?:[a-z]))"], ["R", "(?:x)+"], ["R", "(?:y)?"]]]]
+    agree rules, ["x", "xxy", "y", ""]
+
+  it "converts nested assertions to lookarounds inside a merge", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["!", ["L", "b"]], ["L", "a"]]]]
+      NoMerge: ["$", ["S", [["!", ["RD", ["x"]]], ["L", "a"]]]]
+      NoMergeAnd: ["$", ["S", [["&", ["RD", ["x"]]], ["L", "a"]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["$", ["R", "(?!b)a"]]
+    // a non-collapsible assertion operand blocks the merge but keeps the node
+    assert.deepStrictEqual optimized.NoMerge, rules.NoMerge
+    assert.deepStrictEqual optimized.NoMergeAnd, rules.NoMergeAnd
+    { Rule } := rules
+    agree { Rule }, ["a", "b", ""]
+
+  it "merges fully when only the final element is variable-width", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["&", ["R", "[a-z]"]], ["L", "x"], ["+", ["L", "y"]]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["$", ["R", "(?=(?:[a-z]))x(?:y)+"]]
+    agree rules, ["xy", "xyyy", "x", "zy"]
+
+  it "does not move variable-width parts into non-final position", ->
+    // PEG `[a]* "a"` never matches; a merged regex would.  The sequence must
+    // not collapse, but safe pieces inside it still may.
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["*", ["R", "[a]"]], ["L", "a"]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["$", ["S", [["R", "(?:(?:[a]))*"], ["L", "a"]]]]
+    agree rules, ["aa", "a", ""]
+
+  it "treats ordered choice as final-position-only", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["/", [["L", "a"], ["L", "ab"]]], ["L", "c"]]]]
+    optimized := optimize rules
+    // The choice collapses on its own (still committed, like $C) but stays a
+    // separate node so the regex engine cannot backtrack into it
+    assert.deepStrictEqual optimized.Rule, ["$", ["S", [["R", "(?:a|ab)"], ["L", "c"]]]]
+    [plain, opt] := both rules
+    assert.throws -> plain.parse "abc"
+    assert.throws -> opt.parse "abc"
+    agree rules, ["ac", "abc"]
+
+  it "converts string-literal escapes to regex escapes", ->
+    rules: HeraRules :=
+      // Raw L text is JS-string-escape source: \\ is one backslash, \b is
+      // backspace (not a word boundary), A is A
+      Rule: ["$", ["S", [["L", "\\\\"], ["L", "\\b"], ["L", "\\u0041"], ["L", "a+b"], ["L", "\\q"], ["L", "\\n"]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["$", ["R", "\\\\\\x08\\u0041a\\+bq\\n"]]
+    agree rules, ["\\\bAa+bq\n", "x"]
+
+  it "escapes raw newlines and returns in literals", ->
+    // Raw control characters can't appear in .hera string syntax, but
+    // hand-built rules may carry them; they must not break the regex source
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["L", "a"], ["R", "[b]"], ["L", "\n"], ["L", "\r"]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Rule, ["$", ["R", "a(?:[b])\\n\\r"]]
+
+  it "refuses subtrees containing handlers and stops value-deadness there", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["L", "a"], ["L", "b"]], { f: "return 1", $loc: { pos: 0, length: 0 } }]]
+    assert.deepStrictEqual optimize(rules), rules
+    agree rules, ["ab", "a"]
+
+  it "allows type-only annotations", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["L", "a"], ["L", "b"]], { t: "string" }]]
+    assert.deepStrictEqual optimize(rules).Rule, ["$", ["R", "ab"]]
+
+  it "refuses regexes with backreferences or named groups", ->
+    rules: HeraRules :=
+      Back: ["$", ["S", [["L", "x"], ["R", "(a)\\1"]]]]
+      Named: ["$", ["S", [["L", "x"], ["R", "(?<n>a)"]]]]
+      Lookbehind: ["$", ["S", [["L", "x"], ["R", "(?<=a)"]]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Back, rules.Back
+    assert.deepStrictEqual optimized.Named, rules.Named
+    // lookbehind has no capture group; it may collapse
+    assert.deepStrictEqual optimized.Lookbehind, ["$", ["R", "x(?:(?<=a))"]]
+
+  it "refuses dynamic heregexes and named bindings", ->
+    rules: HeraRules :=
+      Dyn: ["$", ["S", [["L", "x"], ["RD", ["a", { expression: "b" }]]]]]
+      Bound: ["$", [{ name: "n" }, ["L", "a"]]]
+    optimized := optimize rules
+    assert.deepStrictEqual optimized.Dyn, rules.Dyn
+    assert.deepStrictEqual optimized.Bound, rules.Bound
+
+  it "handles rule aliases, cycles, and dangling references", ->
+    rules: HeraRules :=
+      A: ["$", ["S", [["L", "("], "B", ["L", ")"]]]]
+      B: "C"
+      C: ["R", "[ab]"]
+      Var: ["$", ["S", [["L", "("], "D", ["L", ")"]]]]
+      D: ["R", "[ab]+"]
+      Cyclic: ["$", ["S", [["L", "("], "Cyclic", ["L", ")"]]]]
+      Dangling: ["$", ["S", [["L", "x"], "Missing"]]]
+    optimized := optimize rules
+    // C is fixed-width: it may merge anywhere in the sequence
+    assert.deepStrictEqual optimized.A, ["$", ["R", "\\((?:[ab])\\)"]]
+    // D is variable-width, so it only inlines as a separate node
+    assert.deepStrictEqual optimized.Var, ["$", ["S", [["L", "("], ["R", "(?:[ab]+)"], ["L", ")"]]]]
+    assert.deepStrictEqual optimized.Cyclic, rules.Cyclic
+    assert.deepStrictEqual optimized.Dangling, rules.Dangling
+    // Dangling references can't compile; check behavior without that rule
+    { A, B, C, Var, D } := rules
+    agree { A, B, C, Var, D }, ["(a)", "(ab)", "()", "xy"]
+
+  it "keeps rule references as calls with inlineRules: false", ->
+    rules: HeraRules :=
+      Rule: ["S", [["!", "Digit"], ["$", ["S", [["L", "a"], ["L", "b"]]]]]]
+      Digit: ["R", "[0-9]"]
+    optimized := optimize rules, { inlineRules: false }
+    // anonymous subtrees still collapse; the Digit reference stays a call
+    assert.deepStrictEqual optimized.Rule, ["S", [["!", "Digit"], ["$", ["R", "ab"]]]]
+
+  it "preserves code blocks", ->
+    rules: HeraRules :=
+      Rule: ["L", "a"]
+    code := [{ type: "CodeBlock" as const, $loc: { pos: 0, length: 0 }, token: "x" }]
+    rules[CodeSymbol] = code
+    assert.equal optimize(rules)[CodeSymbol], code
+
+  it "is enabled by the HERA_OPTIMIZE environment variable", ->
+    rules: HeraRules :=
+      Rule: ["$", ["S", [["L", "a"], ["L", "b"]]]]
+    rules[CodeSymbol] = []
+    process.env.HERA_OPTIMIZE = "1"
+    try
+      withEnv := compile rules, { module: false }
+      assert withEnv.includes "ab"
+    finally
+      delete process.env.HERA_OPTIMIZE
+
+  it "produces identical results on the sample grammars", ->
+    @timeout 10000
+    batteries: [string, string[]][] := [
+      ["samples/math.hera", ["8 + 3 / (2 + 5)", "((1))", "1 +"]]
+      ["samples/url.hera", ["http://danielx.net:443/%21?query#fragment"]]
+      ["samples/regex.hera", ["/foo[abc](?:bar)\\d+/g", "/a|b|/", "/+/"]]
+    ]
+    for [file, inputs] of batteries
+      agree parse(readFile(file)), inputs
+
+  it "parses the hera grammar identically", ->
+    @timeout 10000
+    heraSrc := readFile "source/hera.hera"
+    rules := parse heraSrc
+    agree rules, [heraSrc, readFile("samples/url.hera"), "Rule\n  \"a\"+\n"]

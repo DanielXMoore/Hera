@@ -1,6 +1,7 @@
 // Compile a rules json to typescript
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
+{ optimize } from ./optimizer.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -19,6 +20,14 @@ export type CompilerOptions = {
    * any handler bodies.
    */
   tokenize?: boolean
+  /**
+   * Experimental: collapse value-dead subtrees ($/!/& operands) into single
+   * regular expressions before code generation.  Parse results are
+   * unchanged; failure expectations within collapsed subtrees coarsen and
+   * per-rule parse events inside them no longer fire.  Can also be enabled
+   * with the HERA_OPTIMIZE environment variable while experimenting.
+   */
+  optimize?: boolean
 }
 
 strDefs: string[] := []
@@ -641,6 +650,12 @@ export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: SourceMap }
   options := { ...defaultOptions, ...maybeOptions }
+
+  optimizeEnv := process.env.HERA_OPTIMIZE
+  if options.optimize ?? !!optimizeEnv
+    // HERA_OPTIMIZE=norefs keeps rule references as calls — for parsers
+    // that run with packrat caching, where a cached call beats re-matching
+    rules = optimize rules, { inlineRules: optimizeEnv is not "norefs" }
 
   strDefs.length = 0
   reDefs.length = 0

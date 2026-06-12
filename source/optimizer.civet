@@ -1,0 +1,216 @@
+/**
+Value-safe grammar AST optimization.
+
+Collapses subtrees in value-discarding positions — the operands of `$`
+(text), `!` (negative lookahead), and `&` (lookahead) — into a single
+regular expression terminal when the subtree consists only of terminals,
+sequences, choices, repetitions, assertions, and references to rules that
+themselves collapse, with no handlers anywhere.
+
+The `$`/`!`/`&` wrapper is kept, so the surrounding rule sees exactly the
+same value it always did ($TEXT yields the matched substring either way;
+$N/$Y yield `true` either way).  What changes is the inside: one regex
+match replaces a tree of combinator calls, rule invocations, and their
+per-call enter/exit events and cache traffic.
+
+PEG composition is possessive (no backtracking into a succeeded part)
+while a regular expression backtracks freely, so merging is only allowed
+where the two agree:
+
+- A trailing element of a merged sequence can be anything: with nothing
+  after it inside the same regex there is no backtracking pressure, and
+  greedy quantifiers/ordered alternation then behave identically to $Q/$P
+  and $C.
+- Non-trailing elements must be "rigid" — unable to give back characters
+  when the regex engine backtracks: literals, fixed-width regexes
+  (conservatively detected), lookarounds, and sequences thereof.
+  Without this, `[a]* "a"` (never matches in PEG) would merge into
+  /(?:[a]*)a/ (matches "aa").
+
+Regex sources containing backreferences or named groups are never merged:
+capture group renumbering would change their meaning.
+
+Trade-off: within a collapsed subtree, per-rule parse events disappear
+(rule callbacks/caching no longer fire there) and failure expectations
+coarsen to the combined regex, so error messages can name a regex instead
+of the original literal.  Values and match behavior are unchanged.
+*/
+
+import type { HeraAST, HeraRules, NameNode, PrefixNode, SequenceNode, SuffixNode } from ./hera-types.civet
+{ CodeSymbol } from ./hera-types.civet
+
+// Characters that must be escaped to appear as a literal in RegExp source
+// (`/` included because the source is emitted inside a /.../ literal).
+regExpEscapeChar := (c: string): string ->
+  switch c
+    when "\n" then "\\n"
+    when "\r" then "\\r"
+    else
+      /[-\/\\^$*+?.()|[\]{}]/.test(c) ? `\\${c}` : c
+
+/**
+Convert an "L" node's text to equivalent RegExp source.
+
+L values hold raw source-escaped text: the compiler emits them verbatim
+into a JS string literal ($L("...")), so `\\` means one backslash and
+`\n` a newline.  Escape sequences that mean the same thing in RegExp
+source pass through; the rest are rewritten (notably `\b`, backspace in a
+string but a word boundary in a RegExp).
+*/
+literalToRegexSource := (raw: string): string ->
+  raw.replace /\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|0(?![0-9])|[\s\S])|([\s\S])/g, (_m: string, esc?: string, ch?: string) ->
+    return regExpEscapeChar ch if ch?
+    e := esc!
+    if e.length > 1 or "\\nrtfv0".includes e
+      `\\${e}` // same meaning in RegExp source
+    else if e is "b"
+      "\\x08"
+    else
+      // \" \' and identity escapes: the escaped character itself
+      regExpEscapeChar e
+
+// Backreferences and named groups change meaning when capture groups from
+// merged sources renumber.
+unsafeToCombine := /\\[1-9]|\(\?<(?![=!])|\\k</
+
+// Conservative: a regex source with none of these characters cannot match
+// variable-width or retry alternatives, so backtracking can never shrink
+// it.  (Escaped literals like \* false-positive toward non-rigid, which is
+// safe.)
+rigidSource := /^[^*+?|{(]*$/
+
+type Collapsed = { source: string, rigid: boolean }
+
+/**
+Try to express a subtree's match behavior as RegExp source (concatenation
+safe).  Returns undefined when the subtree isn't collapsible.
+*/
+collapse := (node: HeraAST, rules: HeraRules, memo: Map<string, Collapsed | undefined>, inlineRules: boolean): Collapsed | undefined ->
+  if node <? "string"
+    // Inlining a rule reference trades the rule call (and any packrat
+    // caching the host provides through parse events) for re-evaluating
+    // the regex at every position.  That wins for cacheless parsers and
+    // badly loses for memoized ones, so it is optional.
+    return undefined unless inlineRules
+    // In-progress entries hold undefined, which also breaks cycles
+    return memo.get(node) if memo.has node
+    memo.set node, undefined
+    rule := rules[node]
+    return undefined unless rule?
+    result := collapse rule, rules, memo, inlineRules
+    memo.set node, result
+    return result
+
+  // A handler means user code runs (it can transform values or $skip).
+  // A {t}-only annotation is erased at runtime and safe to drop here.
+  handler := node[2]
+  return undefined if handler? and "f" in handler
+
+  switch node[0]
+    when "L"
+      { source: literalToRegexSource(node[1] as string), rigid: true }
+    when "R"
+      source := node[1] as string
+      return undefined if unsafeToCombine.test source
+      { source: `(?:${source})`, rigid: rigidSource.test source }
+    when "S"
+      parts: Collapsed[] := []
+      for item of (node as SequenceNode)[1]
+        part := collapse item, rules, memo, inlineRules
+        return undefined unless part?
+        parts.push part
+      // Only the last element may be non-rigid (see header)
+      return undefined unless parts.slice(0, -1).every (p) -> p.rigid
+      { source: parts.map((p) -> p.source).join(""), rigid: parts.every (p) -> p.rigid }
+    when "/"
+      parts: Collapsed[] := []
+      for item of (node as SequenceNode)[1]
+        part := collapse item, rules, memo, inlineRules
+        return undefined unless part?
+        parts.push part
+      // Ordered choice and regex alternation agree when nothing follows
+      // within the same regex; as a choice this fragment is never rigid.
+      { source: `(?:${parts.map((p) -> p.source).join("|")})`, rigid: false }
+    when "*", "+", "?"
+      inner := collapse (node as SuffixNode)[1], rules, memo, inlineRules
+      return undefined unless inner?
+      { source: `(?:${inner.source})${node[0]}`, rigid: false }
+    when "&"
+      inner := collapse (node as PrefixNode)[1], rules, memo, inlineRules
+      return undefined unless inner?
+      { source: `(?=${inner.source})`, rigid: true }
+    when "!"
+      inner := collapse (node as PrefixNode)[1], rules, memo, inlineRules
+      return undefined unless inner?
+      { source: `(?!${inner.source})`, rigid: true }
+    when "$"
+      // The text of the match is the match
+      collapse (node as PrefixNode)[1], rules, memo, inlineRules
+    else
+      // RD (dynamic heregex) and named bindings
+      undefined
+
+/**
+Walk a rule body replacing collapsible subtrees in value-dead positions.
+
+`dead` is true inside `$`/`!`/`&` operands.  It resets to false under a
+handler-bearing node (the handler reads its $n inputs) and under a named
+binding (the name carries the value out to a handler).
+*/
+transform := (node: HeraAST, rules: HeraRules, memo: Map<string, Collapsed | undefined>, dead: boolean, inlineRules: boolean): HeraAST ->
+  return node if node <? "string" and not dead
+
+  // Replace a maximal collapsible subtree.  Single terminals stay as they
+  // are: there is nothing to merge ($L is already the fast path).
+  if dead and not (node <? "string" and not rules[node]?)
+    kind := node <? "string" ? undefined : node[0]
+    unless kind is "L" or kind is "R" or kind is "RD"
+      if collapsed := collapse node, rules, memo, inlineRules
+        return ["R", collapsed.source]
+
+  return node if node <? "string"
+
+  handler := node[2]
+  childDead := dead and not (handler? and "f" in handler)
+
+  rest := handler ? [handler] : []
+
+  switch node[0]
+    when "S", "/"
+      seq := node as SequenceNode
+      [seq[0], seq[1].map((item) -> transform item, rules, memo, childDead, inlineRules), ...rest] as HeraAST
+    when "*", "+", "?"
+      suffix := node as SuffixNode
+      [suffix[0], transform(suffix[1], rules, memo, childDead, inlineRules), ...rest] as HeraAST
+    when "&", "!", "$"
+      prefix := node as PrefixNode
+      [prefix[0], transform(prefix[1], rules, memo, true, inlineRules), ...rest] as HeraAST
+    when "L", "R", "RD"
+      node
+    else
+      // Named binding: its value is captured by name for a handler
+      named := node as NameNode
+      [named[0], transform(named[1], rules, memo, false, inlineRules), ...rest] as HeraAST
+
+/**
+Optimize a grammar's rules.  Returns a new rules object; the input is not
+modified.  Parse results are identical to the unoptimized grammar.
+*/
+export type OptimizeOptions = {
+  /**
+   * Inline references to collapsible rules.  Default true; turn this off
+   * when the parser runs with packrat caching through parse events, where
+   * a cached rule call is cheaper than re-matching its regex.
+   */
+  inlineRules?: boolean
+}
+
+export optimize := (rules: HeraRules, options: OptimizeOptions = {}): HeraRules ->
+  inlineRules := options.inlineRules ?? true
+  memo := new Map<string, Collapsed | undefined>
+  optimized: HeraRules := {}
+  for name of Object.keys rules
+    optimized[name] = transform rules[name], rules, memo, false, inlineRules
+  if rules[CodeSymbol]
+    optimized[CodeSymbol] = rules[CodeSymbol]
+  optimized
