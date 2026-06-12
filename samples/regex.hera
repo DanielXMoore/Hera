@@ -121,8 +121,11 @@ UnicodeEscapeSequence
   "u{" CodePoint "}"
   "u" HexDigit HexDigit HexDigit HexDigit
 
+# Any number of hex digits, but the value must not exceed 0x10FFFF.
+# Leading zeros are allowed (\u{0000000041} is valid JS), so strip them
+# before checking the significant digits against the ceiling.
 CodePoint
-  /[0-9a-fA-F]+/
+  /0*(?:10[0-9a-fA-F]{4}|[0-9a-fA-F]{1,5})/
 
 HexDigit
   [0-9a-fA-F]

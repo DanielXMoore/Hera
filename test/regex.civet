@@ -27,6 +27,7 @@ valid := [
   '/\\p{Script=Latin}+\\P{L}/u'
   '/\\u{1F600}|\\uD83D\\uDE00/u'
   '/\\u{10FFFF}/u'
+  '/\\u{0}\\u{00}\\u{0000000041}\\u{000010FFFF}/u' // leading zeros are fine
   '/a{2}b{3,}c{4,5}d{5,6}?/'
   '/x*?y+?z??/'
   '/[\\b\\-a-z\\u200C]/u'
@@ -56,6 +57,10 @@ invalid := [
   '/[\\B]/'
   '/\\x1/'
   '/\\u12/'
+  '/\\u{110000}/u' // code point above 0x10FFFF
+  '/\\u{1FFFFF}/u'
+  '/\\u{000110000}/u' // leading zeros don't hide an out-of-range value
+  '/\\u{}/u'
   '/\\k/'
   '/(?<1a>x)/'
   '/(?<name>x/'
