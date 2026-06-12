@@ -5,6 +5,12 @@ path from path
 { main } from ./cli.civet
 
 argv := process.argv
+
+if argv.includes '--version'
+  { version } := JSON.parse fs.readFileSync path.join(__dirname, '../package.json'), 'utf8'
+  process.stdout.write `${version}\n`
+  process.exit 0
+
 encoding := "utf8"
 valueFlags := new Set ['--language', '--libPath', '-o', '--output']
 
