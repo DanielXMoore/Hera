@@ -1,5 +1,7 @@
 typescript from typescript
 
+{ extractInlineMap, composedInlineMapComment } from ../sourcemap.civet
+
 export CompilerOptions ::= typescript.TranspileOptions['compilerOptions']
 LogFn ::= (...args: any[]) => any
 
@@ -15,12 +17,21 @@ export function transpileTsToJs(
   compilerOptions: CompilerOptions = {}
   log: LogFn = console.error
 )
+  // If the input carries an inline map (e.g. hera -> TS from the Hera
+  // compiler) it would be stale after transpiling shifts line numbers, so
+  // strip it and have tsc emit a TS -> JS map to compose with it instead.
+  { code, map: inputMap } := extractInlineMap tsSource
+
   compilerOptions = {
     ...defaultCompilerOptions
     ...compilerOptions
+    ...inputMap and {
+      sourceMap: true
+      inlineSourceMap: false
+    }
   }
 
-  { outputText, diagnostics } := typescript.transpileModule(tsSource, {
+  { outputText, sourceMapText, diagnostics } := typescript.transpileModule(code, {
     reportDiagnostics: true
     compilerOptions
   })
@@ -43,4 +54,9 @@ export function transpileTsToJs(
     if diagnostics.find(&.category === typescript.DiagnosticCategory.Error)
       throw new Error "TypeScript compilation failed"
 
-  outputText
+  return outputText unless inputMap and sourceMapText
+
+  // With sourceMap enabled tsc appends a comment pointing at a .js.map file
+  // that doesn't exist; replace it with the composed inline map.
+  js := outputText.replace /\r?\n\/\/# sourceMappingURL=\S*\s*$/, ""
+  `${js}\n${composedInlineMapComment JSON.parse(sourceMapText), inputMap}\n`

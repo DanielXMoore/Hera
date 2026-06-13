@@ -5,6 +5,7 @@
   "devDependencies": {
     "@danielx/civet": "0.11.6",
     "@danielx/hera-previous": "npm:@danielx/hera@0.9.0",
+    "@jridgewell/trace-mapping": "0.3.31",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.5.2",
     "benchmark": "^2.1.4",
@@ -102,5 +103,8 @@
     "./hera-types": "./dist/hera-types.js"
   },
   "types": "dist/main.d.ts",
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@jridgewell/remapping": "2.3.5"
+  }
 }

@@ -1,6 +1,8 @@
 { createRequire } from 'module'
 type { CompileOptions } from '@danielx/civet'
 
+{ hasInlineMap } from ../sourcemap.civet
+
 // createRequire needs a base path for peer dep resolution.
 // process.cwd() is available in both ESM (tests) and CJS (production),
 // and anchors module resolution to the project root where peer deps live.
@@ -24,11 +26,18 @@ export compileCivetToJs := (src: string, filename?: string, civetOptions?: Compi
         "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
         "Run: npm install @danielx/civet"
       ].join '\n'
-  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true }
-  result := civet.compile(src, options)
+  // If the input carries an inline map (e.g. hera -> Civet from the Hera
+  // compiler) it would be stale after compiling shifts line numbers. Civet
+  // strips a trailing inline map from its input, adopts it as the upstream
+  // map, and composes it with its own Civet -> JS map when we ask for an
+  // inline map (`upstreamSourceMap ??= sm` in @danielx/civet's compile), so
+  // the emitted map points back at the original source. Without an input map
+  // we leave the output map-free, matching prior behavior.
+  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true, ...(hasInlineMap(src) and { inlineMap: true }) }
+  // The cast through unknown is because TS infers a Promise result despite sync: true
+  result := civet.compile(src, options) as unknown as string | { code: string }
 
   if result <? 'string'
     result
   else
-    // @ts-expect-error TODO: Figure out why it thinks result is a promise and not a string or object even though sync: true
     result.code

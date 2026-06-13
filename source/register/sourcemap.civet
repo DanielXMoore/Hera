@@ -1,0 +1,47 @@
+// Sourcemap composition helpers for the two-stage register hooks.
+//
+// The Hera compiler attaches an inline map (hera -> TS or hera -> Civet) to
+// its output. When a second stage (tsc or Civet) transpiles that output to
+// JS, line numbers shift, so the second stage must produce its own map and
+// compose it with the first or stack traces and coverage attribute to the
+// wrong lines.
+
+remapping, { type SourceMapInput } from @jridgewell/remapping
+
+// Matches a trailing inline sourcemap comment like the one the Hera compiler
+// appends (the "//" + "#" split prevents tools from picking this line up as
+// an actual sourceMappingURL)
+inlineMapPattern := new RegExp `\\n${"//#"} sourceMappingURL=data:application/json;base64,([A-Za-z0-9+/=]+)\\s*$`
+
+/**
+ * Whether the source ends with an inline sourcemap comment. Used to decide
+ * whether to ask the next stage to emit (and compose) a map of its own.
+ */
+export function hasInlineMap(source: string): boolean
+  inlineMapPattern.test source
+
+/**
+ * Split a trailing inline sourcemap comment off of compiled source.
+ * Returns the source without the comment and the decoded map, if any.
+ */
+export function extractInlineMap(source: string): { code: string, map?: SourceMapInput }
+  match := source.match inlineMapPattern
+  return { code: source } unless match
+  // A malformed map comment degrades to the no-map pass-through rather than
+  // crashing the register hook at file-load time
+  try
+    {
+      code: source.slice 0, match.index
+      map: JSON.parse Buffer.from(match[1], "base64").toString("utf8")
+    }
+  catch
+    { code: source }
+
+/**
+ * Compose a second-stage map (e.g. TS -> JS) with a first-stage map
+ * (e.g. hera -> TS), producing a map from the original source to the final
+ * JS, and return it as an inline sourcemap comment to append to the JS.
+ */
+export function composedInlineMapComment(secondStageMap: SourceMapInput, firstStageMap: SourceMapInput): string
+  composed := remapping [secondStageMap, firstStageMap], => null
+  `${"//#"} sourceMappingURL=data:application/json;base64,${Buffer.from(JSON.stringify(composed), "utf8").toString("base64")}`

@@ -1,6 +1,9 @@
 assert from assert
 { mock } from node:test
 { compileCivetToJs, runtime } from ../../../source/register/civet/transpile.civet
+{ compile } from ../../../source/main.civet
+{ readFile } from ../../helper.civet
+{ TraceMap, originalPositionFor } from @jridgewell/trace-mapping
 
 describe "compileCivetToJs", ->
   it "should compile Civet const declaration to JavaScript", ->
@@ -41,3 +44,47 @@ describe "compileCivetToJs", ->
     )
 
     restore.mock.restore()
+
+  describe "sourcemap composition", ->
+    // Handler fragments that appear verbatim and uniquely in source/hera.hera
+    probes := [
+      `f: $1.join("").trimEnd(),`
+      `return $1 + $2.join("") + ($3 ?? "")`
+    ]
+
+    lineOf := (text: string, probe: string) ->
+      line := text.split("\n").findIndex(&.includes probe) + 1
+      assert line > 0, `probe ${JSON.stringify probe} not found`
+      line
+
+    it "should compose the hera->Civet map with the Civet->JS map so JS lines map back to the .hera source", ->
+      // Civet-compiling the full generated hera.hera parser takes ~1s
+      @timeout 20000
+      heraSource := readFile "source/hera.hera"
+      civetCode := compile heraSource, { filename: "source/hera.hera", inlineMap: true, language: 'civet' }
+      js := compileCivetToJs civetCode, "source/hera.hera"
+
+      // exactly one inline map: the stale hera->Civet map is stripped and
+      // replaced by the composed hera->JS map
+      assert.equal js.match(/\/\/# sourceMappingURL=/g)?#, 1
+
+      encoded := js.match(/\/\/# sourceMappingURL=data:application\/json;base64,([A-Za-z0-9+/=]+)/)![1]
+      map := JSON.parse Buffer.from(encoded, "base64").toString("utf8")
+      assert.deepEqual map.sources, ["source/hera.hera"]
+
+      tracer := new TraceMap map
+      jsLines := js.split "\n"
+      for probe of probes
+        heraLine := lineOf heraSource, probe
+        civetLine := lineOf civetCode, probe
+        jsLine := lineOf js, probe
+        // Civet emit shifts line numbers; without a shift a stale map would
+        // accidentally pass the alignment check below
+        assert civetLine !== jsLine, "expected Civet emit to shift the probe line"
+        pos := originalPositionFor tracer, { line: jsLine, column: jsLines[jsLine-1].indexOf probe }
+        assert.equal pos.source, "source/hera.hera"
+        assert.equal pos.line, heraLine
+
+    it "should not attach a map when the input has none", ->
+      js := compileCivetToJs "x := 1"
+      assert.doesNotMatch js, /sourceMappingURL/
