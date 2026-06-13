@@ -1,0 +1,83 @@
+assert from assert
+{ readFile } from ./helper.civet
+{ generate } from ../source/main.civet
+
+// samples/regex.hera parses JavaScript regular expression literals using the
+// ECMA-262 Pattern grammar in strict (Unicode-aware) form.  Every accepted
+// literal is cross-checked against the real JS engine.  Rejected literals
+// are invalid in Unicode mode (some are tolerated by Annex B sloppy mode —
+// the grammar intentionally sides with strict mode; see the grammar header).
+
+parser := generate readFile "samples/regex.hera"
+
+valid := [
+  '/a/'
+  '/ /'
+  '/=/'
+  '/(?:)/'
+  '/[]/'
+  '/foo[abc](?:bar)\\d+/g' // the input used by perf/compare.civet
+  '/^https?:\\/\\/[^\\s/$.?#]+[^\\s]*$/i'
+  '/(\\d{4})-(\\d{2})-(\\d{2})/'
+  '/(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})/u'
+  '/(?<tag><[a-z]+>).*?\\k<tag>/'
+  '/^[a-zA-Z_$][a-zA-Z0-9_$]*$/'
+  '/a|b|/'
+  '/(?=x)(?!y)(?<=z)(?<!w)x/'
+  '/\\p{Script=Latin}+\\P{L}/u'
+  '/\\u{1F600}|\\uD83D\\uDE00/u'
+  '/\\u{10FFFF}/u'
+  '/\\u{0}\\u{00}\\u{0000000041}\\u{000010FFFF}/u' // leading zeros are fine
+  '/a{2}b{3,}c{4,5}d{5,6}?/'
+  '/x*?y+?z??/'
+  '/[\\b\\-a-z\\u200C]/u'
+  '/[-a][a-][\\]][/][^abc][\\d\\w]/'
+  '/(?i:x)(?m-i:y)(?-s:z)/'
+  '/\\0\\x41\\u0041\\n\\cA\\$\\./'
+  '/(a(b(c)))\\1\\2\\3/'
+  '/((((((((((a))))))))))/'
+  '/./dgimsuy'
+]
+
+// All of these are SyntaxErrors in Unicode mode.  Those marked Annex B are
+// accepted by sloppy mode JS but rejected by this grammar (strict view).
+invalid := [
+  '//' // a comment, not a regex
+  '/+/'
+  '/a**/'
+  '/^*/'
+  '/(/'
+  '/a)/'
+  '/[a/'
+  '/a{1,2,}/' // Annex B treats {1,2,} as literal characters
+  '/a{/' // Annex B
+  '/]/' // Annex B
+  '/\\q/' // Annex B identity escape
+  '/\\01/' // Annex B legacy octal
+  '/[\\B]/'
+  '/\\x1/'
+  '/\\u12/'
+  '/\\u{110000}/u' // code point above 0x10FFFF
+  '/\\u{1FFFFF}/u'
+  '/\\u{000110000}/u' // leading zeros don't hide an out-of-range value
+  '/\\u{}/u'
+  '/\\k/'
+  '/(?<1a>x)/'
+  '/(?<name>x/'
+  '/(?=x/'
+  '/(?i_:x)/'
+  '/a\nb/' // literal line terminator
+  '/a/z' // invalid flag
+]
+
+describe "regex sample (ECMA-262 RegExp literals)", ->
+  for literal of valid
+    it `accepts ${JSON.stringify(literal)}`, ->
+      parser.parse literal
+      // cross-check: the JS engine agrees this is a valid regex literal
+      re := new Function(`return ${literal}`)()
+      assert re instanceof RegExp
+
+  for literal of invalid
+    it `rejects ${JSON.stringify(literal)}`, ->
+      assert.throws -> parser.parse literal

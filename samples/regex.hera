@@ -1,45 +1,193 @@
-# WIP Regex parser
-Regex
-  "/" Primary+ "/" Flags*
+# JavaScript regular expression literals, e.g. /foo[abc](?:bar)\d+/g
+#
+# The Pattern grammar follows ECMA-262 "Patterns" (https://tc39.es/ecma262/#sec-patterns)
+# in strict (Unicode-aware) form, including named groups, lookbehind,
+# \u{...} escapes, \p{...} property escapes, and (?ims-ims:...) modifiers.
+# The RegExpLiteral wrapper follows the lexical grammar
+# (https://tc39.es/ecma262/#sec-literals-regular-expression-literals):
+# an unescaped `/` may not appear outside a character class, line
+# terminators may not appear at all, and `//` is not a regex.
+#
+# This grammar is purely syntactic.  Context-dependent early errors are not
+# checked: backreferences to nonexistent groups, duplicate group names or
+# flags, out-of-order ranges like [z-a], bounds like {3,1}, or invalid
+# modifier combinations like (?ii:x), (?i-i:x), and (?-:x).  Annex B
+# (sloppy-mode) extensions such as an unmatched `{`, a lone `]`, or identity
+# escapes like \q are rejected, as in Unicode mode.  The `v` flag is
+# accepted but ClassSetExpression syntax is not (TODO).
 
-RegexCharacter
-  /[^\/\\]+/
-  EscapeSequence
-
-Primary
-  CharacterClass ::any -> $1
-  Group ::any -> $1
-  RegexCharacter ::any -> $1
-
-Group
-  "(" GroupPrefix? Primary* ")"
-
-CharacterClass
-  "[" CharacterClassCharacter* "]"
-
-CharacterClassCharacter
-  /[^\]\\]+/
-  EscapeSequence
-
-EscapeSequence
-  Backslash /[^]/ ->
-    return '\\' + $2
-
-Backslash
-  "\\"
-
-GroupPrefix
-  GroupName
-  NonCapturing
-
-NonCapturing
-  "?:"
+RegExpLiteral
+  "/" !"/" Pattern "/" Flags
 
 Flags
-  /[dgimsuy]/
+  /[dgimsuvy]*/
+
+Pattern
+  Disjunction
+
+# ::any breaks the type-inference cycle for this recursive rule (the
+# generated parser would otherwise fail under noImplicitAny).
+Disjunction
+  Alternative ( "|" Alternative )* ::any
+
+Alternative
+  Term*
+
+Term
+  Assertion
+  Atom Quantifier?
+
+Assertion
+  "^"
+  "$"
+  "\\b"
+  "\\B"
+  "(?="  Disjunction ")"
+  "(?!"  Disjunction ")"
+  "(?<=" Disjunction ")"
+  "(?<!" Disjunction ")"
+
+Quantifier
+  QuantifierPrefix "?"?
+
+QuantifierPrefix
+  [*+?]
+  "{" DecimalDigits ( "," DecimalDigits? )? "}"
+
+DecimalDigits
+  /[0-9]+/
+
+DecimalDigit
+  [0-9]
+
+Atom
+  PatternCharacter
+  "."
+  "\\" AtomEscape
+  CharacterClass
+  "(?" Modifiers ":" Disjunction ")"
+  "(?" Modifiers "-" Modifiers ":" Disjunction ")"
+  "(" GroupSpecifier Disjunction ")"
+
+# SourceCharacter but not SyntaxCharacter (^ $ \ . * + ? ( ) [ ] { } |).
+# Also excludes `/` and line terminators, which the lexical grammar forbids
+# inside a literal.
+PatternCharacter
+  [^^$\\.*+?()\[\]{}|/\n\r\u2028\u2029]
+
+AtomEscape
+  DecimalEscape
+  CharacterClassEscape
+  CharacterEscape
+  "k" GroupName
+
+# Backreference to a numbered capture group.  (Whether the group exists is
+# a semantic check, not made here.)
+DecimalEscape
+  /[1-9][0-9]*/
+
+CharacterClassEscape
+  [dDsSwW]
+  [pP] "{" UnicodePropertyValueExpression "}"
+
+UnicodePropertyValueExpression
+  UnicodePropertyName "=" UnicodePropertyValue
+  UnicodePropertyValue
+
+UnicodePropertyName
+  /[A-Za-z_]+/
+
+UnicodePropertyValue
+  /[A-Za-z0-9_]+/
+
+CharacterEscape
+  ControlEscape
+  "c" ControlLetter
+  "0" !DecimalDigit
+  HexEscapeSequence
+  UnicodeEscapeSequence
+  IdentityEscape
+
+ControlEscape
+  [fnrtv]
+
+ControlLetter
+  [a-zA-Z]
+
+HexEscapeSequence
+  "x" HexDigit HexDigit
+
+# \uFFFF or \u{10FFFF}
+UnicodeEscapeSequence
+  "u{" CodePoint "}"
+  "u" HexDigit HexDigit HexDigit HexDigit
+
+# Any number of hex digits, but the value must not exceed 0x10FFFF.
+# Leading zeros are allowed (\u{0000000041} is valid JS), so strip them
+# before checking the significant digits against the ceiling.
+CodePoint
+  /0*(?:10[0-9a-fA-F]{4}|[0-9a-fA-F]{1,5})/
+
+HexDigit
+  [0-9a-fA-F]
+
+# In Unicode mode only SyntaxCharacter and `/` are valid identity escapes.
+# (Annex B allows almost any character.)
+IdentityEscape
+  [\^$\\.*+?()\[\]{}|/]
+
+CharacterClass
+  "[" "^"? NonemptyClassRanges? "]"
+
+# `NonemptyClassRanges?` plays the role of the spec's ClassRanges
+# (NonemptyClassRanges or empty).
+# The ::any annotations break the type-inference cycle of these mutually
+# recursive rules, like Disjunction above (every alternative needs one for
+# the rule's declared type to apply).
+NonemptyClassRanges
+  ClassAtom "-" ClassAtom NonemptyClassRanges? ::any
+  ClassAtom NonemptyClassRangesNoDash ::any
+  ClassAtom ::any
+
+NonemptyClassRangesNoDash
+  ClassAtomNoDash "-" ClassAtom NonemptyClassRanges? ::any
+  ClassAtomNoDash NonemptyClassRangesNoDash ::any
+  ClassAtom ::any
+
+ClassAtom
+  "-"
+  ClassAtomNoDash
+
+# SourceCharacter but not one of \ ] - (nor a line terminator, which the
+# lexical grammar forbids).  Note that an unescaped `/` is allowed here.
+ClassAtomNoDash
+  "\\" ClassEscape
+  [^\\\]\-\n\r\u2028\u2029]
+
+ClassEscape
+  "b"
+  "-"
+  CharacterClassEscape
+  CharacterEscape
+
+GroupSpecifier
+  ( "?" GroupName )?
 
 GroupName
-  "<" Name ">"
+  "<" RegExpIdentifierName ">"
 
-Name
-  /[a-zA-Z][a-zA-Z0-9]+/
+# (?ims:...) / (?ims-ims:...) regular expression pattern modifiers.
+# An empty Modifiers also covers plain non-capturing groups (?:...).
+Modifiers
+  /[ims]*/
+
+RegExpIdentifierName
+  RegExpIdentifierStart RegExpIdentifierContinue*
+
+RegExpIdentifierStart
+  /[\p{ID_Start}$_]/
+  "\\" UnicodeEscapeSequence
+
+RegExpIdentifierContinue
+  /[\p{ID_Continue}$\u200C\u200D]/ # ID_Continue, $, <ZWNJ>, <ZWJ>
+  "\\" UnicodeEscapeSequence
