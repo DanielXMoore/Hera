@@ -14,6 +14,13 @@ remapping, { type SourceMapInput } from @jridgewell/remapping
 inlineMapPattern := new RegExp `\\n${"//#"} sourceMappingURL=data:application/json;base64,([A-Za-z0-9+/=]+)\\s*$`
 
 /**
+ * Whether the source ends with an inline sourcemap comment. Used to decide
+ * whether to ask the next stage to emit (and compose) a map of its own.
+ */
+export function hasInlineMap(source: string): boolean
+  inlineMapPattern.test source
+
+/**
  * Split a trailing inline sourcemap comment off of compiled source.
  * Returns the source without the comment and the decoded map, if any.
  */

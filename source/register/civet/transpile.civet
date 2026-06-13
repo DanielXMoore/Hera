@@ -1,8 +1,7 @@
 { createRequire } from 'module'
 type { CompileOptions } from '@danielx/civet'
-type { SourceMapInput } from '@jridgewell/remapping'
 
-{ extractInlineMap, composedInlineMapComment } from ../sourcemap.civet
+{ hasInlineMap } from ../sourcemap.civet
 
 // createRequire needs a base path for peer dep resolution.
 // process.cwd() is available in both ESM (tests) and CJS (production),
@@ -28,18 +27,17 @@ export compileCivetToJs := (src: string, filename?: string, civetOptions?: Compi
         "Run: npm install @danielx/civet"
       ].join '\n'
   // If the input carries an inline map (e.g. hera -> Civet from the Hera
-  // compiler) it would be stale after compiling shifts line numbers, so
-  // strip it and have Civet emit a Civet -> JS map to compose with it.
-  { code: civetSource, map: inputMap } := extractInlineMap src
-
-  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true, ...(inputMap and { sourceMap: true }) }
+  // compiler) it would be stale after compiling shifts line numbers. Civet
+  // strips a trailing inline map from its input, adopts it as the upstream
+  // map, and composes it with its own Civet -> JS map when we ask for an
+  // inline map (`upstreamSourceMap ??= sm` in @danielx/civet's compile), so
+  // the emitted map points back at the original source. Without an input map
+  // we leave the output map-free, matching prior behavior.
+  options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true, ...(hasInlineMap(src) and { inlineMap: true }) }
   // The cast through unknown is because TS infers a Promise result despite sync: true
-  result := civet.compile(civetSource, options) as unknown as string | { code: string, sourceMap?: { json(outFileName: string): unknown } }
+  result := civet.compile(src, options) as unknown as string | { code: string }
 
   if result <? 'string'
     result
-  else if inputMap and result.sourceMap
-    map := result.sourceMap.json(filename ?? "anonymous") as SourceMapInput
-    `${result.code}\n${composedInlineMapComment map, inputMap}\n`
   else
     result.code
