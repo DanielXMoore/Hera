@@ -570,19 +570,19 @@ export function Validator() {
       return result.value
 
     const expectations = Array.from(new Set(failExpected.slice(0, failIndex)))
-    let l = location(input, maxFailPos),
-      [line, column] = l
 
-    // The parse completed with a result but there is still input
-    if (result && result.pos > maxFailPos) {
-      l = location(input, result.pos)
-      throw new Error(`${filename}:${line}:${column} Unconsumed input at #{l}
+    // The parse completed with a result but there is still input. Report it
+    // unless a failure was recorded further along, which is more informative.
+    if (result && (result.pos > maxFailPos || !expectations.length)) {
+      const [line, column] = location(input, result.pos)
+      throw new Error(`${filename}:${line}:${column} Unconsumed input
 
 ${input.slice(result.pos)}
 `)
     }
 
     if (expectations.length) {
+      const [line, column] = location(input, maxFailPos)
       failHintRegex.lastIndex = maxFailPos
       let [hint] = input.match(failHintRegex)!
 
@@ -597,14 +597,6 @@ Found: ${hint}
 `, filename, line, column, maxFailPos)
 
       throw error
-    }
-
-    if (result) {
-      throw new Error(`
-Unconsumed input at ${l}
-
-${input.slice(result.pos)}
-`);
     }
 
     throw new Error("No result")

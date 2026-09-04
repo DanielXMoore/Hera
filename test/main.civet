@@ -1148,6 +1148,18 @@ describe "Hera", ->
       parse("aa")
     , /Unconsumed input/
 
+  it "reports the line and column of unconsumed input", ->
+    {parse} := generate """
+      Rule
+        "a\\n"* "b"
+    """
+
+    assert.throws ->
+      parse("a\na\nb\nc", filename: "x.hera")
+    , (e: Error) ->
+      assert.equal e.message, "x.hera:3:2 Unconsumed input\n\n\nc\n"
+      true
+
   it "should throw an error when there are no failed expectations but still input remaining", ->
     {parse} := generate """
       Rule
