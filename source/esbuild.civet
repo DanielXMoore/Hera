@@ -2,6 +2,7 @@
 { relative } from node:path
 { compile } from ./main.civet
 type { CompilerOptions } from ./compiler.civet
+{ civetNotInstalledError } from ./register/civet/transpile.civet
 type { Plugin, Loader } from esbuild
 
 export interface HeraPluginOptions < CompilerOptions
@@ -37,10 +38,7 @@ export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions
         try
           civet = await runtime.loadCivet()
         catch
-          throw new Error [
-            "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
-            "Run: npm install -D @danielx/civet"
-          ].join '\n'
+          throw civetNotInstalledError()
 
         // No { js: true } here — Civet outputs TypeScript, then esbuild strips
         // types with loader:'ts'. This preserves advanced TS features (const enum

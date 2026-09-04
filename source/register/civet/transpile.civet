@@ -11,6 +11,15 @@ export runtime =
     _require('@danielx/civet') as typeof import('@danielx/civet')
 
 /**
+Error raised when `@danielx/civet` (an optional peer) can't be loaded
+*/
+export civetNotInstalledError := (): Error ->
+  new Error [
+    "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
+    "Run: npm install -D @danielx/civet"
+  ].join '\n'
+
+/**
  * Compile a Civet source string to JavaScript.
  * Used by the Node CJS and ESM loaders.
  * Uses { sync: true } so the result is returned synchronously (required for CJS require.extensions).
@@ -20,10 +29,7 @@ export compileCivetToJs := (src: string, filename?: string, civetOptions?: Compi
     try
       runtime.loadCivet()
     catch
-      throw new Error [
-        "[@danielx/hera] Civet support requires '@danielx/civet' to be installed."
-        "Run: npm install @danielx/civet"
-      ].join '\n'
+      throw civetNotInstalledError()
   options := { ...civetOptions, ...(filename and { filename }), js: true, sync: true }
   result := civet.compile(src, options)
 

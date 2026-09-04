@@ -1,6 +1,14 @@
 { compile, parse, grammarToEBNF } from ./main.civet
 type { CompilerOptions } from ./compiler.civet
 
+/**
+Value following `opt` in `argv`, if present
+*/
+export getOptValue := (argv: string[], opt: string): string | undefined ->
+  index := argv.indexOf opt
+  if index > -1
+    argv[index + 1]
+
 export main := (argv: string[], input: string, filename: string = "<stdin>"): string ->
   ast := parse input
 
@@ -10,12 +18,7 @@ export main := (argv: string[], input: string, filename: string = "<stdin>"): st
   if argv.includes '--ebnf'
     return grammarToEBNF(ast)
 
-  getOptValue := (opt: string) ->
-    index := argv.indexOf opt
-    if index > -1
-      argv[index + 1]
-
-  language := getOptValue('--language') as 'javascript' | 'typescript' | 'civet' | undefined
+  language := getOptValue(argv, '--language') as 'javascript' | 'typescript' | 'civet' | undefined
 
   options: CompilerOptions := {
     types:     argv.includes '--types'
@@ -24,7 +27,7 @@ export main := (argv: string[], input: string, filename: string = "<stdin>"): st
     tokenize:  argv.includes '--tokenize'
     filename: filename
     source: input
-    libPath: getOptValue('--libPath')
+    libPath: getOptValue(argv, '--libPath')
   }
   if language
     options.language = language

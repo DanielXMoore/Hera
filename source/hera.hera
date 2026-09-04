@@ -63,12 +63,10 @@ RuleBody
 
 Choice
   Sequence Handling ->
-    if ($2 !== undefined) {
-      if (!$1.push)
-        $1 = ["S", [$1], $2]
-      else
-        $1.push($2)
-    }
+    if ($2 === undefined) return $1
+    // A bare rule reference gets wrapped so the handler has somewhere to live
+    if (typeof $1 === "string") return ["S", [$1], $2]
+    $1.push($2)
     return $1
 
 Sequence
@@ -91,11 +89,8 @@ ParameterName
 
 Expression
   PrefixOperator? Suffix ParameterName? :: SequenceNode | NameNode ->
-    var result = null
-    if ($1) result = [$1, $2]
-    else result = $2
-    if ($3)
-      return [{name: $3}, result] as NameNode
+    const result = $1 ? [$1, $2] : $2
+    if ($3) return [{name: $3}, result] as NameNode
     return result as SequenceNode
 
 PrefixOperator

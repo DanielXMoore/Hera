@@ -1,11 +1,36 @@
-{ parse } from ./main.civet
+parser from ./hera.hera
 
 {
   CodeSymbol
   type Handler
   type HeraAST
   type HeraRules
+  type RegExpPart
 } from ./hera-types.civet
+
+/**
+Source form of an interpolated `///` regex body
+*/
+heregexSource := (parts: RegExpPart[]): string ->
+  "///" + parts.map((part) ->
+    if part <? "string"
+      part
+    else if part.constant
+      "${const " + part.expression + "}"
+    else
+      "${" + part.expression + "}"
+  ).join("") + "///"
+
+/**
+True when `v` is a bare character class expression like `[a-z]+`, which can
+be written without surrounding slashes.
+*/
+isCharacterClass := (v: string): boolean ->
+  try
+    parser.parse v, startRule: "CharacterClassExpression"
+    true
+  catch
+    false
 
 /**
 Convert HeraRules to a Hera source text
@@ -64,25 +89,12 @@ toS := (rule: HeraAST, depth=0): string ->
         '"' + rule[1] + '"' + hToS(h)
       when "R"
         v := rule[1]
-        if v is "."
+        if v is "." or isCharacterClass v
           v + hToS(h)
         else
-          try
-            parse v,
-              startRule: "CharacterClassExpression"
-            v + hToS(h)
-          catch
-            '/' + v + '/' + hToS(h)
+          '/' + v + '/' + hToS(h)
       when "RD"
-        "///" + rule[1].map((part) =>
-          if part <? "string"
-            part
-          else if part.constant
-            "${const " + part.expression + "}"
-          else
-            "${" + part.expression + "}"
-        ).join("") + "///" + hToS(h)
-
+        heregexSource(rule[1]) + hToS(h)
       when "S"
         terms := rule[1].map (i) ->
           toS i, depth+1
@@ -138,24 +150,12 @@ ruleToEBNF := (rule: HeraAST, depth=0): string ->
         v := rule[1]
         if v is "."
           v
+        else if isCharacterClass v
+          quote v
         else
-          try
-            // throws if it's not a valid character class
-            parse v,
-              startRule: "CharacterClassExpression"
-            quote v
-          catch
-            quote('/' + v + '/')
+          quote('/' + v + '/')
       when "RD"
-        quote("///" + rule[1].map((part) =>
-          if part <? "string"
-            part
-          else if part.constant
-            "${const " + part.expression + "}"
-          else
-            "${" + part.expression + "}"
-        ).join("") + "///")
-
+        quote heregexSource(rule[1])
       when "S"
         terms := rule[1].map (rule) ->
           ruleToEBNF rule
