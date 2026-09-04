@@ -710,7 +710,6 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       throw new Error "sourceMap requires source"
 
     sm = new SourceMap(options.source, options.filename!)
-    //@ts-expect-error
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
 
   head := if types

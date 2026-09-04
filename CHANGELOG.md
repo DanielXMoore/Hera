@@ -4,6 +4,11 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `dist/main.js` no longer bundles the Civet compiler. The source map
+  generator it used is now a small vendored module, shrinking the main bundle
+  from ~990 KB to ~77 KB. Generated source maps are unchanged.
+
 ### Fixed
 - Type declarations for `$C` and `$S` now support generated parsers with more
   than 9 choice alternatives or sequence items.
