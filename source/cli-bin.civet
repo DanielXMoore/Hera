@@ -2,7 +2,7 @@
 
 fs from fs
 path from path
-{ main } from ./cli.civet
+{ main, getOptValue } from ./cli.civet
 
 argv := process.argv
 
@@ -26,12 +26,7 @@ while i < argv.length
     positional.push arg
     i += 1
 
-getOptValue := (opt: string) ->
-  index := argv.indexOf opt
-  if index > -1
-    argv[index + 1]
-
-outputDir := getOptValue('-o') ?? getOptValue('--output')
+outputDir := getOptValue(argv, '-o') ?? getOptValue(argv, '--output')
 
 reportError := (err: unknown, file?: string): never ->
   msg := if err instanceof Error then err.message else String(err)
