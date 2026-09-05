@@ -26,46 +26,26 @@ reDefs: string[] := []
 dynamicReDefs: RegExpPart[][] := []
 
 /**
-Define a literal string terminal
+Return the `${prefix}${index}` identifier for `value`, adding it to `defs` on
+first sight so identical terminals share a single definition.  `key` maps a
+value to the identity used for de-duplication.
 */
-defineTerminal := (lit: string) ->
-  index := strDefs.indexOf(lit)
-  let id
+intern := <T>(defs: T[], prefix: string, value: T, key: (v: T) => unknown = (v) => v): string ->
+  k := key value
+  index .= defs.findIndex (entry) -> key(entry) is k
+  if index < 0
+    index = defs.length
+    defs.push value
+  `${prefix}${index}`
 
-  if index >= 0
-    id = `$L${index}`
-  else
-    id = `$L${strDefs.length}`
-    strDefs.push lit
+/** Define a literal string terminal */
+defineTerminal := (lit: string) -> intern strDefs, "$L", lit
 
-  return id
+/** Define a RegExp terminal */
+defineRe := (re: string) -> intern reDefs, "$R", re
 
-/**
-Define a RegExp terminal
-*/
-defineRe := (re: string) ->
-  index := reDefs.indexOf(re)
-  let id
-
-  if index >= 0
-    id = `$R${index}`
-  else
-    id = `$R${reDefs.length}`
-    reDefs.push re
-
-  return id
-
-defineDynamicRe := (parts: RegExpPart[]) =>
-  index := dynamicReDefs.findIndex((entry) => JSON.stringify(entry) is JSON.stringify(parts))
-  let id
-
-  if index >= 0
-    id = `$RD${index}`
-  else
-    id = `$RD${dynamicReDefs#}`
-    dynamicReDefs.push parts
-
-  return id
+/** Define an interpolated (dynamic) RegExp terminal */
+defineDynamicRe := (parts: RegExpPart[]) -> intern dynamicReDefs, "$RD", parts, JSON.stringify
 
 isIdentifierExpression := (expression: string): boolean =>
   /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
@@ -90,18 +70,12 @@ heregexToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
 Pretty print a string or RegExp literal
 */
 prettyPrint := (name: string, terminal: string, re?: boolean) ->
-  let pv
-  if re
-    pv = `/${terminal}/`
-  else
-    pv = JSON.stringify(terminal)
-
-  return `${name} ${pv}`
+  `${name} ${re ? `/${terminal}/` : JSON.stringify(terminal)}`
 
 /**
 * Compile an operator to a JS or TS string.
 */
-compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boolean): string ->
+compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean): string ->
   // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
   if Array.isArray(tuple)
     switch tuple[0]
@@ -132,7 +106,7 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
       when "/"
         {
           src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler, types)
+            compileOp(arg, name, defaultHandler)
           .join(", ")
 
           `$C(${src})`
@@ -140,26 +114,26 @@ compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean, types?: boo
       when "S"
         {
           src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler, types)
+            compileOp(arg, name, defaultHandler)
           .join(", ")
           `$S(${src})`
         }
       when "*"
-        `$Q(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$Q(${compileOp(tuple[1], name, defaultHandler)})`
       when "+"
-        `$P(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$P(${compileOp(tuple[1], name, defaultHandler)})`
       when "?"
-        `$E(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$E(${compileOp(tuple[1], name, defaultHandler)})`
       when "$"
         // Inside text can ignore all handlers since they are disregarded anyway
-        `$TEXT(${compileOp(tuple[1], name, false, types)})`
+        `$TEXT(${compileOp(tuple[1], name, false)})`
       when "&"
-        `$Y(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$Y(${compileOp(tuple[1], name, defaultHandler)})`
       when "!"
-        `$N(${compileOp(tuple[1], name, defaultHandler, types)})`
+        `$N(${compileOp(tuple[1], name, defaultHandler)})`
       default
         if tuple[0].name
-          compileOp(tuple[1], name, defaultHandler, types)
+          compileOp(tuple[1], name, defaultHandler)
         else
           throw new Error `Unknown op: ${tuple[0]} ${JSON.stringify(tuple[1])}`
   else // rule reference
@@ -372,7 +346,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     // if the length is 1, like the no-handler case.
     if typeOnlyHandler and rule[0] is "S" and rule[1]# is 1
       rule = rule[1][0]
-    parserExpr := compileOp(rule, name, true, types)
+    parserExpr := compileOp(rule, name, true)
     helpers.push `const ${fnName}$parser = ${parserExpr};`
     body := if wrapEvent
       [
@@ -394,7 +368,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   unless h is like { f } and h.f <? "string"
     throw new Error "unknown handler format"
 
-  parserExpr := compileOp(rule, name, false, types)
+  parserExpr := compileOp(rule, name, false)
   helpers.push `const ${fnName}$parser = ${parserExpr};`
 
   // Per-shape: params, their types, and call args.  If multiple retained args
@@ -600,24 +574,19 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     `\n}`
   ]
 
-compileRulesObject := (ruleNames: string[]) ->
-  meat := ruleNames.map (name) ->
-    `  ${name}`
-  .join(",\n")
-
-  return `{\n${meat}}`
+/**
+Braced block with one rule name per line, indented, comma separated.
+`closeOnOwnLine` puts the closing brace on its own line.
+*/
+ruleNameBlock := (ruleNames: string[], closeOnOwnLine = false) ->
+  names := ruleNames.map((name) -> `  ${name}`).join(",\n")
+  `{\n${names}${closeOnOwnLine ? "\n" : ""}}`
 
 compileExports := (ruleNames: string[], module: boolean) ->
   if module
-    meat := ruleNames.map (name) ->
-      `  ${name}`
-    .join(",\n")
-
-    return `export {\n${meat}\n}`
-
-  return ruleNames.map (name) ->
-      `exports.${name} = ${name};`
-    .join("\n")
+    `export ${ruleNameBlock ruleNames, true}`
+  else
+    ruleNames.map((name) -> `exports.${name} = ${name};`).join("\n")
 
 /**
 Get the named handler parameter, if any, from an operator wrapper.
@@ -720,7 +689,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   else
     if module then mjsHead else cjsHead
   .replace("\"./machine.js\"", JSON.stringify(libPath))
-  tail := types ? tsTail : jsTail
+  tail := parserTail types
   exp := (module ? mjsExport : cjsExport)
 
   // User code blocks (the ``` blocks in a .hera file) are appended verbatim
@@ -733,7 +702,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     rules[Symbol.for("code")]
   code := generate [
     head
-    `\n\nconst grammar = ${compileRulesObject(ruleNames)};\n\n`
+    `\n\nconst grammar = ${ruleNameBlock ruleNames};\n\n`
     `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
     `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n\n`
     strDefSource
@@ -833,36 +802,51 @@ cjsHead := """
 
 """
 
-jsTail := """
-  const parser = {
-    parse: (input, options = {}) => {
-      const { fail, validate, reset } = Validator()
-      let ctx = { expectation: "", fail }
 
-      if (typeof input !== "string") throw new Error("Input must be a string")
-
-      let parser
-      if (options.startRule !== null && options.startRule !== undefined)
-        parser = grammar[options.startRule]
-      else
-        parser = Object.values(grammar)[0]
-
-      if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
-
-      const filename = options.filename || "<anonymous>";
-
-      reset()
-      Object.assign(ctx, { ...options.events });
-
-      return validate(input, parser(ctx, {
-        input,
-        pos: 0,
-      }), {
-        filename: filename
-      })
-    }
-  }
-"""
+// The generated `parser` object.  A fresh Validator and context are created
+// on every parse call so `events` from one call never leak into the next.
+// Type annotations are added when `types` is set; the value structure is
+// otherwise identical.
+parserTail := (types: boolean): string ->
+  t := (annotation: string) -> types ? annotation : ""
+  cast := t " as Parser<ParserResult<Grammar[K]>>"
+  typeDefs: string[] := types ? [
+    "type Grammar = typeof grammar;"
+    "type GrammarDefaultRule = typeof grammarDefaultRule;"
+    "type ParserResult<P> = P extends Parser<infer T> ? T : never;"
+    ""
+  ] : []
+  [
+    ...typeDefs
+    "const parser = {"
+    `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
+    "    const { fail, validate, reset } = Validator()"
+    `    let ctx${t ": ParserContext"} = { expectation: "", fail }`
+    ""
+    '    if (typeof input !== "string") throw new Error("Input must be a string")'
+    ""
+    "    let parser"
+    "    if (options.startRule !== null && options.startRule !== undefined)"
+    `      parser = grammar[options.startRule]${cast}`
+    "    else"
+    `      parser = Object.values(grammar)[0]${cast}`
+    ""
+    '    if (!parser) throw new Error(`Could not find rule with name \'${options.startRule}\'`)'
+    ""
+    '    const filename = options.filename || "<anonymous>";'
+    ""
+    "    reset()"
+    "    Object.assign(ctx, { ...options.events });"
+    ""
+    "    return validate(input, parser(ctx, {"
+    "      input,"
+    "      pos: 0,"
+    "    }), {"
+    "      filename: filename"
+    "    })"
+    "  }"
+    "}"
+  ].join "\n"
 
 cjsExport := """
   exports.default = parser
@@ -891,60 +875,59 @@ mjsHead := """
 
 """
 
-tsHead := mjsHead.replace("}", """
-  type Loc,
-  type MaybeResult,
-  type ParseResult,
-  type Parser,
-  type ParserContext,
-  type ParserOptions,
-  type ParseState,
-  type Unwrap,
-}
-""") +
-  "\nvoid " + mjsHead.match(/\{[\s\S]+\}/m)![0] + // quick-and-dirty way to void all the imports so that TS doesn't complain if they aren't used
-  "\n// Reference all imported types at value-position so TS doesn't flag them as unused.\nconst _types: Loc | MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;\n"
+// Same as mjsHead plus the runtime types.  The `void {...}` block and the
+// `_types` reference keep TS from flagging any of the imports as unused in
+// generated parsers that don't happen to use them.
+tsHead := """
+  import {
+    $C,
+    $E,
+    $EXPECT,
+    $L,
+    $N,
+    $P,
+    $Q,
+    $R,
+    $R$0,
+    $S,
+    $TEXT,
+    $Y,
+    ParseError,
+    SKIP,
+    Validator,
+    type Loc,
+    type MaybeResult,
+    type ParseResult,
+    type Parser,
+    type ParserContext,
+    type ParserOptions,
+    type ParseState,
+    type Unwrap,
+  } from "./machine.js"
 
+  void {
+    $C,
+    $E,
+    $EXPECT,
+    $L,
+    $N,
+    $P,
+    $Q,
+    $R,
+    $R$0,
+    $S,
+    $TEXT,
+    $Y,
+    ParseError,
+    SKIP,
+    Validator,
+  }
+  // Reference all imported types at value-position so TS doesn't flag them as unused.
+  const _types: Loc | MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;
 
-tsTail := """
-  type Grammar = typeof grammar;
-  type GrammarDefaultRule = typeof grammarDefaultRule;
-  type ParserResult<P> = P extends Parser<infer T> ? T : never;
-
-  const parser = (function() {
-    const { fail, validate, reset } = Validator()
-    let ctx: ParserContext = { expectation: "", fail }
-
-    return {
-      parse: <K extends keyof Grammar = GrammarDefaultRule>(
-        input: string,
-        options: ParserOptions<Grammar> & { startRule?: K } = {}
-      ) => {
-        if (typeof input !== "string") throw new Error("Input must be a string")
-
-        let parser
-        if (options.startRule !== null && options.startRule !== undefined)
-          parser = grammar[options.startRule] as Parser<ParserResult<Grammar[K]>>
-        else
-          parser = Object.values(grammar)[0] as Parser<ParserResult<Grammar[K]>>
-
-        if (!parser) throw new Error(`Could not find rule with name '${options.startRule}'`)
-
-        const filename = options.filename || "<anonymous>";
-
-        reset()
-        Object.assign(ctx, { ...options.events });
-
-        return validate(input, parser(ctx, {
-          input,
-          pos: 0,
-        }), {
-          filename: filename
-        })
-      }
-    }
-  }())
 """
+
+
 
 mjsExport := """
   export default parser

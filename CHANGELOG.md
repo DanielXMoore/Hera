@@ -10,6 +10,9 @@ All notable changes to `@danielx/hera` will be documented in this file.
   from ~990 KB to ~77 KB. Generated source maps are unchanged.
 
 ### Fixed
+- Parsers compiled with `types: true` no longer carry `events` from one
+  `parse()` call over into later calls. The typed and untyped outputs now
+  share the same per-call parser tail.
 - Type declarations for `$C` and `$S` now support generated parsers with more
   than 9 choice alternatives or sequence items.
 
