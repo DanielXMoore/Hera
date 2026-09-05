@@ -1,6 +1,7 @@
 assert from assert
+typescript from typescript
 { readFile } from ./helper.civet
-hera, { compile, generate, modImport, parse, parseTokens } from ../source/main.civet
+hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../source/main.civet
 { transpileTsToJs } from ../source/register/tsc/transpile.civet
 
 describe "Hera", ->
@@ -1481,6 +1482,22 @@ describe "Hera", ->
       assert.deepEqual parse("abb"), ["bb", "a"]
 
   describe "events", ->
+    it "does not carry events over to a later parse call", ->
+      grammar := """
+        Rule
+          "a"
+      """
+      typedCode := compile grammar, types: true
+      parsers := [
+        generate grammar
+        execMod transpileTsToJs typedCode, module: typescript.ModuleKind.CommonJS
+      ]
+      for { parse } of parsers
+        calls .= 0
+        parse "a", events: { enter: -> calls++; undefined }
+        parse "a"
+        assert.equal calls, 1
+
     it "should pass data from enter to exit events", ->
       {parse} := generate """
         Rule
