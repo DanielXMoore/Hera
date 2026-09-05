@@ -1,6 +1,131 @@
-//@ts-expect-error
-{ SourceMap, sourcemap } from "@danielx/civet"
+// Minimal source map generator, adapted from @danielx/civet's sourcemap.civet.
+//
+// Only the pieces the Hera compiler needs are kept: appending output while
+// tracking the source position, and rendering a v3 JSON map.  Vendoring this
+// instead of importing it from Civet keeps the whole Civet compiler out of
+// the `dist/main.js` bundle.
 
-{ base64Encode } := sourcemap
+/** A mapping entry: [colDelta] or [colDelta, sourceIndex, srcLine, srcCol]. */
+export type SourceMapEntry = [number] | [number, number, number, number]
 
-export { SourceMap, base64Encode }
+export type SourceMapJSON = {
+  version: 3
+  file: string
+  sources: string[]
+  mappings: string
+  names: string[]
+  sourcesContent: string[]
+}
+
+EOL := /\r?\n|\r/
+BASE64_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+VLQ_SHIFT := 5
+VLQ_CONTINUATION_BIT := 1 << VLQ_SHIFT
+VLQ_VALUE_MASK := VLQ_CONTINUATION_BIT - 1
+
+/**
+Table of end offsets (exclusive) for each line of `input`, used to convert a
+position into line/column.
+*/
+locationTable := (input: string): number[] ->
+  linesRe := /([^\r\n]*)(\r\n|\r|\n|$)/y
+  lines: number[] := []
+  pos .= 0
+
+  while match := linesRe.exec input
+    pos += match[0].length
+    lines.push pos
+    break if pos is input.length
+
+  lines
+
+lookupLineColumn := (table: number[], pos: number): [number, number] ->
+  line .= 0
+  prevEnd .= 0
+  while table[line] <= pos
+    prevEnd = table[line++]
+  [line, pos - prevEnd]
+
+encodeVlq := (value: number): string ->
+  signBit := value < 0 ? 1 : 0
+  valueToEncode .= (Math.abs(value) << 1) + signBit
+  answer .= ""
+
+  while valueToEncode or !answer
+    nextChunk .= valueToEncode & VLQ_VALUE_MASK
+    valueToEncode >>= VLQ_SHIFT
+    nextChunk |= VLQ_CONTINUATION_BIT if valueToEncode
+    answer += BASE64_CHARS[nextChunk]
+
+  answer
+
+export base64Encode := (src: string): string ->
+  Buffer.from(src).toString "base64"
+
+export class SourceMap
+  lines: SourceMapEntry[][] = [[]]
+  line = 0
+  colOffset = 0
+  srcLine = 0
+  srcColumn = 0
+  srcTable: number[]
+
+  @(public source: string, public sourceFileName: string)
+    @srcTable = locationTable source
+
+  renderMappings(): string
+    lastSourceLine .= 0
+    lastSourceColumn .= 0
+
+    @lines.map (line) ->
+      line.map (entry) ->
+        if entry.length is 4
+          [colDelta, sourceFileIndex, srcLine, srcCol] := entry
+          lineDelta := srcLine - lastSourceLine
+          colDeltaSrc := srcCol - lastSourceColumn
+          lastSourceLine = srcLine
+          lastSourceColumn = srcCol
+          `${encodeVlq colDelta}${encodeVlq sourceFileIndex}${encodeVlq lineDelta}${encodeVlq colDeltaSrc}`
+        else
+          encodeVlq entry[0]
+      .join ","
+    .join ";"
+
+  json(outFileName: string): SourceMapJSON
+    version: 3
+    file: outFileName
+    sources: [@sourceFileName]
+    mappings: @renderMappings()
+    names: []
+    sourcesContent: [@source]
+
+  /**
+  Append `outputStr` to the generated output.  When `inputPos` is given, the
+  appended text maps back to that position in the source (plus `colOffset`).
+  */
+  updateSourceMap(outputStr: string, inputPos?: number, colOffset = 0): void
+    outLines := outputStr.split EOL
+    let srcLine = 0, srcCol = 0
+
+    if inputPos?
+      [srcLine, srcCol] = lookupLineColumn @srcTable, inputPos
+      srcCol += colOffset
+      @srcLine = srcLine
+      @srcColumn = srcCol
+
+    for each line, i of outLines
+      if i > 0
+        @line++
+        @srcLine++
+        @colOffset = 0
+        @lines[@line] = []
+        @srcColumn = srcCol = colOffset
+
+      l := @colOffset
+      @colOffset = line.length
+      @srcColumn += line.length
+
+      if inputPos?
+        @lines[@line].push [l, 0, srcLine + i, srcCol]
+      else if l is not 0
+        @lines[@line].push [l]
