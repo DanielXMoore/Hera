@@ -545,24 +545,18 @@ export function Validator() {
   }
 
   /**
-  * Utility function to convert position in a string input to 1 based line:colum
+  * Utility function to convert position in a string input to 1 based line:column.
+  * Handles LF, CRLF, and CR line endings; a position inside a CRLF pair
+  * reports as the last column of the line it terminates.
   */
   function location(input: string, pos: number): [number, number] {
-    const [line, column] = input.split(/\n|\r\n|\r/).reduce(([row, col], line) => {
-      const l = line.length + 1
-      if (pos >= l) {
-        pos -= l
-        return [row + 1, 1]
-      } else if (pos >= 0) {
-        col += pos
-        pos = -1
-        return [row, col]
-      } else {
-        return [row, col]
-      }
-    }, [1, 1])
-
-    return [line, column]
+    const lineEnding = /\r\n|\n|\r/g
+    let line = 1, lineStart = 0, m
+    while ((m = lineEnding.exec(input)) && m.index + m[0].length <= pos) {
+      line++
+      lineStart = m.index + m[0].length
+    }
+    return [line, pos - lineStart + 1]
   }
 
   function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {

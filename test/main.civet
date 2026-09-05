@@ -1160,6 +1160,27 @@ describe "Hera", ->
       assert.equal e.message, "x.hera:3:2 Unconsumed input\n\n\nc\n"
       true
 
+  it "reports locations correctly in CRLF input", ->
+    {parse} := generate """
+      Rule
+        "a\\r\\n"* "b"
+    """
+
+    // Unconsumed input after a full match: "\r\nc" starts on line 3, column 2
+    assert.throws ->
+      parse("a\r\na\r\nb\r\nc", filename: "x.hera")
+    , (e: Error) ->
+      assert.equal e.message, "x.hera:3:2 Unconsumed input\n\n\r\nc\n"
+      true
+
+    // Failed expectation: "q" is on line 3, column 1
+    assert.throws ->
+      parse("a\r\na\r\nq", filename: "x.hera")
+    , (e: Error & { line: number, column: number }) ->
+      assert.equal e.line, 3
+      assert.equal e.column, 1
+      true
+
   it "should throw an error when there are no failed expectations but still input remaining", ->
     {parse} := generate """
       Rule
