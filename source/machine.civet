@@ -610,7 +610,7 @@ Found: ${hint}
 }
 
 export class ParseError extends Error {
-  name = "ParseError"
+  name = "ParseError" as const
   constructor(
     public header: string,
     public body: string | undefined,
