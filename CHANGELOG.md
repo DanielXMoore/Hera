@@ -4,17 +4,37 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-13
+
+### Added
+- CLI: `hera --version` prints the installed package version (#97).
+
 ### Changed
 - `dist/main.js` no longer bundles the Civet compiler. The source map
   generator it used is now a small vendored module, shrinking the main bundle
-  from ~990 KB to ~77 KB. Generated source maps are unchanged.
+  from ~990 KB to ~77 KB. Generated source maps are unchanged (#102).
+- Expanded the regex sample to parse JavaScript regular expression literals,
+  including named groups, lookbehind, Unicode escapes, property escapes, and
+  inline modifiers. Context-dependent early errors and `v`-flag character set
+  syntax remain unsupported (#99).
 
 ### Fixed
 - Parsers compiled with `types: true` no longer carry `events` from one
   `parse()` call over into later calls. The typed and untyped outputs now
-  share the same per-call parser tail.
+  share the same per-call parser tail (#103).
 - Type declarations for `$C` and `$S` now support generated parsers with more
-  than 9 choice alternatives or sequence items.
+  than 9 choice alternatives or sequence items (#96).
+- CLI: read stdin asynchronously to avoid `EAGAIN` errors on non-blocking
+  pipes in Node.js 24 (#98).
+- Unconsumed-input errors now report the location where leftover input begins;
+  error locations also account for CRLF line endings correctly (#101, #104).
+- `ParseError.name` now has the literal type `"ParseError"` (#105).
+- Benchmarks now skip samples that the comparison release cannot compile
+  instead of crashing (#99).
+
+### Docs
+- Clarified return values for choices, sequences, regular expressions,
+  repetitions, and the stringify operator (#95).
 
 ## [0.9.8] - 2026-05-26
 
