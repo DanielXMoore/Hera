@@ -386,7 +386,7 @@ describe "Hera", ->
     """
     tsSrc := compile hera.parse(heraSrc), types: true
 
-    assert tsSrc.includes('$R<["abc"]>')
+    assert tsSrc.includes('as "abc"')
 
   it "should annotate rules with types with handlers ", ->
     heraSrc := """
@@ -476,7 +476,7 @@ describe "Hera", ->
         //
     """
     assert.deepEqual rules.Empty, ["R", ""]
-    assert.match compile(rules), /const \$R0 = \$R\(\/\(\?:\)\/suy\);/
+    assert.match compile(rules), /const \$R0 = \/\(\?:\)\/suy;/
 
     parser := generate """
       Empty
@@ -511,7 +511,7 @@ describe "Hera", ->
     assert.deepEqual rules.Quants, ["R", "[0-9]{3,4}"]
     assert.deepEqual rules.Quant2, ["R", "[a]{2}"]
     assert.deepEqual rules.EscapedSpace, ["R", "[ ]"]
-    assert.match compile(rules), /const \$R0 = \$R\(\/\[a-z\]\+\[1-9\]\*\/suy\);/
+    assert.match compile(rules), /const \$R0 = \/\[a-z\]\+\[1-9\]\*\/suy;/
 
   it "should normalize regexp source whitespace for JS literals", ->
     tab := "\t"
@@ -686,26 +686,24 @@ describe "Hera", ->
         /// ${shared} ///
     """
 
-    assert.match code, /const \$RD0 = /
-    assert.doesNotMatch code, /const \$RD1 = /
-    assert.match code, /\$EXPECT\(\$RD0, \(\) => `Rule \/\$\{\$RD0\.source\}\/`\)/
+    assert.match code, /function \$RD0\(\)/
+    assert.doesNotMatch code, /function \$RD1\(\)/
+    assert.match code, /\$\$ctx\.fail\(\$\$ctx\.pos, `Rule \/\$\{\$\$re\d+\.source\}\/`\)/
     constOnlyCode := compile parse """
       Rule
         /// ${const shared} ///
     """
-    assert.match constOnlyCode, /let \$RD0 = /
-    assert.match constOnlyCode, /\$RD0 = \$R\(new RegExp/
-    assert.match constOnlyCode, /return \$RD0\(\$\$ctx, \$\$state\)/
-    assert.doesNotMatch constOnlyCode, /const \$\$parser = \$RD0 = /
+    assert.match constOnlyCode, /let \$RD0_re;/
+    assert.match constOnlyCode, /\$RD0_re = new RegExp/
     assert.match constOnlyCode, /const \$\$source = `\$\{shared\}`/
-    assert.doesNotMatch constOnlyCode, /\$\$const0/
+    assert.doesNotMatch constOnlyCode, /\$RD0_c0/
 
     mixedConstCode := compile parse """
       Rule
         /// ${ const shared }${dynamic} ///
     """
     assert.match mixedConstCode, /`\$\{shared\s*\}\$\{dynamic\}`/
-    assert.doesNotMatch mixedConstCode, /\$\$const0/
+    assert.doesNotMatch mixedConstCode, /\$RD0_c0/
 
     unicodeIdentifierConstCode := compile parse """
       ```
@@ -722,7 +720,7 @@ describe "Hera", ->
       Rule
         /// ${const shared.slice(0)}${dynamic} ///
     """
-    assert.match mixedComplexConstCode, /\$RD0\.const0 \?\?= String\(shared\.slice\(0\)\);[\s\S]*`\$\{\$RD0\.const0\}\$\{dynamic\}`/
+    assert.match mixedComplexConstCode, /if \(\$RD0_c0 === undefined\) \$RD0_c0 = String\(shared\.slice\(0\)\);[\s\S]*`\$\{\$RD0_c0\}\$\{dynamic\}`/
     assert.doesNotMatch mixedComplexConstCode, /\(\(\) =>/
     assert.doesNotMatch mixedComplexConstCode, /\$\$const0/
 
@@ -730,27 +728,28 @@ describe "Hera", ->
       Rule
         /// ${shared} ///
     """), types: true
-    assert.match typedCode, /parser\?: Parser<RegExpMatchArray>/
-    assert.match typedCode, /\{ source\?: string, parser\?: Parser<RegExpMatchArray> \}/
+    assert.match typedCode, /let \$RD0_re: RegExp \| undefined;/
+    assert.match typedCode, /function \$RD0\(\): RegExp/
 
     typedConstCode := compile parse("""
       Rule
         /// ${const shared}${dynamic} ///
     """), types: true
-    assert.doesNotMatch typedConstCode, /\$\$const0/
+    assert.doesNotMatch typedConstCode, /\$RD0_c0/
 
     typedComplexConstCode := compile parse("""
       Rule
         /// ${const shared.slice(0)}${dynamic} ///
     """), types: true
-    assert.match typedComplexConstCode, /const0\?: string/
+    assert.match typedComplexConstCode, /let \$RD0_c0: string \| undefined;/
     assert.doesNotMatch typedComplexConstCode, /\$\$const0/
 
     typedConstOnlyCode := compile parse("""
       Rule
         /// ${const shared} ///
     """), types: true
-    assert.match typedConstOnlyCode, /let \$RD0: Parser<RegExpMatchArray> & \{ source\?: string \}/
+    assert.match typedConstOnlyCode, /let \$RD0_re: RegExp \| undefined;/
+    assert.match typedConstOnlyCode, /function \$RD0\(\): RegExp/
     assert.doesNotMatch typedConstOnlyCode, /\$\$const0/
 
   it "should treat hash interpolation syntax as static text in triple-slash regexes", ->
@@ -1230,8 +1229,8 @@ describe "Hera", ->
         /a+/
     """)
 
-    assert code.includes('const $R0 = $R(')
-    assert !code.includes('const $R1 = $R(')
+    assert code.includes('const $R0 = /a+/suy;')
+    assert !code.includes('const $R1 = ')
 
   it "should throw an error when encountering an invalid handler", ->
     rules := hera.parse """
@@ -1381,7 +1380,7 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), language: 'javascript')
       assert.match result, /\(function\(a\) \{/m
-      assert.match result, /\}\)\(\$\$r\.value\[0\]\)/m
+      assert.match result, /\}\)\(\$\$v0\)/m
       assert.doesNotMatch result, /var a = \$1/
 
     it "should not void named parameters", ->
@@ -1390,7 +1389,7 @@ describe "Hera", ->
           "a":a -> a
       """
       result := compile(parse(grammar), language: 'typescript')
-      assert.match result, /\(function\(a: typeof \$\$r\.value\) \{/m
+      assert.match result, /\(function\(a: typeof \$\$v\) \{/m
       assert.doesNotMatch result, /void[^;]*a;/
 
     it "should reject duplicate named parameters", ->
@@ -1531,6 +1530,162 @@ describe "Hera", ->
         }, "the data"]
       ]
 
+    it "should skip events for noMemo rules unless allEvents is set", ->
+      grammar := """
+        Root
+          LA A B Alias Empty Num Word Alias Empty B -> [$2, $3, $4, $5, $6, $7]
+
+        LA
+          /(?=[a-z\\]])/
+
+        A
+          "a" -> $1
+
+        B
+          "b"
+
+        Alias
+          B
+
+        Empty
+          ""
+
+        Num
+          /[0-9]+/
+
+        Word
+          /x|y/
+
+        SelfAlias
+          SelfAlias
+
+        UseSelf
+          SelfAlias -> 1
+      """
+      noMemo := ["LA", "A", "B", "Alias", "Empty", "Num", "Word", "SelfAlias"]
+      typedCode := compile grammar, { types: true, noMemo }
+      untypedCode := compile grammar, { noMemo }
+      parsers := [
+        execMod untypedCode
+        execMod transpileTsToJs typedCode, module: typescript.ModuleKind.CommonJS
+      ]
+      for { parse } of parsers
+        seen: string[] := []
+        res := parse "abb42xbb", events:
+          enter: (rule) -> seen.push `enter:${rule}`; undefined
+          exit: (rule) -> seen.push `exit:${rule}`
+        assert.deepEqual res, ["a", "b", "b", "", "42", "x"]
+        assert.deepEqual seen, ["enter:Root", "exit:Root"]
+
+        seenAll: string[] := []
+        resAll := parse "abb42xbb", events:
+          allEvents: true
+          enter: (rule) -> seenAll.push `enter:${rule}`; undefined
+          exit: (rule) -> seenAll.push `exit:${rule}`
+        assert.deepEqual resAll, ["a", "b", "b", "", "42", "x"]
+        assert.deepEqual seenAll, [
+          "enter:Root"
+          "enter:LA", "exit:LA"
+          "enter:A", "exit:A"
+          "enter:B", "exit:B"
+          "enter:Alias", "enter:B", "exit:B", "exit:Alias"
+          "enter:Empty", "exit:Empty"
+          "enter:Num", "exit:Num"
+          "enter:Word", "exit:Word"
+          "enter:Alias", "enter:B", "exit:B", "exit:Alias"
+          "enter:Empty", "exit:Empty"
+          "enter:B", "exit:B"
+          "exit:Root"
+        ]
+
+    it "should compile pure lookaheads, inline operators, and edge shapes in JS and TS", ->
+      grammar := """
+        Root
+          NestedChoice OptLit LookaheadOps SubDiscard
+
+        NestedChoice
+          ( ( "" "" ) / /(?=[a-z])/ / /ab/ / /[0-9]/ / "z" / "" ) "a"
+
+        TextChoice
+          $( /ab/ / /[0-9]/ )
+
+        OptLit
+          ""? ""? ","? "!"? -> $1
+
+        LookaheadOps
+          &/[0-9]/ &"0" &"" (!"")? !/[a-z]/ !"x" &Digit !Letter "0" -> $9
+
+        LookaheadVals
+          &/[0-9]/ &Digit !Letter "0"
+
+        Digit
+          /[0-9]/
+
+        Letter
+          /[a-z]/
+
+        SubDiscard
+          ( "1" "2" ) ( "3":n )+ -> $2
+
+        NamedNoHandler
+          "q":q
+
+        EmptyChoice
+          "k"
+          "" ""
+
+        EmptySingleChoice
+          "k"
+          ""
+
+        EmptyHandlerChoice
+          "k" -> "k"
+          "" "" -> "es"
+
+        SeqWithZero
+          "a" "b" -> $0
+
+        SimpleReHandler
+          /ab/ -> $0
+
+        ComplexLookahead
+          /(?=[a-z\\\\\\]])/ /(?!(?:x))/ "a" -> $3
+      """
+      jsCode := compile grammar
+      tsCode := compile grammar, types: true
+      tokTs := compile grammar, { tokenize: true, types: true }
+      assert tokTs.includes("as any")
+      parsers := [
+        execMod jsCode
+        execMod transpileTsToJs tsCode, module: typescript.ModuleKind.CommonJS
+      ]
+      for { parse } of parsers
+        assert.deepEqual parse("a,01233"), [[["", ""], "a"], "", "0", ["3", "3"]]
+        assert.equal parse("ab", startRule: "TextChoice"), "ab"
+        assert.deepEqual parse("0", startRule: "LookaheadVals"), [true, true, true, "0"]
+        assert.equal parse("q", startRule: "NamedNoHandler"), "q"
+        assert.deepEqual parse("", startRule: "EmptyChoice"), ["", ""]
+        assert.equal parse("", startRule: "EmptySingleChoice"), ""
+        assert.equal parse("", startRule: "EmptyHandlerChoice"), "es"
+        assert.deepEqual parse("ab", startRule: "SeqWithZero"), ["a", "b"]
+        assert.equal parse("ab", startRule: "SimpleReHandler"), "ab"
+        assert.equal parse("a", startRule: "ComplexLookahead"), "a"
+
+      // Also verify direct cursor cacheEnter/cacheExit fast hooks
+      { FAIL, MISS } := await import("../source/machine.civet")
+      cache := new Map<string, { pos: number, value: unknown }>()
+      res := parsers[0].parse "a,01233", events:
+        cacheEnter: (name, pos, ctx) ->
+          entry := cache.get `${name}:${pos}`
+          if entry
+            return FAIL if entry.value is FAIL
+            ctx.pos = entry.pos
+            return entry.value
+          MISS
+        cacheExit: (name, startPos, endPos, value) ->
+          cache.set `${name}:${startPos}`, { pos: endPos, value }
+      assert.deepEqual res, [[["", ""], "a"], "", "0", ["3", "3"]]
+
     it "should not emit parent-rule events from typed choice alternatives", ->
       {parse} := generate """
         Rule
@@ -1596,13 +1751,13 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'civet')
       assert.match result, /: ParseState/
 
-    it "should use Civet if expression for skip handlers", ->
+    it "should emit statement-based skip guard compatible with Civet", ->
       grammar := """
         Rule
           "a" -> $skip
       """
       result := compile(parse(grammar), language: 'civet')
-      assert.match result, / = if \(\$\$m as any\) !== SKIP then /m
+      assert.match result, /if \(\(\$\$m as any\) === \$SKIP\) \{/m
 
     it "should indent inline civet handlers by two spaces", ->
       grammar := """
@@ -1671,10 +1826,9 @@ describe "Hera", ->
             return $1
       """
       result := compile(parse(grammar), language: 'javascript')
-      // Regex handlers emit single positional access directly from
-      // `$$r.value`; the `as any[]` cast is TS-only so it must not leak into
-      // JS output.
-      assert.match result, /\$\$r\.value\[1\]/
+      // Regex handlers emit positional access directly from `$$v`;
+      // the `as any[]` cast is TS-only so it must not leak into JS output.
+      assert.match result, /\$\$v\[1\]/
       assert.doesNotMatch result, /as any\[\]/
 
     it "should omit unused handler arguments and cached locals", ->
@@ -1686,7 +1840,7 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'typescript')
       assert.match result, /\(function\(\) \{/m
       assert.match result, /\}\)\(\)/m
-      assert.doesNotMatch result, /\$\$value = \$\$r\.value/
+      assert.doesNotMatch result, /const \$\$v =/
       assert.doesNotMatch result, /void[^;]*\$0;/
 
     it "should not match internal $$ names as handler parameters", ->
@@ -1699,9 +1853,9 @@ describe "Hera", ->
       assert.match result, /\(function\(\) \{/m
       assert.match result, /\}\)\(\)/m
       assert.doesNotMatch result, /\(function\(\$loc/
-      assert.doesNotMatch result, /\}\)\(\$\$r\.loc\)/
+      assert.doesNotMatch result, /length: \$\$ctx\.pos - \$\$p0/
 
-    it "should cache parser value when repeated value arguments are used", ->
+    it "should pass matched local directly when repeated value arguments are used", ->
       grammar := """
         Rule
           "a" ->
@@ -1709,6 +1863,5 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), language: 'typescript')
       assert.match result, /\(function\(\$0:/m
-      assert.match result, /\$\$value = \$\$r\.value/
-      assert.match result, /\$\$value = \$\$r\.value;[\s\S]*\}\)\(\$\$value, \$\$value\)/m
+      assert.match result, /const \$\$v = "a" as const;[\s\S]*\}\)\(\$\$v, \$\$v\)/m
       assert.match result, /void \$0, \$1;/
