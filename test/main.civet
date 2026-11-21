@@ -243,9 +243,9 @@ describe "Hera", ->
     """
     assert.deepEqual parser.parse("a"), { type: "X", value: 1 }
 
-    // Second: inspect the emitted code.  After the `return {` line inside
-    // the handler IIFE, every continuation line up to and including the
-    // matching `}` must be indented strictly deeper than the `return`.
+    // Second: inspect the emitted code.  After the `const $$m = {` line,
+    // every continuation line up to and including the matching `};` must be
+    // indented strictly deeper than the `const $$m = {` declaration.
     code := compile """
       Rule
         "a" -> {
@@ -254,22 +254,21 @@ describe "Hera", ->
         }
     """
     lines := code.split("\n")
-    returnIdx := lines.findIndex (l) -> /^\s+return\s*\{\s*$/.test l
-    assert returnIdx >= 0, "expected a `return {` line in emitted handler"
-    returnIndent := lines[returnIdx].match(/^(\s*)/)![1].length
-    // Find the matching closing `}` (a line with fewer-or-equal indent).
+    declIdx := lines.findIndex (l) -> /^\s+const \$\$m = \{\s*$/.test l
+    assert declIdx >= 0, "expected a `const $$m = {` line in emitted handler"
+    declIndent := lines[declIdx].match(/^(\s*)/)![1].length
+    // Find the closing `};` line of the object literal.
     closeIdx .= -1
-    for i of [returnIdx + 1...lines.length]
-      indent := lines[i].match(/^(\s*)/)![1].length
-      if /^\s*\}/.test(lines[i]) and indent <= returnIndent
+    for i of [declIdx + 1...lines.length]
+      if /^\s*\};$/.test(lines[i])
         closeIdx = i
         break
-    assert closeIdx > returnIdx, "expected closing `}` after `return {`"
-    for i of [returnIdx + 1...closeIdx]
+    assert closeIdx > declIdx, "expected closing `};` after `const $$m = {`"
+    for i of [declIdx + 1..closeIdx]
       continue if lines[i].trim() is ""
       indent := lines[i].match(/^(\s*)/)![1].length
-      assert indent > returnIndent,
-        `continuation line ${i} of inline handler must be deeper than return: ${JSON.stringify(lines[i])}`
+      assert indent > declIndent,
+        `continuation line ${i} of inline handler must be deeper than declaration: ${JSON.stringify(lines[i])}`
 
   it "should handle rules that are aliases", ->
     grammar := """
@@ -348,15 +347,15 @@ describe "Hera", ->
     """
     {code, sourceMap} := compile grammar, sourceMap: true
     lines := code.split("\n")
-    sequenceLine := lines.findIndex (line) -> line.includes "return [left, right]"
-    regexLine := lines.findIndex (line) -> line.includes "return [$1, $2]"
-    trueLine := lines.findIndex (line) -> line.includes "return true"
-    nullLine := lines.findIndex (line) -> line.includes "return null"
+    sequenceLine := lines.findIndex (line) -> line.includes "return [left, right];"
+    regexLine := lines.findIndex (line) -> line.includes "return [$1, $2];"
+    trueLine := lines.findIndex (line) -> line.includes "return true;"
+    nullLine := lines.findIndex (line) -> line.includes "return null;"
 
-    assert sequenceLine >= 0, "compiled output should contain 'return [left, right]'"
-    assert regexLine >= 0, "compiled output should contain 'return [$1, $2]'"
-    assert trueLine >= 0, "compiled output should contain 'return true'"
-    assert nullLine >= 0, "compiled output should contain 'return null'"
+    assert sequenceLine >= 0, "compiled output should contain 'return [left, right];'"
+    assert regexLine >= 0, "compiled output should contain 'return [$1, $2];'"
+    assert trueLine >= 0, "compiled output should contain 'return true;'"
+    assert nullLine >= 0, "compiled output should contain 'return null;'"
 
     assert sourceMap.lines[sequenceLine].some (entry) ->
       entry.length is 4 and entry[2] is 1 and entry[3] is 24
@@ -1379,8 +1378,8 @@ describe "Hera", ->
           "b"
       """
       result := compile(parse(grammar), language: 'javascript')
-      assert.match result, /\(function\(a\) \{/m
-      assert.match result, /\}\)\(\$\$v0\)/m
+      assert.match result, /const a = \$\$v0;/m
+      assert.match result, /const \$\$m = a;/m
       assert.doesNotMatch result, /var a = \$1/
 
     it "should not void named parameters", ->
@@ -1389,7 +1388,7 @@ describe "Hera", ->
           "a":a -> a
       """
       result := compile(parse(grammar), language: 'typescript')
-      assert.match result, /\(function\(a: typeof \$\$v\) \{/m
+      assert.match result, /const a: typeof \$\$v = \$\$v;/m
       assert.doesNotMatch result, /void[^;]*a;/
 
     it "should reject duplicate named parameters", ->
@@ -1769,17 +1768,13 @@ describe "Hera", ->
           }
       """
       result := compile(parse(grammar), language: 'civet')
-      // Handler bodies inside the IIFE are emitted at 4-space so they're
-      // strictly deeper than the IIFE's 2-space declaration line (civet
-      // uses indent to disambiguate function bodies from object literals).
-      // For multi-line inline handlers the continuation lines are shifted
-      // by bodyIndent (4 extra spaces) past the grammar's original indent
-      // so downstream indent-sensitive parsers read them as the object
-      // body rather than separate statements.
-      assert.match result, /\(function\(t:/m
-      assert.match result, /\n    return \{\n        type: "TypeSuffix",/m
-      // The handler IIFE closes with `  })(...)` at 2-space indent.
-      assert.match result, /\n  \}\)\(/m
+      // Inline handlers are emitted directly without an IIFE wrapper, with
+      // continuation lines shifted by 2 extra spaces past the 2-space
+      // `const $$m =` declaration so downstream indent-sensitive parsers
+      // (Civet) read them as the object body rather than separate statements.
+      assert.match result, /const t: typeof \$\$v = \$\$v;/m
+      assert.match result, /const \$\$m: TypeSuffix = \{\n      type: "TypeSuffix",/m
+      assert.doesNotMatch result, /\(function\(t:/m
 
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
       grammar := """
@@ -2139,8 +2134,36 @@ describe "Hera", ->
       """
       js := compile(parse(grammar))
       assert.match js, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
+      assert.doesNotMatch js, /\(function\(\$loc, \$0\)/
       mod := execMod(js) as any
       assert.deepEqual mod.parse("  hello", { memo: true }), ["  ", "HELLO"]
       assert.deepEqual mod.parse("  42", { memo: true }), ["  ", 42]
       tsCode := compile(parse(grammar), { types: true })
       assert.match tsCode, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
+
+    it "should emit IIFE-free inline and choice-alternative block handlers in JS, TS, and Civet", ->
+      grammar := """
+        Root
+          "a" -> { a: $1 }
+          "b":x ->
+            // comment
+
+            return x + "!"
+          "c" ->
+            return `c`
+          "d" ->
+            void $0
+          /foo|bar/ -> $1 || $0
+          ///(\${"d"})/// -> $1 || $0
+      """
+      tsCode := compile(parse(grammar), { types: true })
+      assert.match tsCode, /const \$1: typeof \$\$v = \$\$v;/
+      assert.match tsCode, /let x: typeof \$\$v = \$\$v;/
+      // Returning block alts inline directly; non-returning TS block alt keeps IIFE for noImplicitReturns
+      assert.doesNotMatch tsCode, /\(function\(x:/
+      assert.match tsCode, /\(function\(\$0:/
+      civetCode := compile(parse(grammar), { language: "civet" })
+      assert.match civetCode, /let x: typeof \$\$v = \$\$v;\n  \/\/ comment/
+      // Backtick handler stays wrapped in IIFE to preserve template whitespace
+      assert.match civetCode, /\(function\(\)/
+      assert.match tsCode, /\(function\(\)/

@@ -1203,30 +1203,74 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
 
-  iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
-  body.push "  const $$m = "
-  body.push iife
-  body.push ";\n"
+  // Eliminate handler IIFE wrapper whenever safe:
+  // 1) Inline expression handlers without $skip (both top-level and choice alts)
+  // 2) Choice-alternative block handlers (!wrapEvent) without $skip / arguments / var
+  //    (and with uniform 4-space indent + no multiline strings in Civet mode)
+  canInlineExpr := Boolean h.inline and not handlerUsesSkip
+  canInlineBlock := (and)
+    not h.inline
+    not wrapEvent
+    not handlerUsesSkip
+    not usesIdentifier(h.f, "arguments")
+    not /\bvar\b/.test(h.f)
+    not /[`]|"""|'''/.test(h.f)
+    h.f.split("\n").every((l) -> l.length is 0 or l.startsWith "    ")
+    (not types or options.language is "civet" or /\breturn\b/.test(h.f))
 
-  if handlerUsesSkip
-    skipCast := types ? " as any" : ""
-    body.push `  if (($$m${skipCast}) === $SKIP) {\n`
-    body.push "    $$ctx.pos = $$p0;\n"
+  if canInlineExpr
+    for p, i of parameters
+      typeAnno := if types then `: ${paramTypes[i]}` else ""
+      body.push `  const ${p}${typeAnno} = ${callArgs[i]};\n`
+    voidParameters := parameters.filter (p) => p.startsWith "$"
+    if types and voidParameters.length
+      body.push `  void ${voidParameters.join(", ")};\n`
+    handlerText := h.f.replace(/\n/g, "\n  ")
+    if not wrapEvent
+      body.push "  return "
+      body.push { $loc: h.$loc, token: handlerText }
+      body.push ";"
+    else
+      handlerRetAnno := if types and h.t then `: ${h.t.trim()}` else ""
+      body.push `  const $$m${handlerRetAnno} = `
+      body.push { $loc: h.$loc, token: handlerText }
+      body.push ";\n"
+      body.push `  ${emitExitCall name, "$$m"}\n`
+      retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
+      body.push `  return $$m${retCast};`
+  else if canInlineBlock
+    for p, i of parameters
+      typeAnno := if types then `: ${paramTypes[i]}` else ""
+      body.push `  let ${p}${typeAnno} = ${callArgs[i]};\n`
+    voidParameters := parameters.filter (p) => p.startsWith "$"
+    if types and voidParameters.length
+      body.push `  void ${voidParameters.join(", ")};\n`
+    body.push { $loc: h.$loc, token: h.f.replace(/^  /gm, "") }
+  else
+    iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
+    body.push "  const $$m = "
+    body.push iife
+    body.push ";\n"
+
+    if handlerUsesSkip
+      skipCast := types ? " as any" : ""
+      body.push `  if (($$m${skipCast}) === $SKIP) {\n`
+      body.push "    $$ctx.pos = $$p0;\n"
+      if wrapEvent
+        body.push `    ${emitExitCall name, "$FAIL", "$$p0", "    "}\n`
+      body.push "    return $FAIL;\n"
+      body.push "  }\n"
+
     if wrapEvent
-      body.push `    ${emitExitCall name, "$FAIL", "$$p0", "    "}\n`
-    body.push "    return $FAIL;\n"
-    body.push "  }\n"
-
-  if wrapEvent
-    body.push `  ${emitExitCall name, "$$m"}\n`
-  retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
-  body.push `  return $$m${retCast};`
+      body.push `  ${emitExitCall name, "$$m"}\n`
+    retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
+    body.push `  return $$m${retCast};`
   // Drop unused $$p0 declaration (e.g. sequence of empty/infallible items) and silence unused $$ctx in TS mode
   if needP0 and not wrapEvent and not handlerUsesLoc and not handlerUsesSkip and not body.slice(1).some((s) -> typeof s is "string" and s.includes "$$p0")
     body.shift()
   if types and not body.some((s) -> typeof s is "string" and s.includes "$$ctx")
     body.unshift "  void $$ctx;\n"
-  { helpers, body }
+  { helpers, body, inlined: canInlineExpr or canInlineBlock }
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
@@ -1262,10 +1306,12 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
       return []
     subName := `$$r_${name}$${i}`
     altNames.push subName
-    { helpers, body } := compileRuleBodyInline(options, name, arg, false)
+    { helpers, body, inlined } := compileRuleBodyInline(options, name, arg, false)
     allHelpers.push ...helpers
+    subHandlerType := if inlined and Array.isArray(arg) and arg.length is 3 and arg[2] <? "object" and "f" in arg[2] and arg[2].t then arg[2].t.trim() else undefined
+    subRetAnno := if types and subHandlerType then `: ${subHandlerType} | typeof FAIL` else ""
     [
-      `function ${subName}($$ctx${ctxType}) {\n`
+      `function ${subName}($$ctx${ctxType})${subRetAnno} {\n`
       body
       `\n}\n\n`
     ]
