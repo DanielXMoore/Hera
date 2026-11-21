@@ -2014,7 +2014,7 @@ describe "Hera", ->
       assert.match tsCode, /\$\$mc\.sk & 3/
       assert.match tsCode, /createMemoCache/
 
-  describe "recognize-only codegen", ->
+  describe "recognize-only codegen and $cc char-class matchers", ->
     it "should recognize $(...), &(...), !(...), and discarded repetitions without inner allocations", ->
       grammar := """
         Root
@@ -2038,12 +2038,13 @@ describe "Hera", ->
           "z"
       """
       js := compile(parse(grammar), { noMemo: ["Spaces", "Ident"] })
+      assert.match js, /const \$RC\d+ = \$cc\(/
       assert.match js, /function \$\$k_\d+\(\$\$ctx\)/
       mod := execMod(js) as any
       assert.deepEqual mod.parse("/* hi 😀 */  foo+a"), ["/* hi 😀 */", "foo"]
 
-      // Also verify TypeScript codegen for recognize-only + empty-sequence void $$ctx
-      // + dynamic regex in recognize-only + non-char-class &/!
+      // Also verify TypeScript codegen for recognize-only + $cc + empty-sequence void $$ctx
+      // + dynamic regex in recognize-only + non-char-class &/! + tuple unions on $cc/noMemo
       tsCode := compile(parse("""
         Root :: string
           $( "" "" ) $( "a" / /(?=[b])/ / /[0-9]/ / /xy|zw/ / Leaf / ( "m" "n" ) ) &( /[a-z]/ ) !( /[0-9]/ ) &( /ab|cd/ ) !( /ef|gh/ ) $( ///${pat}/// ) ( /[a-z]+/ )? ( "x" )+ ( "y" )* Sign Sign SimpleChoice AltWord Word ->
@@ -2066,6 +2067,7 @@ describe "Hera", ->
         ```
       """), { types: true, noMemo: ["Leaf", "Sign", "AltWord", "Word"] })
       assert.match tsCode, /function \$\$k_\d+\(\$\$ctx: CursorContext\): boolean/
+      assert.match tsCode, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
       // Also exercise JS mode varName on non-char-class &/!
       jsLook := compile(parse("""
         Root
@@ -2073,3 +2075,72 @@ describe "Hera", ->
             return [$1, $2]
       """))
       assert.deepEqual (execMod(jsLook) as any).parse("ab"), [true, true]
+
+    it "should handle all $cc quantifiers, ASCII/Unicode paths, and identifier lookaheads", ->
+      grammar := """
+        Root
+          A B C D E F G H I J "_" K L
+
+        A
+          /[a-z]+/
+        B
+          /[ \\t]*/
+        C
+          /[+-]?/
+        D
+          /[0-9]/
+        E
+          /[\\s]+/
+        F
+          /[\\s]*/
+        G
+          /[^x]?/
+        H
+          /./
+        I
+          /[a-z][0-9]+/
+        J
+          /[a-z][0-9]*(?![a-z])/
+        K
+          /[a-z][0-9]*(?![\\x80-\\u{10FFFF}])/
+        L
+          /[^x]+/
+      """
+      parser := generate(grammar)
+      res := parser.parse("abc  +5 \u00A0😀😀a12b3_c4!yz")
+      assert.equal res[0], "abc"
+      assert.equal res[1], "  "
+      assert.equal res[2], "+"
+      assert.equal res[3], "5"
+      assert.equal res[4], " \u00A0"
+      assert.equal res[6], "😀"
+      assert.equal res[7], "😀"
+      assert.equal res[8], "a12"
+      assert.equal res[9], "b3"
+      assert.equal res[11], "c4"
+      assert.equal res[12], "!yz"
+
+    it "should unlock $cc for regex rules with $0-only handlers", ->
+      grammar := """
+        Root
+          Spaces Word ->
+            return [$1.token, $2]
+
+        Spaces
+          /[ \\t]+/ -> { $loc, token: $0 }
+
+        Word
+          /[a-z]+/ ->
+            return $0.toUpperCase()
+          /[0-9]+/ ->
+            return Number($0)
+          /foo|bar/ -> $1 || $0
+          ///(\${"d"})/// -> $1 || $0
+      """
+      js := compile(parse(grammar))
+      assert.match js, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
+      mod := execMod(js) as any
+      assert.deepEqual mod.parse("  hello", { memo: true }), ["  ", "HELLO"]
+      assert.deepEqual mod.parse("  42", { memo: true }), ["  ", 42]
+      tsCode := compile(parse(grammar), { types: true })
+      assert.match tsCode, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/

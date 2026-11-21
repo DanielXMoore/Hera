@@ -74,6 +74,7 @@ getMemoSpec := (name: string): MemoSpec ->
 
 reDefs: string[] := []
 laDefs: string[] := []
+ccDefs: string[] := []
 dynamicReDefs: RegExpPart[][] := []
 
 /**
@@ -94,6 +95,15 @@ defineRe := (re: string) -> intern reDefs, "$R", re
 
 /** Define a pure lookahead RegExp terminal (compiled via `$la(...)`) */
 defineLa := (re: string) -> intern laDefs, "$RL", re
+
+/** Define a character-class RegExp terminal (compiled via `$cc(...)`) */
+defineCc := (re: string) -> intern ccDefs, "$RC", re
+
+const charClassSingleRe = /^(\[(?:\\.|[^\]\\])+\]|\\s|\\d|\\w|\.)([+*?])?$/
+const charClassIdentRe = /^(\[(?:\\.|[^\]\\])+\])(\[(?:\\.|[^\]\\])+\])([*+])(?:\(\?!(\[(?:\\.|[^\]\\])+\])\))?$/
+
+isCharClassRe := (source: string): boolean ->
+  charClassSingleRe.test(source) or charClassIdentRe.test(source)
 
 /** Define an interpolated (dynamic) RegExp terminal */
 defineDynamicRe := (parts: RegExpPart[]) -> intern dynamicReDefs, "$RD", parts, JSON.stringify
@@ -442,7 +452,7 @@ compileRecFn := (ast: HeraAST, ruleName: string, options: CompilerOptions, helpe
   if Array.isArray(ast) and ast[0] is "/"
     lines: string[] := []
     for arg of ast[1]
-      lines.push ...emitRecChoiceAlt(arg, ruleName, options, helpers)
+      lines.push ...emitRecChoiceAlt(arg, ruleName, options, helpers, idGen)
     lines.push "  return false;"
     helpers.push `function ${fnName}($$ctx${ctxType})${retAnno} {\n${lines.join "\n"}\n}`
     return { fn: fnName, isBool: true }
@@ -470,7 +480,7 @@ compileRecFn := (ast: HeraAST, ruleName: string, options: CompilerOptions, helpe
   helpers.push `function ${fnName}($$ctx${ctxType})${retAnno} {\n${lines.join "\n"}\n}`
   { fn: fnName, isBool: true }
 
-emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, helpers: any[]): string[] ->
+emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, helpers: any[], idGen: (p: string) => string): string[] ->
   { types } := options
   if typeof arg is "string"
     return [
@@ -495,6 +505,14 @@ emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, h
           laId := defineLa r
           return [
             `  if (${laId}($$ctx.input, $$ctx.pos)) return true;`
+            `  $$ctx.fail($$ctx.pos, ${exp});`
+          ]
+        if isCharClassRe r
+          ccId := defineCc r
+          eVar := idGen "e"
+          return [
+            `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
+            `  if (${eVar} >= 0) { $$ctx.pos = ${eVar}; return true; }`
             `  $$ctx.fail($$ctx.pos, ${exp});`
           ]
         reId := defineRe r
@@ -541,6 +559,16 @@ emitChoiceAlt := (arg: HeraAST, ruleName: string, defaultHandler: boolean, optio
           laId := defineLa r
           return [
             `  if (${laId}($$ctx.input, $$ctx.pos)) return ${types ? '"" as const' : '""'};`
+            `  $$ctx.fail($$ctx.pos, ${exp});`
+          ]
+        if defaultHandler and isCharClassRe r
+          ccId := defineCc r
+          eVar := idGen "e"
+          vVar := idGen "v"
+          tupleUnion := reTupleUnion types, r
+          return [
+            `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
+            `  if (${eVar} >= 0) { const ${vVar} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""}; $$ctx.pos = ${eVar}; return ${vVar}; }`
             `  $$ctx.fail($$ctx.pos, ${exp});`
           ]
         reId := defineRe r
@@ -643,6 +671,31 @@ emitMatch := (
             `  }`
             `  if (${failTest types, v}) ${failBlock onFail}`
           ]
+        if isCharClassRe r
+          ccId := defineCc r
+          eVar := idGen "e"
+          tupleUnion := reTupleUnion types, r
+          typeAnno := if types then `: ${tupleUnion ?? "string"} | typeof FAIL` else ""
+          valExpr := if varName
+            `$$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""}`
+          else
+            `""${tupleUnion ? ` as ${tupleUnion}` : ""}`
+          return [
+            `  let ${v}${typeAnno};`
+            `  if ($$ctx.allEvents) {`
+            `    ${v} = $$r_${ast}($$ctx);`
+            `  } else {`
+            `    const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
+            `    if (${eVar} >= 0) {`
+            `      ${v} = ${valExpr};`
+            `      $$ctx.pos = ${eVar};`
+            `    } else {`
+            `      $$ctx.fail($$ctx.pos, ${exp});`
+            `      ${v} = $FAIL;`
+            `    }`
+            `  }`
+            `  if (${failTest types, v}) ${failBlock onFail}`
+          ]
         reId := defineRe r
         mVar := idGen "m"
         tupleUnion := reTupleUnion types, r
@@ -700,6 +753,18 @@ emitMatch := (
           `  if (!${laId}($$ctx.input, $$ctx.pos)) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
         ]
         lines.push `  const ${varName} = ${types ? '"" as const' : '""'};` if varName
+        return lines
+      if (defaultHandler or not varName) and isCharClassRe r
+        ccId := defineCc r
+        eVar := idGen "e"
+        tupleUnion := reTupleUnion types, r
+        lines := [
+          `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
+          `  if (${eVar} < 0) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+        ]
+        if varName
+          lines.push `  const ${varName} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""};`
+        lines.push `  $$ctx.pos = ${eVar};`
         return lines
       reId := defineRe r
       if not varName
@@ -862,6 +927,13 @@ emitMatch := (
       if Array.isArray(child) and child[0] is "R"
         r := child[1]
         exp := JSON.stringify prettyPrint(ruleName, r, true)
+        if isCharClassRe r
+          ccId := defineCc r
+          lines := [
+            `  if (${ccId}($$ctx.input, $$ctx.pos) < 0) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          ]
+          lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+          return lines
         reId := defineRe r
         lines := [
           `  ${reId}.lastIndex = $$ctx.pos;`
@@ -899,6 +971,14 @@ emitMatch := (
       if Array.isArray(child) and child[0] is "R"
         r := child[1]
         exp := JSON.stringify prettyPrint(ruleName, r, true)
+        if isCharClassRe r
+          ccId := defineCc r
+          lines := [
+            `  if (${ccId}($$ctx.input, $$ctx.pos) >= 0) ${failBlock onFail}`
+            `  $$ctx.fail($$ctx.pos, ${exp});`
+          ]
+          lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+          return lines
         reId := defineRe r
         lines := [
           `  ${reId}.lastIndex = $$ctx.pos;`
@@ -1087,16 +1167,26 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       body.push `  const $$s0 = ${tupleExpr};\n`
 
   else if rule[0] <? "string" and rule[0].startsWith "R"
-    parameters = regExpHandlerParams.slice()
-    paramTypes = ["Loc"].concat Array(10).fill("any")
-    /* c8 ignore next */
-    valueExpr := if types then "($$v as any[])" else "$$v"
-    callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }"]
-    for (let i = 0; i < 10; i++)
-      callArgs.push `${valueExpr}[${i}]`
-    usesRegexVal := parameters.slice(1).some (p) -> usesIdentifier h.f, p
-    lines := emitMatch(rule, usesRegexVal ? "$$v" : undefined, makeFail(false), name, false, options, helpers, idGen)
-    body.push lines.join("\n") + "\n" if lines.length
+    usesCaptures := regExpHandlerParams.slice(2).some (p) -> usesIdentifier h.f, p
+    usesRegexVal := usesCaptures or usesIdentifier h.f, "$0"
+    if not usesCaptures
+      // Handler uses at most $0 (no capture groups $1..$9) — pass defaultHandler=true
+      // so $cc / $la fast matchers apply directly without RegExpMatchArray allocation.
+      parameters = ["$loc", "$0"]
+      paramTypes = ["Loc", "any"]
+      callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }", "$$v"]
+      lines := emitMatch(rule, usesRegexVal ? "$$v" : undefined, makeFail(false), name, true, options, helpers, idGen)
+      body.push lines.join("\n") + "\n" if lines.length
+    else
+      parameters = regExpHandlerParams.slice()
+      paramTypes = ["Loc"].concat Array(10).fill("any")
+      /* c8 ignore next */
+      valueExpr := if types then "($$v as any[])" else "$$v"
+      callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }"]
+      for (let i = 0; i < 10; i++)
+        callArgs.push `${valueExpr}[${i}]`
+      lines := emitMatch(rule, "$$v", makeFail(false), name, false, options, helpers, idGen)
+      body.push lines.join("\n") + "\n" if lines.length
   else
     parameters = regularHandlerParams.slice()
     paramTypes = ["Loc", "typeof $$v", "typeof $$v"]
@@ -1250,6 +1340,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   reDefs.length = 0
   laDefs.length = 0
+  ccDefs.length = 0
   dynamicReDefs.length = 0
   subFnCounter = 0
   allRules = rules
@@ -1280,6 +1371,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   laDefSource := laDefs.map (r, i) ->
     `const $RL${i} = $la(/${r}/suy);\n`
+
+  ccDefSource := ccDefs.map (r, i) ->
+    `const $RC${i} = $cc(/${r}/suy);\n`
 
   dynamicReDefSource := dynamicReDefs.map (r, i) =>
     if r.every((part) => part <? "string" or part.constant)
@@ -1364,6 +1458,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     "\n\n"
     laDefSource
     "\n\n"
+    ccDefSource
+    "\n\n"
     dynamicReDefSource
     "\n\n"
     body
@@ -1435,6 +1531,7 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
 cjsHead := """
   const {
     $adaptEvents,
+    $cc,
     $isFail,
     $la,
     $memoGet,
@@ -1521,6 +1618,7 @@ cjsExport := """
 mjsHead := """
   import {
     $adaptEvents,
+    $cc,
     $la,
     $memoGet,
     $memoGet0,
@@ -1540,6 +1638,7 @@ mjsHead := """
 tsHead := """
   import {
     $adaptEvents,
+    $cc,
     $isFail,
     $la,
     $memoGet,
@@ -1571,6 +1670,7 @@ tsHead := """
 
   void {
     $adaptEvents,
+    $cc,
     $isFail,
     $la,
     $memoGet,
