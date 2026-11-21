@@ -1865,3 +1865,151 @@ describe "Hera", ->
       assert.match result, /\(function\(\$0:/m
       assert.match result, /const \$\$v = "a" as const;[\s\S]*\}\)\(\$\$v, \$\$v\)/m
       assert.match result, /void \$0, \$1;/
+
+  describe "built-in MemoCache", ->
+    it "should memoize exponential backtracking grammars with memo: true", ->
+      grammar := """
+        Root
+          Expr "!"
+          Expr "?"
+
+        Expr
+          "(" Expr ")"
+          "x"
+      """
+      parser := generate(grammar)
+      // Deeply nested parens that fail the first Root branch at the very end;
+      // without memoization this re-parses the entire nested expression.
+      input := "(".repeat(25) + "x" + ")".repeat(25) + "?"
+      res := parser.parse(input, memo: true)
+      assert.equal res[1], "?"
+      // Pooled reuse on a second parse returns fresh results
+      res2 := parser.parse("(x)!", memo: true)
+      assert.equal res2[1], "!"
+
+    it "should support custom MemoCache with memoTiers (stateless, masked, stateful)", ->
+      grammar := """
+        Root
+          FlipMask FailBranch
+          FlipFull MatchBranch
+          StatelessPart "!"
+
+        FlipMask
+          "" ->
+            activeMemo.sk = 1
+            return "m"
+
+        FlipFull
+          "" ->
+            activeMemo.sk = 5
+            return "f"
+
+        FailBranch
+          MaskedRule "nope"
+
+        MatchBranch
+          MaskedRule FullRule
+
+        MaskedRule
+          "a" ->
+            maskedRuns++
+            return "masked:" + (activeMemo.sk & 1)
+
+        FullRule
+          "b" ->
+            fullRuns++
+            return "full:" + activeMemo.sk
+
+        StatelessPart
+          "a" "b"
+
+        ```
+        let activeMemo = null
+        let maskedRuns = 0
+        let fullRuns = 0
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        exports.getCounts = () => ({ maskedRuns, fullRuns })
+        exports.resetCounts = () => { maskedRuns = 0; fullRuns = 0 }
+        ```
+      """
+      js := compile(parse(grammar), {
+        noMemo: ["FlipMask", "FlipFull"]
+        memoTiers: {
+          stateless: ["StatelessPart"]
+          masks: { MaskedRule: 1 }
+          defaultStateful: true
+        }
+      })
+      mod := execMod(js) as any
+      mc := mod.default.createMemoCache()
+      assert.equal mod.default.memoRuleCount, 6
+      mod.setActiveMemo(mc)
+      // MaskedRule runs with sk=1 (masked=1) in FailBranch, then sk=5 (masked=1) in MatchBranch -> cache HIT!
+      res := mod.parse("ab", { memo: mc })
+      assert.deepEqual res, ["f", ["masked:1", "full:5"]]
+      assert.equal mod.getCounts().maskedRuns, 1
+      assert.equal mod.getCounts().fullRuns, 1
+
+      // Calling reset() invalidates entries; changing sk to 0 misses MaskedRule
+      mc.reset()
+      mc.clearVals()
+      mod.resetCounts()
+      res2 := mod.parse("ab", { memo: mc })
+      assert.deepEqual res2, ["f", ["masked:1", "full:5"]]
+      assert.equal mod.getCounts().maskedRuns, 1
+
+    it "should handle 2-way collisions and cached failures in MemoCache", ->
+      grammar := """
+        Root
+          Probe "b"
+          Probe "a"
+
+        Probe
+          "x"+ ->
+            probeRuns++
+            return $1.length
+
+        ```
+        let probeRuns = 0
+        exports.getProbeRuns = () => probeRuns
+        ```
+      """
+      js := compile(parse(grammar), {
+        memoTiers: {
+          defaultStateful: true
+        }
+      })
+      mod := execMod(js) as any
+      mc := mod.default.createMemoCache()
+      // Exercise way-0 and way-1 hits in both stateless and stateful modes
+      res := mod.parse("xxxxa", { memo: mc })
+      assert.deepEqual res, [4, "a"]
+      assert.equal mod.getProbeRuns(), 1
+      // Also test direct MemoCache way-1 hits (two colliding positions in same set: 0 and 64)
+      res2 := mod.parse("x".repeat(64) + "a", { memo: true })
+      assert.deepEqual res2, [64, "a"]
+
+    it "should emit valid TypeScript for memoTiers", ->
+      grammar := """
+        Root :: string
+          Stateless Masked Full ->
+            return $1 + $2 + $3
+        Stateless :: string
+          "a"
+        Masked :: string
+          "b"
+        Full :: string
+          "c"
+      """
+      tsCode := compile(parse(grammar), {
+        types: true
+        memoTiers: {
+          stateless: ["Stateless"]
+          masks: { Masked: 3 }
+          defaultStateful: true
+        }
+      })
+      assert.match tsCode, /\$mGet0\(/
+      assert.match tsCode, /\$mGet\(\$\$mc, \d+, \$\$p0, \$\$sk, \$\$ctx\)/
+      assert.match tsCode, /\$\$mc\.sk & 3/
+      assert.match tsCode, /createMemoCache/

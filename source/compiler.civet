@@ -1,6 +1,19 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
+import { MEMO_SLOTS } from ./machine.civet
+
+export type MemoTiers = {
+  /** Rules that do not depend on `memo.sk` (use stateless `$memoGet0`/`$memoSet0`). */
+  stateless?: Iterable<string>
+  /** Rules that depend only on `memo.sk & mask` (per-rule bitmask). */
+  masks?: Record<string, number>
+  /**
+   * When true, memoized rules not in `stateless` or `masks` depend on the full `memo.sk`.
+   * When false or omitted, unlisted rules are treated as stateless.
+   */
+  defaultStateful?: boolean
+}
 
 export type CompilerOptions = {
   filename?: string
@@ -28,11 +41,36 @@ export type CompilerOptions = {
    * when `!$$ctx.allEvents`.
    */
   noMemo?: Iterable<string>
+  /**
+   * Optional per-rule state-sensitivity tiers for built-in `MemoCache`
+   * (`options.memo`).  Stateless rules skip `memo.sk` hashing/comparison;
+   * masked rules hash `memo.sk & mask`; stateful rules hash full `memo.sk`.
+   */
+  memoTiers?: MemoTiers
 }
 
 let noMemoSet: Set<string> | undefined = undefined
+let memoBaseMap: Map<string, number> = new Map
+let memoStatelessSet: Set<string> | undefined = undefined
+let memoMasks: Record<string, number> | undefined = undefined
+let memoDefaultStateful = false
 let allRules: HeraRules = {}
 let subFnCounter = 0
+
+type MemoSpec =
+  | { base: number, mode: "stateless" }
+  | { base: number, mode: "full" }
+  | { base: number, mode: "masked", mask: number }
+
+getMemoSpec := (name: string): MemoSpec ->
+  base := memoBaseMap.get(name)!
+  if memoStatelessSet?.has name
+    return { base, mode: "stateless" }
+  if memoMasks and Object.prototype.hasOwnProperty.call(memoMasks, name)
+    return { base, mode: "masked", mask: memoMasks[name] }
+  if memoDefaultStateful
+    return { base, mode: "full" }
+  { base, mode: "stateless" }
 
 reDefs: string[] := []
 laDefs: string[] := []
@@ -214,21 +252,49 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
     }
     ```
     + "\n"
+  spec := getMemoSpec name
+  if spec.mode is "stateless"
+    return ```
+  \  const $$mc = $$ctx.memo;
+    let $$s = 0;
+    if ($$mc) {
+      const $$c = $mGet0($$mc, ${spec.base}, $$p0, $$ctx);
+      if ($$c !== $MISS) return $$c${retAnno};
+      $$s = $$mc.s;
+    } else if ($$ctx.cacheEnter) {
+      const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
+      if ($$c !== $MISS) return $$c${retAnno};
+    }
+    ```
+    + "\n"
+  skExpr := if spec.mode is "masked" then `($$mc.sk & ${spec.mask})` else "$$mc.sk"
   ```
-\  if ($$ctx.cacheEnter) {
+\  const $$mc = $$ctx.memo;
+  let $$sk = 0;
+  let $$s = 0;
+  if ($$mc) {
+    $$sk = ${skExpr};
+    const $$c = $mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx);
+    if ($$c !== $MISS) return $$c${retAnno};
+    $$s = $$mc.s;
+  } else if ($$ctx.cacheEnter) {
     const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
     if ($$c !== $MISS) return $$c${retAnno};
   }
   ```
   + "\n"
 
-// Emit the inline event/cache exit hook call (single statement).
-emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos"): string ->
+// Emit the inline event/cache exit hook call.
+emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
   nameLit := JSON.stringify name
   if noMemoSet?.has name
-    `if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+    return `if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+  spec := getMemoSpec name
+  setCall := if spec.mode is "stateless"
+    `$mSet0($$mc, $$s, $$p0, ${endPosExpr}, ${valExpr})`
   else
-    `if ($$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+    `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
+  `if ($$mc) ${setCall};\n${indent}if (!$$mc && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
 
 /**
 Emit a failure check expression for `expr`. In TS mode, uses `$isFail(expr)`
@@ -768,7 +834,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   makeFail := (restorePos: boolean): string ->
     restore := if restorePos then "$$ctx.pos = $$p0;\n    " else ""
     if wrapEvent
-      `${restore}${emitExitCall name, "$FAIL", "$$p0"}\n    return $FAIL;`
+      `${restore}${emitExitCall name, "$FAIL", "$$p0", "    "}\n    return $FAIL;`
     else if restorePos
       `${restore}return $FAIL;`
     else
@@ -943,7 +1009,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     body.push `  if (($$m${skipCast}) === $SKIP) {\n`
     body.push "    $$ctx.pos = $$p0;\n"
     if wrapEvent
-      body.push `    ${emitExitCall name, "$FAIL", "$$p0"}\n`
+      body.push `    ${emitExitCall name, "$FAIL", "$$p0", "    "}\n`
     body.push "    return $FAIL;\n"
     body.push "  }\n"
 
@@ -1074,6 +1140,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   subFnCounter = 0
   allRules = rules
   noMemoSet = if options.noMemo then new Set options.noMemo else undefined
+  memoStatelessSet = if options.memoTiers?.stateless then new Set options.memoTiers.stateless else undefined
+  memoMasks = options.memoTiers?.masks
+  memoDefaultStateful = Boolean options.memoTiers?.defaultStateful
 
   { language, module } := options
   types := options.types || language === 'typescript' || language === 'civet'
@@ -1081,6 +1150,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
+
+  memoBaseMap = new Map
+  memoCount .= 0
+  for name of ruleNames
+    unless noMemoSet?.has name
+      memoBaseMap.set name, memoCount * MEMO_SLOTS
+      memoCount++
 
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
@@ -1163,7 +1239,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
     `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
     `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
-    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n\n`
+    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+    `const $mGet = $memoGet; void $mGet;\n`
+    `const $mGet0 = $memoGet0; void $mGet0;\n`
+    `const $mSet = $memoSet; void $mSet;\n`
+    `const $mSet0 = $memoSet0; void $mSet0;\n`
+    `const $memoRuleCount = ${memoCount};\n`
+    `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n\n`
     reDefSource
     "\n\n"
     laDefSource
@@ -1241,7 +1323,12 @@ cjsHead := """
     $adaptEvents,
     $isFail,
     $la,
+    $memoGet,
+    $memoGet0,
+    $memoSet,
+    $memoSet0,
     $wrap,
+    createMemoCache,
     FAIL,
     MISS,
     ParseError,
@@ -1263,6 +1350,8 @@ parserTail := (types: boolean): string ->
   [
     ...typeDefs
     "const parser = {"
+    "  memoRuleCount: $memoRuleCount,"
+    "  createMemoCache: () => createMemoCache($memoRuleCount),"
     `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
     `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail }`
@@ -1281,14 +1370,30 @@ parserTail := (types: boolean): string ->
     ""
     "    reset()"
     "    if (options.events) $adaptEvents(ctx, options.events);"
-    ""
-    "    const val = parser(ctx)"
-    `    if (${types ? "$isFail(val)" : "val === $FAIL"}) {`
-    `      return validate(input, undefined, { filename: filename })${t " as never"}`
+    `    let $$ownedMemo${t ": MemoCache | undefined"}`
+    "    if (options.memo === true) {"
+    "      $$ownedMemo = $memoPool.pop() || createMemoCache($memoRuleCount)"
+    "      $$ownedMemo.sk = 0"
+    "      $$ownedMemo.reset()"
+    "      ctx.memo = $$ownedMemo"
+    "    } else if (options.memo) {"
+    "      ctx.memo = options.memo"
     "    }"
-    "    return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val }, {"
-    "      filename: filename"
-    "    })"
+    ""
+    "    try {"
+    "      const val = parser(ctx)"
+    `      if (${types ? "$isFail(val)" : "val === $FAIL"}) {`
+    `        return validate(input, undefined, { filename: filename })${t " as never"}`
+    "      }"
+    "      return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val }, {"
+    "        filename: filename"
+    "      })"
+    "    } finally {"
+    "      if ($$ownedMemo) {"
+    "        $$ownedMemo.clearVals()"
+    "        $memoPool.push($$ownedMemo)"
+    "      }"
+    "    }"
     "  }"
     "}"
   ].join "\n"
@@ -1303,7 +1408,12 @@ mjsHead := """
   import {
     $adaptEvents,
     $la,
+    $memoGet,
+    $memoGet0,
+    $memoSet,
+    $memoSet0,
     $wrap,
+    createMemoCache,
     FAIL,
     MISS,
     ParseError,
@@ -1318,7 +1428,12 @@ tsHead := """
     $adaptEvents,
     $isFail,
     $la,
+    $memoGet,
+    $memoGet0,
+    $memoSet,
+    $memoSet0,
     $wrap,
+    createMemoCache,
     FAIL,
     MISS,
     ParseError,
@@ -1329,6 +1444,7 @@ tsHead := """
     type FailSymbol,
     type Loc,
     type MaybeResult,
+    type MemoCache,
     type MissSymbol,
     type ParseResult,
     type Parser,
@@ -1343,7 +1459,12 @@ tsHead := """
     $adaptEvents,
     $isFail,
     $la,
+    $memoGet,
+    $memoGet0,
+    $memoSet,
+    $memoSet0,
     $wrap,
+    createMemoCache,
     FAIL,
     MISS,
     ParseError,
@@ -1351,7 +1472,7 @@ tsHead := """
     Validator,
   }
   // Reference all imported types at value-position so TS doesn't flag them as unused.
-  const _types: CursorContext | CursorParser<any> | Loc | MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;
+  const _types: CursorContext | CursorParser<any> | Loc | MaybeResult<any> | MemoCache | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;
 
 """
 

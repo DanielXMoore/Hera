@@ -85,6 +85,7 @@ export interface CursorContext {
   expectation: string
   fail: Fail
   allEvents?: boolean
+  memo?: MemoCache
   /**
    * Fast zero-allocation cache enter hook:
    * - return `MISS` on cache miss
@@ -96,6 +97,133 @@ export interface CursorContext {
    * Fast zero-allocation cache exit hook (`value === FAIL` on failure).
    */
   cacheExit?(name: string, startPos: number, endPos: number, value: unknown): void
+}
+
+/**
+ * Built-in 2-way set-associative typed-array packrat memo cache.
+ * Each memoized rule gets `MEMO_SETS` sets of 2 slots (`MEMO_SLOTS` total)
+ * indexed by compile-time rule base offset + hashed `(pos, sk)`.
+ */
+export const MEMO_SETS = 64
+export const MEMO_MASK = MEMO_SETS - 1
+export const MEMO_SLOTS = MEMO_SETS * 2
+
+export class MemoCache {
+  readonly pos: Int32Array
+  readonly state: Int32Array
+  readonly end: Int32Array
+  readonly val: unknown[]
+  sk: number = 0
+  /** Last slot index computed on a cache miss (reused by `$memoSet`/`$memoSet0`). */
+  s: number = 0
+
+  constructor(ruleCount: number) {
+    const size = ruleCount * MEMO_SLOTS
+    this.pos = new Int32Array(size)
+    this.pos.fill(-1)
+    this.state = new Int32Array(size)
+    this.end = new Int32Array(size)
+    this.val = new Array(size)
+  }
+
+  reset(): void {
+    this.pos.fill(-1)
+  }
+
+  clearVals(): void {
+    this.val.fill(undefined)
+  }
+}
+
+export function createMemoCache(ruleCount: number): MemoCache {
+  return new MemoCache(ruleCount)
+}
+
+export function $memoGet0(mc: MemoCache, base: number, p0: number, ctx: CursorContext): unknown {
+  const s = base + ((p0 & MEMO_MASK) << 1)
+  const pos = mc.pos
+  if (pos[s] === p0) {
+    const ep = mc.end[s]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s]
+  }
+  const s1 = s + 1
+  if (pos[s1] === p0) {
+    const ep = mc.end[s1]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s1]
+  }
+  mc.s = s
+  return MISS
+}
+
+export function $memoSet0(mc: MemoCache, s: number, p0: number, endPos: number, val: unknown): void {
+  const pos = mc.pos
+  const end = mc.end
+  const vals = mc.val
+  const pPrev = pos[s]
+  if (pPrev >= 0) {
+    const s1 = s + 1
+    pos[s1] = pPrev
+    const ePrev = end[s]
+    end[s1] = ePrev
+    if (ePrev >= 0) vals[s1] = vals[s]
+  }
+  pos[s] = p0
+  if (val === FAIL) {
+    end[s] = -1
+  } else {
+    end[s] = endPos
+    vals[s] = val
+  }
+}
+
+export function $memoGet(mc: MemoCache, base: number, p0: number, sk: number, ctx: CursorContext): unknown {
+  const mix = sk ^ (sk >>> 7) ^ (sk >>> 14) ^ (sk >>> 21)
+  const s = base + (((p0 ^ mix) & MEMO_MASK) << 1)
+  const pos = mc.pos
+  const st = mc.state
+  if (pos[s] === p0 && st[s] === sk) {
+    const ep = mc.end[s]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s]
+  }
+  const s1 = s + 1
+  if (pos[s1] === p0 && st[s1] === sk) {
+    const ep = mc.end[s1]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s1]
+  }
+  mc.s = s
+  return MISS
+}
+
+export function $memoSet(mc: MemoCache, s: number, p0: number, sk: number, endPos: number, val: unknown): void {
+  const pos = mc.pos
+  const st = mc.state
+  const end = mc.end
+  const vals = mc.val
+  const pPrev = pos[s]
+  if (pPrev >= 0) {
+    const s1 = s + 1
+    pos[s1] = pPrev
+    st[s1] = st[s]
+    const ePrev = end[s]
+    end[s1] = ePrev
+    if (ePrev >= 0) vals[s1] = vals[s]
+  }
+  pos[s] = p0
+  st[s] = sk
+  if (val === FAIL) {
+    end[s] = -1
+  } else {
+    end[s] = endPos
+    vals[s] = val
+  }
 }
 
 export interface Parser<T> {
@@ -338,6 +466,12 @@ export interface ParserOptions<T extends HeraGrammar> {
   filename?: string
   startRule?: keyof T
   events?: ParserEvents
+  /**
+   * Enable built-in packrat memoization:
+   * - `true`: acquire a pooled `MemoCache` automatically for this parse
+   * - `MemoCache`: use a caller-managed `MemoCache` (allowing state key `sk` updates and `reset()`)
+   */
+  memo?: boolean | MemoCache
 }
 
 // Minimal legacy combinators kept solely for backwards compatibility with
