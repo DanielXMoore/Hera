@@ -2167,3 +2167,30 @@ describe "Hera", ->
       // Backtick handler stays wrapped in IIFE to preserve template whitespace
       assert.match civetCode, /\(function\(\)/
       assert.match tsCode, /\(function\(\)/
+
+    it "should support lazyErrors two-pass error tracking", ->
+      grammar := """
+        Root
+          Spaces Word ->
+            return [$1.token, $2]
+
+        Spaces
+          /[ \\t]+/ -> { $loc, token: $0 }
+
+        Word
+          /[a-z]+/ ->
+            return $0.toUpperCase()
+          /[0-9]+/ ->
+            return Number($0)
+      """
+      js := compile(parse(grammar))
+      mod := execMod(js) as any
+      assert.deepEqual mod.parse("  hello", { memo: true, lazyErrors: true }), ["  ", "HELLO"]
+      assert.deepEqual mod.parse("  42", { memo: true, lazyErrors: true }), ["  ", 42]
+      // Verify lazyErrors re-parses with full error tracking on both ParseError and unconsumed input
+      assert.throws ->
+        mod.parse("  !!!", { memo: true, lazyErrors: true })
+      , /Failed to parse/
+      assert.throws ->
+        mod.parse("  hello trailing", { memo: true, lazyErrors: true })
+      , /Unconsumed input/

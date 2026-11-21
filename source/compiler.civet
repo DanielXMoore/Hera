@@ -306,6 +306,10 @@ emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent
     `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
   `if ($$mc) ${setCall};\n${indent}if (!$$mc && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
 
+/** Guard `$$ctx.fail(...)` so lazy-error parses skip all expectation tracking on the fast path. */
+emitFailCall := (exp: string): string ->
+  `if ($$ctx.fail) $$ctx.fail($$ctx.pos, ${exp});`
+
 /**
 Emit a failure check expression for `expr`. In TS mode, uses `$isFail(expr)`
 so infallible rules (whose static type excludes `typeof FAIL`) never trip TS2367
@@ -496,7 +500,7 @@ emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, h
           return ["  return true;"]
         return [
           `  if (${test}) { $$ctx.pos += ${len}; return true; }`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
       when "R"
         r := arg[1]
@@ -505,7 +509,7 @@ emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, h
           laId := defineLa r
           return [
             `  if (${laId}($$ctx.input, $$ctx.pos)) return true;`
-            `  $$ctx.fail($$ctx.pos, ${exp});`
+            `  ${emitFailCall exp}`
           ]
         if isCharClassRe r
           ccId := defineCc r
@@ -513,13 +517,13 @@ emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, h
           return [
             `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
             `  if (${eVar} >= 0) { $$ctx.pos = ${eVar}; return true; }`
-            `  $$ctx.fail($$ctx.pos, ${exp});`
+            `  ${emitFailCall exp}`
           ]
         reId := defineRe r
         return [
           `  ${reId}.lastIndex = $$ctx.pos;`
           `  if (${reId}.test($$ctx.input)) { $$ctx.pos = ${reId}.lastIndex; return true; }`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
   { fn, isBool } := compileRecFn arg, ruleName, options, helpers
   if isBool
@@ -550,7 +554,7 @@ emitChoiceAlt := (arg: HeraAST, ruleName: string, defaultHandler: boolean, optio
           return [`  return ${litVal};`]
         return [
           `  if (${test}) { $$ctx.pos += ${len}; return ${litVal}; }`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
       when "R"
         r := arg[1]
@@ -559,7 +563,7 @@ emitChoiceAlt := (arg: HeraAST, ruleName: string, defaultHandler: boolean, optio
           laId := defineLa r
           return [
             `  if (${laId}($$ctx.input, $$ctx.pos)) return ${types ? '"" as const' : '""'};`
-            `  $$ctx.fail($$ctx.pos, ${exp});`
+            `  ${emitFailCall exp}`
           ]
         if defaultHandler and isCharClassRe r
           ccId := defineCc r
@@ -569,7 +573,7 @@ emitChoiceAlt := (arg: HeraAST, ruleName: string, defaultHandler: boolean, optio
           return [
             `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
             `  if (${eVar} >= 0) { const ${vVar} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""}; $$ctx.pos = ${eVar}; return ${vVar}; }`
-            `  $$ctx.fail($$ctx.pos, ${exp});`
+            `  ${emitFailCall exp}`
           ]
         reId := defineRe r
         mVar := idGen "m"
@@ -582,7 +586,7 @@ emitChoiceAlt := (arg: HeraAST, ruleName: string, defaultHandler: boolean, optio
           `  ${reId}.lastIndex = $$ctx.pos;`
           `  const ${mVar} = ${reId}.exec($$ctx.input);`
           `  if (${mVar}) { $$ctx.pos += ${mVar}[0].length; return ${retVal}; }`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
   fn := compileSubFn arg, ruleName, defaultHandler, options, helpers
   v := idGen "c"
@@ -647,7 +651,7 @@ emitMatch := (
           `    $$ctx.pos += ${len};`
           `    ${v} = "${inl.lit}";`
           `  } else {`
-          `    $$ctx.fail($$ctx.pos, ${exp});`
+          `    ${emitFailCall exp}`
           `    ${v} = $FAIL;`
           `  }`
           `  if (${failTest types, v}) ${failBlock onFail}`
@@ -666,7 +670,7 @@ emitMatch := (
             `  } else if (${laId}($$ctx.input, $$ctx.pos)) {`
             `    ${v} = "";`
             `  } else {`
-            `    $$ctx.fail($$ctx.pos, ${exp});`
+            `    ${emitFailCall exp}`
             `    ${v} = $FAIL;`
             `  }`
             `  if (${failTest types, v}) ${failBlock onFail}`
@@ -690,7 +694,7 @@ emitMatch := (
             `      ${v} = ${valExpr};`
             `      $$ctx.pos = ${eVar};`
             `    } else {`
-            `      $$ctx.fail($$ctx.pos, ${exp});`
+            `      ${emitFailCall exp}`
             `      ${v} = $FAIL;`
             `    }`
             `  }`
@@ -712,7 +716,7 @@ emitMatch := (
           `      $$ctx.pos += ${mVar}[0].length;`
           `      ${v} = ${valExpr};`
           `    } else {`
-          `      $$ctx.fail($$ctx.pos, ${exp});`
+          `      ${emitFailCall exp}`
           `      ${v} = $FAIL;`
           `    }`
           `  }`
@@ -738,7 +742,7 @@ emitMatch := (
       if len is 0
         return if varName then [`  const ${varName} = ${litVal};`] else []
       lines := [
-        `  if (!(${test})) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+        `  if (!(${test})) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
         `  $$ctx.pos += ${len};`
       ]
       lines.push `  const ${varName} = ${litVal};` if varName
@@ -750,7 +754,7 @@ emitMatch := (
       if (defaultHandler or not varName) and isPureLookahead r
         laId := defineLa r
         lines := [
-          `  if (!${laId}($$ctx.input, $$ctx.pos)) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          `  if (!${laId}($$ctx.input, $$ctx.pos)) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
         ]
         lines.push `  const ${varName} = ${types ? '"" as const' : '""'};` if varName
         return lines
@@ -760,7 +764,7 @@ emitMatch := (
         tupleUnion := reTupleUnion types, r
         lines := [
           `  const ${eVar} = ${ccId}($$ctx.input, $$ctx.pos);`
-          `  if (${eVar} < 0) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          `  if (${eVar} < 0) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
         ]
         if varName
           lines.push `  const ${varName} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""};`
@@ -770,7 +774,7 @@ emitMatch := (
       if not varName
         return [
           `  ${reId}.lastIndex = $$ctx.pos;`
-          `  if (!${reId}.test($$ctx.input)) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          `  if (!${reId}.test($$ctx.input)) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
           `  $$ctx.pos = ${reId}.lastIndex;`
         ]
       mVar := idGen "m"
@@ -782,7 +786,7 @@ emitMatch := (
       return [
         `  ${reId}.lastIndex = $$ctx.pos;`
         `  const ${mVar} = ${reId}.exec($$ctx.input);`
-        `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+        `  if (!${mVar}) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
         `  $$ctx.pos += ${mVar}[0].length;`
         `  const ${varName} = ${valExpr};`
       ]
@@ -794,7 +798,7 @@ emitMatch := (
         return [
           `  const ${reVar} = ${rdId}();`
           `  ${reVar}.lastIndex = $$ctx.pos;`
-          `  if (!${reVar}.test($$ctx.input)) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
+          `  if (!${reVar}.test($$ctx.input)) ${failBlock `if ($$ctx.fail) $$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
           `  $$ctx.pos = ${reVar}.lastIndex;`
         ]
       mVar := idGen "m"
@@ -802,7 +806,7 @@ emitMatch := (
         `  const ${reVar} = ${rdId}();`
         `  ${reVar}.lastIndex = $$ctx.pos;`
         `  const ${mVar} = ${reVar}.exec($$ctx.input);`
-        `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
+        `  if (!${mVar}) ${failBlock `if ($$ctx.fail) $$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
         `  $$ctx.pos += ${mVar}[0].length;`
         `  const ${varName} = ${defaultHandler ? `${mVar}[0]` : mVar};`
       ]
@@ -820,10 +824,10 @@ emitMatch := (
           typeAnno := if types then `: "${lit}" | undefined` else ""
           return [
             `  let ${varName}${typeAnno} = undefined;`
-            `  if (${test}) { $$ctx.pos += ${len}; ${varName} = "${lit}"; } else { $$ctx.fail($$ctx.pos, ${exp}); }`
+            `  if (${test}) {\n    $$ctx.pos += ${len};\n    ${varName} = "${lit}";\n  } else if ($$ctx.fail) {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
           ]
         return [
-          `  if (${test}) { $$ctx.pos += ${len}; } else { $$ctx.fail($$ctx.pos, ${exp}); }`
+          `  if (${test}) {\n    $$ctx.pos += ${len};\n  } else if ($$ctx.fail) {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
         ]
       if varName
         fn := compileSubFn child, ruleName, defaultHandler, options, helpers
@@ -921,7 +925,7 @@ emitMatch := (
         lit := child[1]
         { len, test } := literalMatchTest lit
         exp := JSON.stringify prettyPrint(ruleName, lit)
-        lines: string[] := if len is 0 then ([] as string[]) else [`  if (!(${test})) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`]
+        lines: string[] := if len is 0 then ([] as string[]) else [`  if (!(${test})) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`]
         lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
         return lines
       if Array.isArray(child) and child[0] is "R"
@@ -930,14 +934,14 @@ emitMatch := (
         if isCharClassRe r
           ccId := defineCc r
           lines := [
-            `  if (${ccId}($$ctx.input, $$ctx.pos) < 0) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+            `  if (${ccId}($$ctx.input, $$ctx.pos) < 0) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
           ]
           lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
           return lines
         reId := defineRe r
         lines := [
           `  ${reId}.lastIndex = $$ctx.pos;`
-          `  if (!${reId}.test($$ctx.input)) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          `  if (!${reId}.test($$ctx.input)) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
         ]
         lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
         return lines
@@ -964,7 +968,7 @@ emitMatch := (
           return [`  ${failBlock onFail}`]
         lines := [
           `  if (${test}) ${failBlock onFail}`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
         lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
         return lines
@@ -975,7 +979,7 @@ emitMatch := (
           ccId := defineCc r
           lines := [
             `  if (${ccId}($$ctx.input, $$ctx.pos) >= 0) ${failBlock onFail}`
-            `  $$ctx.fail($$ctx.pos, ${exp});`
+            `  ${emitFailCall exp}`
           ]
           lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
           return lines
@@ -983,7 +987,7 @@ emitMatch := (
         lines := [
           `  ${reId}.lastIndex = $$ctx.pos;`
           `  if (${reId}.test($$ctx.input)) ${failBlock onFail}`
-          `  $$ctx.fail($$ctx.pos, ${exp});`
+          `  ${emitFailCall exp}`
         ]
         lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
         return lines
@@ -1611,7 +1615,9 @@ parserTail := (types: boolean): string ->
     "  createMemoCache: () => createMemoCache($memoRuleCount),"
     `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
-    `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail }`
+    `    let $$fail${t ": ((pos: number, expected: unknown) => void) | undefined"}`
+    "    if (!options.lazyErrors) $$fail = fail"
+    `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail: $$fail }`
     ""
     '    if (typeof input !== "string") throw new Error("Input must be a string")'
     ""
@@ -1640,7 +1646,29 @@ parserTail := (types: boolean): string ->
     "    try {"
     "      const val = parser(ctx)"
     `      if (${types ? "$isFail(val)" : "val === $FAIL"}) {`
+    "        if (options.lazyErrors) {"
+    "          reset()"
+    "          ctx.pos = 0"
+    "          ctx.fail = fail"
+    "          if (ctx.memo) ctx.memo.reset()"
+    "          const val2 = parser(ctx)"
+    `          if (${types ? "$isFail(val2)" : "val2 === $FAIL"}) {`
+    `            return validate(input, undefined, { filename: filename })${t " as never"}`
+    "          }"
+    "          return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val2 }, { filename: filename })"
+    "        }"
     `        return validate(input, undefined, { filename: filename })${t " as never"}`
+    "      }"
+    "      if (ctx.pos !== input.length && options.lazyErrors) {"
+    "        reset()"
+    "        ctx.pos = 0"
+    "        ctx.fail = fail"
+    "        if (ctx.memo) ctx.memo.reset()"
+    "        const val2 = parser(ctx)"
+    `        if (${types ? "$isFail(val2)" : "val2 === $FAIL"}) {`
+    `          return validate(input, undefined, { filename: filename })${t " as never"}`
+    "        }"
+    "        return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val2 }, { filename: filename })"
     "      }"
     "      return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val }, {"
     "        filename: filename"

@@ -83,7 +83,7 @@ export interface CursorContext {
   input: string
   pos: number
   expectation: string
-  fail: Fail
+  fail?: Fail | undefined
   allEvents?: boolean
   memo?: MemoCache
   /**
@@ -635,6 +635,12 @@ export interface ParserOptions<T extends HeraGrammar> {
    * - `MemoCache`: use a caller-managed `MemoCache` (allowing state key `sk` updates and `reset()`)
    */
   memo?: boolean | MemoCache
+  /**
+   * Skip recording failure expectations on the initial parse pass and only
+   * re-run with full error tracking if the parse actually fails. Safe for
+   * idempotent grammars (e.g. grammars with a Reset rule).
+   */
+  lazyErrors?: boolean
 }
 
 // Minimal legacy combinators kept solely for backwards compatibility with
