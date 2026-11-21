@@ -420,6 +420,96 @@ compileSubFn := (ast: HeraAST, ruleName: string, defaultHandler: boolean, option
   fnName
 
 /**
+Compile a recognize-only sub-expression into a flat top-level helper returning
+`boolean` (leaving `$$ctx.pos` unchanged on `false`), skipping all tuple/array/
+match allocations.  Bare rule references return `{ fn, isBool: false }` directly.
+*/
+compileRecFn := (ast: HeraAST, ruleName: string, options: CompilerOptions, helpers: any[]): { fn: string, isBool: boolean } ->
+  if typeof ast is "string"
+    return { fn: `$$r_${ast}`, isBool: false }
+
+  if Array.isArray(ast) and typeof ast[0] is "object" and "name" in ast[0]
+    return compileRecFn(ast[1], ruleName, options, helpers)
+
+  { types } := options
+  ctxType := types ? ": CursorContext" : ""
+  retAnno := types ? ": boolean" : ""
+  fnName := `$$k_${subFnCounter++}`
+  let localId = 0
+  idGen := (prefix: string) -> `$$${prefix}${localId++}`
+
+  // Choice: try each alternative sequentially, returning true on first match.
+  if Array.isArray(ast) and ast[0] is "/"
+    lines: string[] := []
+    for arg of ast[1]
+      lines.push ...emitRecChoiceAlt(arg, ruleName, options, helpers)
+    lines.push "  return false;"
+    helpers.push `function ${fnName}($$ctx${ctxType})${retAnno} {\n${lines.join "\n"}\n}`
+    return { fn: fnName, isBool: true }
+
+  // Sequence: save cursor, recognize each item with varName=undefined, return true.
+  if Array.isArray(ast) and ast[0] is "S"
+    items := ast[1]
+    lines: string[] := []
+    for item, i of items
+      onFail := if i is 0 then "return false;" else "$$ctx.pos = $$p0;\n    return false;"
+      lines.push ...emitMatch(item, undefined, onFail, ruleName, true, options, helpers, idGen)
+    if lines.some((l) -> l.includes "$$p0")
+      lines.unshift "  const $$p0 = $$ctx.pos;"
+    if types and not lines.some((l) -> l.includes "$$ctx")
+      lines.unshift "  void $$ctx;"
+    lines.push "  return true;"
+    helpers.push `function ${fnName}($$ctx${ctxType})${retAnno} {\n${lines.join "\n"}\n}`
+    return { fn: fnName, isBool: true }
+
+  // Single operator
+  lines := emitMatch(ast, undefined, "return false;", ruleName, true, options, helpers, idGen)
+  if types and not lines.some((l) -> l.includes "$$ctx")
+    lines.unshift "  void $$ctx;"
+  lines.push "  return true;"
+  helpers.push `function ${fnName}($$ctx${ctxType})${retAnno} {\n${lines.join "\n"}\n}`
+  { fn: fnName, isBool: true }
+
+emitRecChoiceAlt := (arg: HeraAST, ruleName: string, options: CompilerOptions, helpers: any[]): string[] ->
+  { types } := options
+  if typeof arg is "string"
+    return [
+      `  if (${notFailTest types, `$$r_${arg}($$ctx)`}) return true;`
+    ]
+  if Array.isArray(arg)
+    switch arg[0]
+      when "L"
+        lit := arg[1]
+        { len, test } := literalMatchTest lit
+        exp := JSON.stringify prettyPrint(ruleName, lit)
+        if len is 0
+          return ["  return true;"]
+        return [
+          `  if (${test}) { $$ctx.pos += ${len}; return true; }`
+          `  $$ctx.fail($$ctx.pos, ${exp});`
+        ]
+      when "R"
+        r := arg[1]
+        exp := JSON.stringify prettyPrint(ruleName, r, true)
+        if isPureLookahead r
+          laId := defineLa r
+          return [
+            `  if (${laId}($$ctx.input, $$ctx.pos)) return true;`
+            `  $$ctx.fail($$ctx.pos, ${exp});`
+          ]
+        reId := defineRe r
+        return [
+          `  ${reId}.lastIndex = $$ctx.pos;`
+          `  if (${reId}.test($$ctx.input)) { $$ctx.pos = ${reId}.lastIndex; return true; }`
+          `  $$ctx.fail($$ctx.pos, ${exp});`
+        ]
+  { fn, isBool } := compileRecFn arg, ruleName, options, helpers
+  if isBool
+    return [`  if (${fn}($$ctx)) return true;`]
+  /* c8 ignore next -- compileRecFn only returns isBool=false for string rule refs handled above */
+  [`  if (${notFailTest types, `${fn}($$ctx)`}) return true;`]
+
+/**
 Emit statements inside a Choice function for one alternative `arg`.
 Returns immediately on match; falls through (with `$$ctx.pos` unchanged) on fail.
 */
@@ -612,36 +702,45 @@ emitMatch := (
         lines.push `  const ${varName} = ${types ? '"" as const' : '""'};` if varName
         return lines
       reId := defineRe r
+      if not varName
+        return [
+          `  ${reId}.lastIndex = $$ctx.pos;`
+          `  if (!${reId}.test($$ctx.input)) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
+          `  $$ctx.pos = ${reId}.lastIndex;`
+        ]
       mVar := idGen "m"
       tupleUnion := reTupleUnion types, r
-      lines := [
+      valExpr := if defaultHandler
+        `${mVar}[0]${tupleUnion ? ` as ${tupleUnion}` : ""}`
+      else
+        `${mVar}${tupleUnion ? ` as unknown as [${tupleUnion}]` : ""}`
+      return [
         `  ${reId}.lastIndex = $$ctx.pos;`
         `  const ${mVar} = ${reId}.exec($$ctx.input);`
         `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, ${exp});\n    ${onFail}`}`
         `  $$ctx.pos += ${mVar}[0].length;`
+        `  const ${varName} = ${valExpr};`
       ]
-      if varName
-        valExpr := if defaultHandler
-          `${mVar}[0]${tupleUnion ? ` as ${tupleUnion}` : ""}`
-        else
-          `${mVar}${tupleUnion ? ` as unknown as [${tupleUnion}]` : ""}`
-        lines.push `  const ${varName} = ${valExpr};`
-      return lines
 
     when "RD"
       rdId := defineDynamicRe ast[1]
       reVar := idGen "re"
+      if not varName
+        return [
+          `  const ${reVar} = ${rdId}();`
+          `  ${reVar}.lastIndex = $$ctx.pos;`
+          `  if (!${reVar}.test($$ctx.input)) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
+          `  $$ctx.pos = ${reVar}.lastIndex;`
+        ]
       mVar := idGen "m"
-      lines := [
+      return [
         `  const ${reVar} = ${rdId}();`
         `  ${reVar}.lastIndex = $$ctx.pos;`
         `  const ${mVar} = ${reVar}.exec($$ctx.input);`
         `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
         `  $$ctx.pos += ${mVar}[0].length;`
+        `  const ${varName} = ${defaultHandler ? `${mVar}[0]` : mVar};`
       ]
-      if varName
-        lines.push `  const ${varName} = ${defaultHandler ? `${mVar}[0]` : mVar};`
-      return lines
 
     when "?"
       child := ast[1]
@@ -661,25 +760,26 @@ emitMatch := (
         return [
           `  if (${test}) { $$ctx.pos += ${len}; } else { $$ctx.fail($$ctx.pos, ${exp}); }`
         ]
-      fn := compileSubFn child, ruleName, defaultHandler, options, helpers
-      tVar := idGen "o"
       if varName
+        fn := compileSubFn child, ruleName, defaultHandler, options, helpers
+        tVar := idGen "o"
         typeAnno := if types then `: Exclude<typeof ${tVar}, typeof FAIL> | undefined` else ""
         return [
           `  const ${tVar} = ${fn}($$ctx);`
           `  let ${varName}${typeAnno};`
           `  if (${failTest types, tVar}) { ${varName} = undefined; } else { ${varName} = ${tVar}; }`
         ]
+      { fn } := compileRecFn child, ruleName, options, helpers
       return [`  ${fn}($$ctx);`]
 
     when "*"
       child := ast[1]
-      fn := compileSubFn child, ruleName, defaultHandler, options, helpers
       p0Var := idGen "q"
       fVar := idGen "qf"
       pVar := idGen "q"
       itVar := idGen "qi"
       if varName
+        fn := compileSubFn child, ruleName, defaultHandler, options, helpers
         arrType := if types then `: Exclude<typeof ${fVar}, typeof FAIL>[]` else ""
         return [
           `  const ${p0Var} = $$ctx.pos;`
@@ -698,43 +798,54 @@ emitMatch := (
           `    }`
           `  }`
         ]
+      { fn, isBool } := compileRecFn child, ruleName, options, helpers
+      stopCheck := if isBool then `!${itVar}` else failTest(types, itVar)
       return [
         `  while (true) {`
         `    const ${pVar} = $$ctx.pos;`
         `    const ${itVar} = ${fn}($$ctx);`
-        `    if (${failTest types, itVar} || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`
+        `    if (${stopCheck} || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`
         `  }`
       ]
 
     when "+"
       child := ast[1]
-      fn := compileSubFn child, ruleName, defaultHandler, options, helpers
       firstVar := idGen "pf"
       pVar := idGen "p"
       itVar := idGen "pi"
-      lines := [
-        `  const ${firstVar} = ${fn}($$ctx);`
-        `  if (${failTest types, firstVar}) ${failBlock onFail}`
-      ]
       if varName
-        lines.push `  const ${varName} = [${firstVar}];`
-      lines.push(
+        fn := compileSubFn child, ruleName, defaultHandler, options, helpers
+        return [
+          `  const ${firstVar} = ${fn}($$ctx);`
+          `  if (${failTest types, firstVar}) ${failBlock onFail}`
+          `  const ${varName} = [${firstVar}];`
+          `  while (true) {`
+          `    const ${pVar} = $$ctx.pos;`
+          `    const ${itVar} = ${fn}($$ctx);`
+          `    if (${failTest types, itVar} || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`
+          `    ${varName}.push(${itVar});`
+          `  }`
+        ]
+      { fn, isBool } := compileRecFn child, ruleName, options, helpers
+      firstFail := if isBool then `!${fn}($$ctx)` else failTest(types, `${fn}($$ctx)`)
+      stopCheck := if isBool then `!${itVar}` else failTest(types, itVar)
+      return [
+        `  if (${firstFail}) ${failBlock onFail}`
         `  while (true) {`
         `    const ${pVar} = $$ctx.pos;`
         `    const ${itVar} = ${fn}($$ctx);`
-        `    if (${failTest types, itVar} || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`
-      )
-      lines.push `    ${varName}.push(${itVar});` if varName
-      lines.push `  }`
-      return lines
+        `    if (${stopCheck} || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`
+        `  }`
+      ]
 
     when "$"
-      // Inside text we ignore default regex handlers since only matched span matters
+      // Recognize-only: only matched span matters, so skip all inner allocations
       pVar := idGen "tp"
-      fn := compileSubFn ast[1], ruleName, false, options, helpers
+      { fn, isBool } := compileRecFn ast[1], ruleName, options, helpers
+      failCond := if isBool then `!${fn}($$ctx)` else failTest(types, `${fn}($$ctx)`)
       lines := [
         `  const ${pVar} = $$ctx.pos;`
-        `  if (${failTest types, `${fn}($$ctx)`}) ${failBlock onFail}`
+        `  if (${failCond}) ${failBlock onFail}`
       ]
       lines.push `  const ${varName} = $$ctx.input.substring(${pVar}, $$ctx.pos);` if varName
       return lines
@@ -760,12 +871,13 @@ emitMatch := (
         return lines
       pVar := idGen "lp"
       tVar := idGen "lv"
-      fn := compileSubFn child, ruleName, defaultHandler, options, helpers
+      { fn, isBool } := compileRecFn child, ruleName, options, helpers
+      failCond := if isBool then `!${tVar}` else failTest(types, tVar)
       lines := [
         `  const ${pVar} = $$ctx.pos;`
         `  const ${tVar} = ${fn}($$ctx);`
         `  $$ctx.pos = ${pVar};`
-        `  if (${failTest types, tVar}) ${failBlock onFail}`
+        `  if (${failCond}) ${failBlock onFail}`
       ]
       lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
       return lines
@@ -797,24 +909,26 @@ emitMatch := (
         return lines
       pVar := idGen "lp"
       tVar := idGen "lv"
-      fn := compileSubFn child, ruleName, defaultHandler, options, helpers
+      { fn, isBool } := compileRecFn child, ruleName, options, helpers
+      succCond := if isBool then tVar else notFailTest(types, tVar)
       lines := [
         `  const ${pVar} = $$ctx.pos;`
         `  const ${tVar} = ${fn}($$ctx);`
         `  $$ctx.pos = ${pVar};`
-        `  if (${notFailTest types, tVar}) ${failBlock onFail}`
+        `  if (${succCond}) ${failBlock onFail}`
       ]
       lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
       return lines
 
     when "S", "/"
-      fn := compileSubFn ast, ruleName, defaultHandler, options, helpers
       if varName
+        fn := compileSubFn ast, ruleName, defaultHandler, options, helpers
         return [
           `  const ${varName} = ${fn}($$ctx);`
           `  if (${failTest types, varName}) ${failBlock onFail}`
         ]
-      return [`  if (${failTest types, `${fn}($$ctx)`}) ${failBlock onFail}`]
+      { fn } := compileRecFn ast, ruleName, options, helpers
+      return [`  if (!${fn}($$ctx)) ${failBlock onFail}`]
 
     default
       if typeof ast[0] is "object" and "name" in ast[0]

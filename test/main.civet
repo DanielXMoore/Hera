@@ -2013,3 +2013,63 @@ describe "Hera", ->
       assert.match tsCode, /\$mGet\(\$\$mc, \d+, \$\$p0, \$\$sk, \$\$ctx\)/
       assert.match tsCode, /\$\$mc\.sk & 3/
       assert.match tsCode, /createMemoCache/
+
+  describe "recognize-only codegen", ->
+    it "should recognize $(...), &(...), !(...), and discarded repetitions without inner allocations", ->
+      grammar := """
+        Root
+          Comment Spaces Ident OptTail "a" ->
+            return [$1, $3]
+
+        Comment
+          $( "/*" ( !"*/" . )* "*/" )
+
+        Spaces
+          /[ \\t]+/
+
+        Ident
+          /[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-9_$\\\\\\x80-\\u{10FFFF}])/
+
+        OptTail
+          ( ( "" / /(?=[!])/ / /[0-9]+/ / /ab|cd/ / Sub / ( "p" "q" ) ):x )? ( "!" / "?" )* ( "+" )+ &( /[a-z]/ / "1" ) !( /[0-9]/ / "2" ) ->
+            return "ok"
+
+        Sub
+          "z"
+      """
+      js := compile(parse(grammar), { noMemo: ["Spaces", "Ident"] })
+      assert.match js, /function \$\$k_\d+\(\$\$ctx\)/
+      mod := execMod(js) as any
+      assert.deepEqual mod.parse("/* hi 😀 */  foo+a"), ["/* hi 😀 */", "foo"]
+
+      // Also verify TypeScript codegen for recognize-only + empty-sequence void $$ctx
+      // + dynamic regex in recognize-only + non-char-class &/!
+      tsCode := compile(parse("""
+        Root :: string
+          $( "" "" ) $( "a" / /(?=[b])/ / /[0-9]/ / /xy|zw/ / Leaf / ( "m" "n" ) ) &( /[a-z]/ ) !( /[0-9]/ ) &( /ab|cd/ ) !( /ef|gh/ ) $( ///${pat}/// ) ( /[a-z]+/ )? ( "x" )+ ( "y" )* Sign Sign SimpleChoice AltWord Word ->
+            return $2 + String($5) + String($6) + $12 + $13 + $14 + $15
+        Leaf :: string
+          "k"
+        Sign
+          /[ab]/
+        SimpleChoice
+          "x" ( /[ab]/ / "0" )
+        AltWord
+          /ab|cd/
+        Word
+          /[a-z]+(?:_x)?/
+        HandlerChoice
+          ( /ab|cd/ / /a+/ / "e" ) ->
+            return $1
+        ```
+        const pat = "q"
+        ```
+      """), { types: true, noMemo: ["Leaf", "Sign", "AltWord", "Word"] })
+      assert.match tsCode, /function \$\$k_\d+\(\$\$ctx: CursorContext\): boolean/
+      // Also exercise JS mode varName on non-char-class &/!
+      jsLook := compile(parse("""
+        Root
+          &( /ab|cd/ ) !( /ef|gh/ ) "ab" ->
+            return [$1, $2]
+      """))
+      assert.deepEqual (execMod(jsLook) as any).parse("ab"), [true, true]
