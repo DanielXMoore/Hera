@@ -287,48 +287,34 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
     ```
     + "\n"
   spec := getMemoSpec name
-  if spec.mode is "stateless"
-    return ```
-  \  const $$mc = $$ctx.memo;
-    let $$s = 0;
-    if ($$mc) {
-      if ($$ctx.allEvents && $$ctx.cacheEnter) {
-        const $$e = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
-        if ($$e !== $MISS) return $$e${retAnno};
-      }
-      const $$c = $mGet0($$mc, ${spec.base}, $$p0, $$ctx);
-      if ($$c !== $MISS) {
-        if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, $$ctx.pos, $$c);
-        return $$c${retAnno};
-      }
-      $$s = $$mc.s;
-    } else if ($$ctx.cacheEnter) {
-      const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
-      if ($$c !== $MISS) return $$c${retAnno};
-    }
-    ```
-    + "\n"
-  skExpr := if spec.mode is "masked" then `($$mc.sk & ${spec.mask})` else "$$mc.sk"
+  cType := if types then ": unknown" else ""
+  isStateless := spec.mode is "stateless"
+  skDecl := if isStateless then "" else "  let $$sk = 0;\n"
+  skSet := if isStateless
+    ""
+  else if spec.mode is "masked"
+    `      $$sk = ($$mc.sk & ${spec.mask});\n`
+  else
+    "      $$sk = $$mc.sk;\n"
+  getCall := if isStateless
+    `$mGet0($$mc, ${spec.base}, $$p0, $$ctx)`
+  else
+    `$mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx)`
   ```
 \  const $$mc = $$ctx.memo;
-  let $$sk = 0;
-  let $$s = 0;
+${skDecl}  let $$s = 0;
+  let $$c${cType} = $MISS;
   if ($$mc) {
-    if ($$ctx.allEvents && $$ctx.cacheEnter) {
-      const $$e = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
-      if ($$e !== $MISS) return $$e${retAnno};
-    }
-    $$sk = ${skExpr};
-    const $$c = $mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx);
-    if ($$c !== $MISS) {
-      if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, $$ctx.pos, $$c);
-      return $$c${retAnno};
+    if ($$ctx.allEvents && $$ctx.cacheEnter) $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
+    if ($$c === $MISS) {
+${skSet}      $$c = ${getCall};
+      if ($$c !== $MISS && $$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, $$ctx.pos, $$c);
     }
     $$s = $$mc.s;
   } else if ($$ctx.cacheEnter) {
-    const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
-    if ($$c !== $MISS) return $$c${retAnno};
+    $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
   }
+  if ($$c !== $MISS) return $$c${retAnno};
   ```
   + "\n"
 
