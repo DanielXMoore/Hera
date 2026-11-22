@@ -160,6 +160,36 @@ describe "esbuild plugin", ->
 
     restore.mock.restore()
 
+  it "should compile civet with inline source maps when language is 'civet'", ->
+    { parse } := await buildAndImport 'civet-sourcemap-grammar.hera',
+      """
+        Rule
+          "a" ->
+            x := "ok"
+            x
+      """
+      pluginOptions: { language: 'civet', inlineMap: true }
+
+    assert.equal parse('a'), "ok"
+
+  it "should respect a custom transpileEmbedded option when language is 'civet'", ->
+    let called = false
+    { parse } := await buildAndImport 'civet-custom-transpile-grammar.hera',
+      """
+        Rule
+          "a" ->
+            return "ok"
+      """
+      pluginOptions: {
+        language: 'civet'
+        transpileEmbedded: (src) =>
+          called = true
+          src
+      }
+
+    assert.equal called, true
+    assert.equal parse('a'), "ok"
+
   it "should not override explicit loader option when language is set", ->
     // If user explicitly passes loader, it wins over language-derived loader
     { parse } := await buildAndImport 'explicit-loader-grammar.hera',

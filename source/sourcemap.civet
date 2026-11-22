@@ -129,3 +129,32 @@ export class SourceMap
         @lines[@line].push [l, 0, srcLine + i, srcCol]
       else if l is not 0
         @lines[@line].push [l]
+
+  /**
+  Append pre-compiled `outputStr` whose lines already have composed source map
+  entries (`mappedLines`) mapping back to this map's original source.
+  */
+  appendMapped(outputStr: string, mappedLines: SourceMapEntry[][]): void
+    outLines := outputStr.split EOL
+    for each line, i of outLines
+      if i > 0
+        @line++
+        @colOffset = 0
+        @lines[@line] = []
+      entries := mappedLines[i]
+      if entries and entries.length
+        sum .= 0
+        for e of entries
+          sum += e[0]
+        if @colOffset is 0
+          @lines[@line].push ...entries
+        else
+          first := entries[0]
+          shifted: SourceMapEntry := if first.length is 4
+            [first[0] + @colOffset, first[1], first[2], first[3]] as SourceMapEntry
+          else
+            [first[0] + @colOffset] as SourceMapEntry
+          @lines[@line].push shifted, ...entries.slice(1)
+        @colOffset = line.length - sum
+      else
+        @colOffset += line.length

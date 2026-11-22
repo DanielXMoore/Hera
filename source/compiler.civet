@@ -1,6 +1,17 @@
 // Compile a rules json to typescript
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
+{ SourceMap, base64Encode, type SourceMapEntry } from ./sourcemap.civet
+
+export type EmbeddedTranspileResult =
+  | string
+  | {
+      code: string
+      sourceMap?: {
+        lines?: SourceMapEntry[][]
+        data?: { lines?: SourceMapEntry[][] }
+      }
+    }
 
 export type CompilerOptions = {
   filename?: string
@@ -19,11 +30,33 @@ export type CompilerOptions = {
    * any handler bodies.
    */
   tokenize?: boolean
+  /**
+   * Optional transpiler for embedded user code (fenced code blocks, handler bodies,
+   * and dynamic regex expressions). When provided, Hera batches only the embedded
+   * user code into a single virtual module, invokes `transpileEmbedded` once, and
+   * splices the compiled JS/TS chunks directly into the generated parser — avoiding
+   * re-parsing Hera's generated JS scaffolding through a downstream compiler (e.g. Civet).
+   */
+  transpileEmbedded?: (
+    source: string
+    upstreamSourceMap?: SourceMap
+  ) => EmbeddedTranspileResult
+}
+
+type EmbeddedHandlerSpec = {
+  handler: { $loc: any, f: string, t?: string, inline?: boolean }
+  parameters: string[]
+}
+
+type CompiledChunk = {
+  code: string
+  sourceMapLines?: SourceMapEntry[][] | undefined
 }
 
 strDefs: string[] := []
 reDefs: string[] := []
 dynamicReDefs: RegExpPart[][] := []
+embeddedHandlers: EmbeddedHandlerSpec[] := []
 
 /**
 Return the `${prefix}${index}` identifier for `value`, adding it to `defs` on
@@ -268,7 +301,11 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   // newline so the grammar's relative nesting is preserved inside the IIFE.
   handlerText := if handler.inline then handler.f.replace(/\n/g, `\n${bodyIndent}`) else handler.f
   handlerToken := { $loc: handler.$loc, token: handlerText }
-  handlerBody := if handler.inline
+  handlerBody := if options.transpileEmbedded
+    id := embeddedHandlers.length
+    embeddedHandlers.push { handler, parameters }
+    { embeddedHandler: id }
+  else if handler.inline
     [`${bodyIndent}return `, handlerToken]
   else
     handlerToken
@@ -292,7 +329,7 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   ]
 
 conditionalExpression := (options: CompilerOptions, condition: string, consequent: string, alternate: string) =>
-  if options.language is 'civet'
+  if options.language is 'civet' and not options.transpileEmbedded
     `if ${condition} then ${consequent} else ${alternate}`
   else
     `${condition} ? ${consequent} : ${alternate}`
@@ -604,7 +641,112 @@ defaultOptions: CompilerOptions :=
   types: false
   libPath: "@danielx/hera/lib"
 
-{ SourceMap, base64Encode } from ./sourcemap.civet
+/**
+Batch-transpile only the embedded user code (fenced code blocks, handler bodies,
+and dynamic regex expressions) via `options.transpileEmbedded`, returning the
+compiled code block, per-handler compiled bodies (with optional composed
+sourcemap lines), and per-expression compiled dynamic regexes.
+*/
+transpileEmbeddedCode := (
+  options: CompilerOptions
+  codeBlocks: ASTNode[]
+  handlers: EmbeddedHandlerSpec[]
+  dynamicExprs: string[]
+): {
+  codeBlock: CompiledChunk
+  handlers: CompiledChunk[]
+  dynamicExprs: string[]
+} ->
+  wantMap := Boolean (options.inlineMap or options.sourceMap)
+  let virtualSM: SourceMap | undefined
+  virtualGenOpts: GenerateOptions := {}
+  if wantMap
+    virtualSM = new SourceMap(options.source!, options.filename!)
+    virtualGenOpts.updateSourceMap = virtualSM.updateSourceMap.bind(virtualSM)
+
+  virtualNodes: ASTNode[] := []
+  if codeBlocks.length
+    virtualNodes.push codeBlocks, "\n"
+  virtualNodes.push "function __hera_code_end__() {}\n"
+
+  for { handler, parameters }, i of handlers
+    params := parameters.join(", ")
+    if handler.inline
+      handlerText := handler.f.replace(/\n/g, "\n    ")
+      virtualNodes.push
+        `function __hera_h_${i}__(${params}) {\n    return `
+        { $loc: handler.$loc, token: handlerText }
+        "\n}\n"
+    else
+      virtualNodes.push
+        `function __hera_h_${i}__(${params}) {\n`
+        { $loc: handler.$loc, token: handler.f }
+        "\n}\n"
+
+  for expr, j of dynamicExprs
+    virtualNodes.push `function __hera_rd_${j}__() {\n  return ${expr}\n}\n`
+
+  virtualSrc := generate virtualNodes, virtualGenOpts
+  res := options.transpileEmbedded!(virtualSrc, virtualSM)
+  compiledCode := if typeof res is "string" then res else res.code
+  compiledMapLines := if typeof res is "string"
+    undefined
+  else
+    res.sourceMap?.lines ?? res.sourceMap?.data?.lines
+
+  lines := compiledCode.split("\n")
+  markers: { kind: "code_end" | "h" | "rd", id: number, line: number }[] := []
+  for line, idx of lines
+    if /^function __hera_code_end__\(/.test line
+      markers.push { kind: "code_end", id: 0, line: idx }
+    else if m := /^function __hera_(h|rd)_(\d+)__\(/.exec line
+      markers.push { kind: m[1] as "h" | "rd", id: Number(m[2]), line: idx }
+
+  // Slice lines before `__hera_code_end__` as the compiled fenced code block
+  // (including any top-level runtime helpers hoisted by the transpiler).
+  codeEndMarker := markers.find (m) -> m.kind is "code_end"
+  unless codeEndMarker
+    throw new Error "transpileEmbedded output is missing __hera_code_end__ marker"
+  codeEndIdx := codeEndMarker.line
+  codeBlockLines := lines.slice(0, codeEndIdx)
+  codeBlock: CompiledChunk := {
+    code: codeBlockLines.join("\n")
+    sourceMapLines: compiledMapLines?.slice(0, codeEndIdx)
+  }
+
+  compiledHandlers: CompiledChunk[] := Array(handlers.length)
+  compiledDynamicExprs: string[] := Array(dynamicExprs.length)
+
+  for m, k of markers
+    continue if m.kind is "code_end"
+    nextLine := if k + 1 < markers.length then markers[k + 1].line else lines.length
+    endLine .= nextLine - 1
+    while endLine > m.line and lines[endLine].trim() is ""
+      endLine--
+    let bodyLines: string[]
+    let bodyMapLines: SourceMapEntry[][] | undefined
+    if endLine is m.line
+      lineText := lines[m.line]
+      openIdx := lineText.indexOf("{")
+      closeIdx := lineText.lastIndexOf("}")
+      bodyLines = [lineText.slice(openIdx + 1, closeIdx).trim()]
+    else
+      bodyLines = lines.slice(m.line + 1, endLine)
+      bodyMapLines = compiledMapLines?.slice(m.line + 1, endLine)
+    if m.kind is "h"
+      compiledHandlers[m.id] = {
+        code: bodyLines.join("\n")
+        sourceMapLines: bodyMapLines
+      }
+    else
+      bodyStr := bodyLines.join("\n").trim()
+      retMatch := /^return\s+([\s\S]*?);?$/.exec bodyStr
+      if retMatch
+        compiledDynamicExprs[m.id] = retMatch[1].trim()
+      else
+        compiledDynamicExprs[m.id] = `(() => {\n${bodyStr}\n})()`
+
+  { codeBlock, handlers: compiledHandlers, dynamicExprs: compiledDynamicExprs }
 
 export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: SourceMap }
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
@@ -614,9 +756,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   strDefs.length = 0
   reDefs.length = 0
   dynamicReDefs.length = 0
+  embeddedHandlers.length = 0
 
   { language, module } := options
-  types := options.types || language === 'typescript' || language === 'civet'
+  types := if maybeOptions?.types?
+    maybeOptions.types
+  else
+    language is 'typescript' or (language is 'civet' and not options.transpileEmbedded)
   options.types = types
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
@@ -625,13 +771,51 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
 
+  // User code blocks (the ``` blocks in a .hera file) are appended verbatim
+  // for handler-side imports/types.  In tokenize mode handlers are never
+  // invoked, so these blocks are dead weight — and can carry TS-only syntax
+  // (`import type ...`) that breaks plain-JS execution of the bundled
+  // tokenize parser.  Skip them.
+  rawCodeBlocks: ASTNode[] := if options.tokenize then ([] as ASTNode[]) else
+    //@ts-ignore
+    (rules[Symbol.for("code")] ?? []) as ASTNode[]
+
+  if options.inlineMap or options.sourceMap
+    /* c8 ignore next */
+    unless options.source
+      /* c8 ignore next */
+      throw new Error "sourceMap requires source"
+
+  // When `transpileEmbedded` is provided, batch-transpile only embedded user
+  // code (fenced blocks, handlers, dynamic regex expressions) in a single call.
+  let compiledHandlers: CompiledChunk[] | undefined
+  let codeBlocks: ASTNode = rawCodeBlocks
+  let resolvedDynamicReDefs = dynamicReDefs
+
+  if options.transpileEmbedded
+    dynamicExprs: string[] := []
+    for r of dynamicReDefs
+      for part of r
+        if not (part <? "string")
+          dynamicExprs.push part.expression
+
+    if rawCodeBlocks.length > 0 or embeddedHandlers.length > 0 or dynamicExprs.length > 0
+      embedded := transpileEmbeddedCode(options, rawCodeBlocks, embeddedHandlers, dynamicExprs)
+      compiledHandlers = embedded.handlers
+      codeBlocks = { compiled: embedded.codeBlock }
+      if dynamicExprs.length > 0
+        let exprIdx = 0
+        resolvedDynamicReDefs = dynamicReDefs.map (r) ->
+          r.map (part) ->
+            if part <? "string" then part else { ...part, expression: embedded.dynamicExprs[exprIdx++] }
+
   strDefSource := strDefs.map (str, i) ->
     `const $L${i} = $L("${str}");\n`
 
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
 
-  dynamicReDefSource := dynamicReDefs.map (r, i) =>
+  dynamicReDefSource := resolvedDynamicReDefs.map (r, i) =>
     rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
     ctxType := types ? ": ParserContext" : ""
     stateType := types ? ": ParseState" : ""
@@ -669,17 +853,15 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       `})${cacheType};\n`
     ].join("")
 
-  genOpts: GenerateOptions := {}
+  genOpts: GenerateOptions := {
+    compiledHandlers
+  }
 
   let sm: SourceMap | undefined
   if options.inlineMap or options.sourceMap
-    /* c8 ignore next */
-    unless options.source
-      /* c8 ignore next */
-      throw new Error "sourceMap requires source"
-
-    sm = new SourceMap(options.source, options.filename!)
+    sm = new SourceMap(options.source!, options.filename!)
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
+    genOpts.appendMapped = sm.appendMapped.bind(sm)
 
   head := if types
     if language is 'civet' and !module
@@ -692,14 +874,6 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   tail := parserTail types
   exp := (module ? mjsExport : cjsExport)
 
-  // User code blocks (the ``` blocks in a .hera file) are appended verbatim
-  // for handler-side imports/types.  In tokenize mode handlers are never
-  // invoked, so these blocks are dead weight — and can carry TS-only syntax
-  // (`import type ...`) that breaks plain-JS execution of the bundled
-  // tokenize parser.  Skip them.
-  codeBlocks := if options.tokenize then [] else
-    //@ts-ignore
-    rules[Symbol.for("code")]
   code := generate [
     head
     `\n\nconst grammar = ${ruleNameBlock ruleNames};\n\n`
@@ -754,10 +928,25 @@ reTupleType := (types: boolean?, reSource: string) ->
     .join("|")
     |> `<[${&}]>`
 
-type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] }
+type ASTNode =
+  | string
+  | ASTNode[]
+  | { $loc: { pos: number }, token: string, offset?: number }
+  | { embeddedHandler: number }
+  | { compiled: CompiledChunk }
+  | { children: ASTNode[] }
 type GenerateOptions = {
   updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number) => void
+  appendMapped?: (outputStr: string, mappedLines: SourceMapEntry[][]) => void
+  compiledHandlers?: CompiledChunk[] | undefined
 }
+emitCompiledChunk := (chunk: CompiledChunk, options: GenerateOptions): string ->
+  if chunk.sourceMapLines and options.appendMapped
+    options.appendMapped chunk.code, chunk.sourceMapLines
+  else
+    options.updateSourceMap? chunk.code
+  chunk.code
+
 generate := (node: ASTNode, options: GenerateOptions): string ->
   if typeof node is "string"
     // increment output line/column
@@ -775,6 +964,10 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
       {token, $loc, offset} := node
       options.updateSourceMap?(token, $loc.pos, offset)
       return token
+    if "embeddedHandler" in node
+      return emitCompiledChunk options.compiledHandlers![node.embeddedHandler], options
+    if "compiled" in node
+      return emitCompiledChunk node.compiled, options
     /* c8 ignore next */
     return generate node.children, options
   /* c8 ignore next */

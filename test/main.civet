@@ -3,6 +3,8 @@ typescript from typescript
 { readFile } from ./helper.civet
 hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../source/main.civet
 { transpileTsToJs } from ../source/register/tsc/transpile.civet
+{ SourceMap } from ../source/sourcemap.civet
+civet from @danielx/civet
 
 describe "Hera", ->
   it "should do math example", ->
@@ -1712,3 +1714,250 @@ describe "Hera", ->
       assert.match result, /\$\$value = \$\$r\.value/
       assert.match result, /\$\$value = \$\$r\.value;[\s\S]*\}\)\(\$\$value, \$\$value\)/m
       assert.match result, /void \$0, \$1;/
+
+  describe "transpileEmbedded", ->
+    civetJsTranspiler := (src: string, upstreamSourceMap?: SourceMap) ->
+      civet.compile src, {
+        sync: true
+        js: true
+        filename: "test.hera"
+        ...(upstreamSourceMap and { sourceMap: true, upstreamSourceMap })
+      } as any
+
+    it "should batch-transpile Civet code blocks, handlers, inline handlers, $skip, and dynamic regexes in a single call", ->
+      grammar := """
+        ```
+        helper := (s: string) -> s.toUpperCase()
+        prefix := "x"
+        flag := true
+        ```
+
+        Start
+          SkipCheck
+          DynCheck
+          BlockCheck
+          InlineCheck
+          MultiInlineCheck
+
+        SkipCheck
+          "skip" ->
+            $skip
+
+        DynCheck
+          /// p-\${prefix}-\${if flag then "y" else "z"} /// ->
+            helper $0
+
+        BlockCheck
+          "b" /\\d+/:num ->
+            n := Number(num)
+            n * 2
+
+        InlineCheck
+          "i" -> helper "inline"
+
+        MultiInlineCheck
+          "m" -> {
+            kind: "multi"
+            val: helper $1
+          }
+      """
+
+      calls .= 0
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) ->
+          calls++
+          civetJsTranspiler src, upstreamSM
+      }
+
+      assert.equal calls, 1
+      // Scaffolding must use standard JS ternary (not Civet `if ... then ... else ...`)
+      assert.doesNotMatch js, /\bif \(.*\) then\b/
+      assert.match js, /\(?\$\$m\)? !== SKIP \?/
+
+      parser := execMod(js) as any
+      assert.throws -> parser.parse("skip")
+      assert.equal parser.parse("p-x-y"), "P-X-Y"
+      assert.equal parser.parse("b21"), 42
+      assert.equal parser.parse("i"), "INLINE"
+      assert.deepEqual parser.parse("m"), { kind: "multi", val: "M" }
+
+    it "should support explicit types: true with transpileEmbedded", ->
+      grammar := """
+        Rule :: string
+          "a" ->
+            x: string := $1
+            x
+      """
+      ts := compile grammar, {
+        language: 'civet'
+        types: true
+        transpileEmbedded: (src) ->
+          civet.compile(src, { sync: true }) as string
+      }
+      assert.match ts, /: MaybeResult<string>/
+      assert.match ts, /const x: string = \$1/
+
+    it "should skip calling transpileEmbedded when grammar has no embedded user code", ->
+      grammar := """
+        Rule
+          "a" "b"
+      """
+      calls .= 0
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) ->
+          calls++
+          src
+      }
+      assert.equal calls, 0
+      parser := execMod(js) as any
+      assert.deepEqual parser.parse("ab"), ["a", "b"]
+
+      // Also works with hand-crafted HeraRules lacking Symbol.for("code")
+      handCrafted := compile { Rule: ["L", "a"] }, {
+        transpileEmbedded: (src) ->
+          calls++
+          src
+      }
+      assert.equal calls, 0
+      assert.equal (execMod(handCrafted) as any).parse("a"), "a"
+
+    it "should handle grammar with only a fenced code block and no handlers", ->
+      grammar := """
+        ```
+        exports.answer = 42
+        ```
+        Rule
+          "a"
+      """
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) -> civetJsTranspiler src
+      }
+      mod := execMod(js) as any
+      assert.equal mod.answer, 42
+      assert.equal mod.parse("a"), "a"
+
+    it "should handle single-line stub output, object without sourceMap, and data.lines sourceMap", ->
+      grammar := """
+        Rule
+          "a" -> $1
+      """
+      // Plain string with sourceMap: true (falls back to unmapped updateSourceMap)
+      plainRes := compile parse(grammar), {
+        source: grammar
+        filename: "plain.hera"
+        sourceMap: true
+        transpileEmbedded: (src) -> src
+      }
+      assert.equal (execMod(plainRes.code) as any).parse("a"), "a"
+
+      // Object without sourceMap + single-line stub output + trailing blank lines
+      objRes := compile grammar, {
+        transpileEmbedded: (_src) ->
+          code: "function __hera_code_end__() {}\nfunction __hera_h_0__($1) { return $1.toUpperCase() }\n\n"
+      }
+      assert.equal (execMod(objRes) as any).parse("a"), "A"
+
+      // Dynamic regex whose transpiled stub contains multiple statements (IIFE fallback)
+      multiStmtRd := compile """
+        Rule
+          /// \${val} /// -> $0
+      """, {
+        transpileEmbedded: (_src) ->
+          """
+          function __hera_code_end__() {}
+          function __hera_h_0__($0) {
+            return $0
+          }
+          function __hera_rd_0__() {
+            const pat = "ok";
+            return pat;
+          }
+          """
+      }
+      assert.equal (execMod(multiStmtRd) as any).parse("ok"), "ok"
+
+      // Object with sourceMap.data.lines
+      dataLinesRes := compile parse(grammar), {
+        source: grammar
+        filename: "data-lines.hera"
+        sourceMap: true
+        transpileEmbedded: (src, upstreamSM) ->
+          compiled := civetJsTranspiler src, upstreamSM
+          { code: compiled.code, sourceMap: { data: { lines: compiled.sourceMap.lines } } }
+      }
+      assert.equal (execMod(dataLinesRes.code) as any).parse("a"), "a"
+      assert dataLinesRes.sourceMap.lines.some (line) ->
+        line.some (entry) -> entry.length is 4 and entry[2] is 1
+
+    it "should throw when transpileEmbedded output is missing __hera_code_end__ marker", ->
+      grammar := """
+        Rule
+          "a" -> $1
+      """
+      assert.throws
+        -> compile grammar, { transpileEmbedded: -> "/* stripped */" }
+        /missing __hera_code_end__ marker/
+
+    it "should compose accurate source maps back to original .hera lines", ->
+      grammar := """
+        ```
+        tag := (s) -> `[${s}]`
+        ```
+
+        Rule
+          "a" ->
+            val := tag $1
+            val
+      """
+      { code, sourceMap } := compile parse(grammar), {
+        source: grammar
+        filename: "mapped.hera"
+        language: 'civet'
+        sourceMap: true
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+
+      parser := execMod(code) as any
+      assert.equal parser.parse("a"), "[a]"
+
+      // Find the line in generated output containing `const val = tag($1)`
+      outLines := code.split "\n"
+      valLineIdx := outLines.findIndex (l) -> l.includes "const val = tag($1)"
+      assert valLineIdx >= 0, "expected compiled handler line"
+      // Original `    val := tag $1` is at 0-based line 6 in `grammar`
+      entries := sourceMap.lines[valLineIdx]
+      assert entries.some (e) -> e.length is 4 and e[2] is 6
+
+      // Also verify inlineMap embeds valid base64 source map
+      inlineCode := compile grammar, {
+        filename: "mapped.hera"
+        language: 'civet'
+        inlineMap: true
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+      assert.match inlineCode, /sourceMappingURL=data:application\/json;base64,/
+
+    it "should splice mid-line and empty entries cleanly in SourceMap.appendMapped", ->
+      sm := new SourceMap("line0\nline1\n", "test.hera")
+      sm.updateSourceMap "prefix"
+      // Mid-line append with 4-tuple first entry, followed by 1-tuple line, followed by empty line
+      sm.appendMapped "abc\ndef\nghi", [
+        [[0, 0, 1, 2], [2, 0, 1, 4]]
+        [[1]]
+        []
+      ]
+      // First line had colOffset=6 ("prefix"), so first entry colDelta becomes 6
+      assert.deepEqual sm.lines[0], [[6, 0, 1, 2], [2, 0, 1, 4]]
+      // Second line started at colOffset=0
+      assert.deepEqual sm.lines[1], [[1]]
+      // Third line had no mapped entries, colOffset advanced by "ghi".length
+      assert.deepEqual sm.lines[2], []
+      assert.equal sm.colOffset, 3
+
+      // Mid-line append whose first entry is a 1-tuple
+      sm.appendMapped "jk", [[[1]]]
+      assert.deepEqual sm.lines[2], [[4]]
+      assert.equal sm.colOffset, 1

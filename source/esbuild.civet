@@ -26,28 +26,30 @@ export default function heraPlugin({ loader, ...heraOptions }: HeraPluginOptions
   setup: (build) =>
     build.onLoad { filter: /.\.hera$/ }, ({ path }) =>
       filename := relative(process.cwd(), path)
+      compileOptions: CompilerOptions := { ...heraOptions, filename }
 
-      compiled := readFile(path, 'utf8')
-        |> await
-        |> compile ., { ...heraOptions, filename }
-
-      let contents = compiled
-
-      if heraOptions.language is 'civet'
+      if heraOptions.language is 'civet' and not heraOptions.transpileEmbedded
         let civet: any
         try
           civet = await runtime.loadCivet()
         catch
           throw civetNotInstalledError()
 
-        // No { js: true } here — Civet outputs TypeScript, then esbuild strips
-        // types with loader:'ts'. This preserves advanced TS features (const enum
-        // etc.) that Civet can't compile to JS itself. The Node loader path uses
-        // { js: true, sync: true } because require.extensions must be synchronous
-        // and there is no esbuild in the chain to strip types.
-        result := await civet.compile(compiled)
-        /* c8 ignore next */
-        contents = if typeof result is 'string' then result else result.code
+        // Batch-transpile only the embedded Civet user code (fenced blocks,
+        // handler bodies, dynamic regex expressions) to TypeScript, then let
+        // esbuild strip types with loader:'ts'.  This preserves advanced TS
+        // features (const enum etc.) that Civet can't compile to JS itself,
+        // while avoiding re-parsing Hera's generated JS scaffolding through Civet.
+        compileOptions.transpileEmbedded = (src, upstreamSourceMap) =>
+          civet.compile(src, {
+            sync: true
+            filename
+            ...(upstreamSourceMap and { sourceMap: true, upstreamSourceMap })
+          })
+
+      contents := readFile(path, 'utf8')
+        |> await
+        |> compile ., compileOptions
 
       resolvedLoader := loader ?? defaultLoaderForLanguage(heraOptions.language)
 

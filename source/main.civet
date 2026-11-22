@@ -6,12 +6,17 @@ import type {
 } from ./hera-types.civet
 import type { Loc, Token } from ./machine.civet
 
-export type HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
+import type {
+  CompilerOptions,
+  EmbeddedTranspileResult,
+} from ./compiler.civet
+
+export type CompilerOptions, EmbeddedTranspileResult, HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
 
 import { createRequire } from "module"
 
 parser from ./hera.hera
-{ compile as heraCompile, type CompilerOptions } from ./compiler.civet
+{ compile as heraCompile } from ./compiler.civet
 { grammarToEBNF } from ./util.civet
 
 require := createRequire(import.meta.url)

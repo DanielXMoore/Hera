@@ -1,5 +1,7 @@
 { createRequire } from 'module'
 type { CompileOptions } from '@danielx/civet'
+type { EmbeddedTranspileResult } from '../../compiler.civet'
+type { SourceMap } from '../../sourcemap.civet'
 
 // createRequire needs a base path for peer dep resolution.
 // process.cwd() is available in both ESM (tests) and CJS (production),
@@ -38,3 +40,27 @@ export compileCivetToJs := (src: string, filename?: string, civetOptions?: Compi
   else
     // @ts-expect-error TODO: Figure out why it thinks result is a promise and not a string or object even though sync: true
     result.code
+
+/**
+ * Compile an embedded Civet batch to JavaScript (with optional composed source map)
+ * for `CompilerOptions.transpileEmbedded`.
+ */
+export compileCivetEmbedded := (
+  src: string
+  filename?: string
+  civetOptions?: CompileOptions
+  upstreamSourceMap?: SourceMap
+): EmbeddedTranspileResult ->
+  civet :=
+    try
+      runtime.loadCivet()
+    catch
+      throw civetNotInstalledError()
+  options := {
+    ...civetOptions
+    ...(filename and { filename })
+    js: true
+    sync: true
+    ...(upstreamSourceMap and { sourceMap: true, upstreamSourceMap })
+  }
+  civet.compile(src, options) as unknown as EmbeddedTranspileResult
