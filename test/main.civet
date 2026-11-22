@@ -2165,7 +2165,7 @@ describe "Hera", ->
       assert.doesNotMatch tsCode, /\(function\(x:/
       assert.match tsCode, /\(function\(\$0:/
       civetCode := compile(parse(grammar), { language: "civet" })
-      assert.match civetCode, /let x: typeof \$\$v = \$\$v;\n  \/\/ comment/
+      assert.match civetCode, /let x: typeof \$\$v = \$\$v;\n  \{\n    \/\/ comment/
       // Backtick and `arguments` handlers stay wrapped in IIFE
       assert.match civetCode, /\(function\(\)/
       assert.match tsCode, /\(function\(\)/
@@ -2205,13 +2205,38 @@ describe "Hera", ->
       assert.doesNotMatch mixedCode, /\(function\(/
       assert.deepEqual (execMod(mixedCode) as any).parse("a"), { url: 'http://a"b;c' }
 
-      // Named parameters shadowing matcher identifiers (e.g. `undefined`) fall back to IIFE to avoid TDZ
+      // Regex literals (including escaped slashes and [//] char classes) and division stay intact
+      regexCode := compile(parse("""
+        Root
+          "/" -> /\\//.test($1)
+        CharClass
+          "/;" -> /[//];/.test($1); // comment
+        Div
+          "a" -> (6 + 0) / [3][0] // division after ) and ]
+        AfterKw
+          "a" -> typeof /\\//;
+      """))
+      assert.doesNotMatch regexCode, /\(function\(/
+      regexMod := execMod(regexCode) as any
+      assert.equal regexMod.parse("/"), true
+      assert.equal regexMod.parse("/;", { startRule: "CharClass" }), true
+      assert.equal regexMod.parse("a", { startRule: "Div" }), 2
+      assert.equal regexMod.parse("a", { startRule: "AfterKw" }), "object"
+
+      // Named parameters and block-local declarations cannot shadow matcher identifiers (e.g. `undefined`)
       shadowParser := generate """
         Root
           "a"?:undefined -> undefined
+        BlockShadow
+          "a"? "b" ->
+            const undefined = 1
+            return [$1, undefined]
+          "c"
       """
       assert.equal shadowParser.parse(""), undefined
       assert.equal shadowParser.parse("a"), "a"
+      assert.deepEqual shadowParser.parse("b", { startRule: "BlockShadow" }), [undefined, 1]
+      assert.deepEqual shadowParser.parse("ab", { startRule: "BlockShadow" }), ["a", 1]
 
       // Multiline inline template literals keep IIFE indentation (exact whitespace)
       tplGrammar := """

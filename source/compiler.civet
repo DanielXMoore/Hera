@@ -1268,7 +1268,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
 
   if canInlineExpr
     emitHandlerParams()
-    handlerText := stripInlineTrailing(h.f).replace(/\n/g, "\n  ")
+    handlerText := h.f.replace(/\n/g, "\n  ")
     if not wrapEvent
       body.push "  return "
       body.push { $loc: h.$loc, token: handlerText }
@@ -1283,7 +1283,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       body.push `  return $$m${retCast};`
   else if canInlineBlock
     emitHandlerParams()
-    body.push { $loc: h.$loc, token: h.f.replace(/^  /gm, "") }
+    body.push "  {\n"
+    body.push { $loc: h.$loc, token: h.f }
+    body.push "\n  }"
   else
     iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
     body.push "  const $$m = "
@@ -1309,37 +1311,6 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   if types and not body.some((s) -> typeof s is "string" and s.includes "$$ctx")
     body.unshift "  void $$ctx;\n"
   { helpers, body, inlined: canInlineExpr or canInlineBlock }
-
-// Drop trailing semicolons and trailing comments (outside quoted strings)
-// so inline handlers like `1;`, `1 // comment`, or `1; // comment` can be
-// inlined directly inside `(...)` without producing invalid JS.
-stripInlineTrailing := (src: string): string ->
-  i .= 0
-  n := src.length
-  lastCodeEnd .= 0
-  while i < n
-    ch := src[i]
-    if /['"`]/.test ch
-      i++
-      while i < n and src[i] is not ch
-        i++ if src[i] is "\\"
-        i++
-      i++
-      lastCodeEnd = i
-    else if ch is "/" and src[i + 1] is "/"
-      nl := src.indexOf "\n", i + 2
-      break if nl < 0
-      i = nl + 1
-    else if ch is "/" and src[i + 1] is "*"
-      end := src.indexOf "*/", i + 2
-      /* c8 ignore next -- unterminated block comment */
-      break if end < 0
-      i = end + 2
-    else if /[\s;]/.test ch
-      i++
-    else
-      lastCodeEnd = ++i
-  src.slice 0, lastCodeEnd
 
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
   { types } := options
