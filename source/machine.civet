@@ -276,6 +276,10 @@ export function $la(re: RegExp): (input: string, pos: number) => boolean {
 const ccSingleRe = /^(\[(?:\\.|[^\]\\])+\]|\\s|\\d|\\w|\.)([+*?])?$/
 const ccIdentRe = /^(\[(?:\\.|[^\]\\])+\])(\[(?:\\.|[^\]\\])+\])([*+])(?:\(\?!(\[(?:\\.|[^\]\\])+\])\))?$/
 
+export function isCharClassRe(source: string): boolean {
+  return ccSingleRe.test(source) || ccIdentRe.test(source)
+}
+
 function isAsciiOnlyAtom(atom: string): boolean {
   if (atom === "." || atom.startsWith("[^") || atom === "\\s") return false
   if (/\\[sSdDwWpPuUx]/.test(atom)) return false
@@ -304,7 +308,8 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
     ascii := buildAsciiTable(charRe)
     asciiOnly := isAsciiOnlyAtom(atom)
 
-    if quant is "+"
+    if quant is "+" or quant is "*"
+      requireOne := quant is "+"
       if asciiOnly
         return (input: string, pos: number) =>
           p .= pos
@@ -313,7 +318,7 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
             c := input.charCodeAt(p)
             break if c >= 128 or !ascii[c]
             p++
-          if p > pos then p else -1
+          if requireOne and p is pos then -1 else p
       return (input: string, pos: number) =>
         p .= pos
         len := input.length
@@ -327,60 +332,22 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
             m := charRe.exec(input)
             break if !m
             p += m[0].length
-        if p > pos then p else -1
+        if requireOne and p is pos then -1 else p
 
-    if quant is "*"
-      if asciiOnly
-        return (input: string, pos: number) =>
-          p .= pos
-          len := input.length
-          while p < len
-            c := input.charCodeAt(p)
-            break if c >= 128 or !ascii[c]
-            p++
-          p
-      return (input: string, pos: number) =>
-        p .= pos
-        len := input.length
-        while p < len
-          c := input.charCodeAt(p)
-          if c < 128
-            break if !ascii[c]
-            p++
-          else
-            charRe.lastIndex = p
-            m := charRe.exec(input)
-            break if !m
-            p += m[0].length
-        p
-
-    if quant is "?"
-      if asciiOnly
-        return (input: string, pos: number) =>
-          c := input.charCodeAt(pos)
-          if c < 128 and ascii[c] then pos + 1 else pos
-      return (input: string, pos: number) =>
-        c := input.charCodeAt(pos)
-        if c < 128
-          return if ascii[c] then pos + 1 else pos
-        return pos if c !== c
-        charRe.lastIndex = pos
-        m := charRe.exec(input)
-        if m then pos + m[0].length else pos
-
-    // Single character (no quantifier)
+    // Single character (`""`) or optional single character (`"?"`)
+    optional := quant is "?"
     if asciiOnly
       return (input: string, pos: number) =>
         c := input.charCodeAt(pos)
-        if c < 128 and ascii[c] then pos + 1 else -1
+        if c < 128 and ascii[c] then pos + 1 else (if optional then pos else -1)
     return (input: string, pos: number) =>
       c := input.charCodeAt(pos)
       if c < 128
-        return if ascii[c] then pos + 1 else -1
-      return -1 if c !== c
+        return if ascii[c] then pos + 1 else (if optional then pos else -1)
+      return (if optional then pos else -1) if c !== c
       charRe.lastIndex = pos
       m := charRe.exec(input)
-      if m then pos + m[0].length else -1
+      if m then pos + m[0].length else (if optional then pos else -1)
 
   m2 := ccIdentRe.exec(source)
   if m2 and isAsciiOnlyAtom(m2[1]) and isAsciiOnlyAtom(m2[2])
@@ -388,29 +355,9 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
     ascii2 := buildAsciiTable(new RegExp(m2[2], "suy"))
     requireCont := m2[3] is "+"
     stopAtom := m2[4]
-    if stopAtom
-      stopRe := new RegExp(stopAtom, "suy")
-      asciiStop := buildAsciiTable(stopRe)
-      stopAsciiOnly := isAsciiOnlyAtom(stopAtom)
-      return (input: string, pos: number) =>
-        len := input.length
-        return -1 if pos >= len
-        c0 := input.charCodeAt(pos)
-        return -1 if c0 >= 128 or !ascii1[c0]
-        p .= pos + 1
-        while p < len
-          c := input.charCodeAt(p)
-          break if c >= 128 or !ascii2[c]
-          p++
-        return -1 if requireCont and p is pos + 1
-        if p < len
-          cs := input.charCodeAt(p)
-          if cs < 128
-            return -1 if asciiStop[cs]
-          else if !stopAsciiOnly
-            stopRe.lastIndex = p
-            return -1 if stopRe.test(input)
-        p
+    stopRe := if stopAtom then new RegExp(stopAtom, "suy") else undefined
+    asciiStop := if stopRe then buildAsciiTable(stopRe) else undefined
+    stopAsciiOnly := if stopAtom then isAsciiOnlyAtom(stopAtom) else true
     return (input: string, pos: number) =>
       len := input.length
       return -1 if pos >= len
@@ -422,6 +369,13 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
         break if c >= 128 or !ascii2[c]
         p++
       return -1 if requireCont and p is pos + 1
+      if asciiStop and p < len
+        cs := input.charCodeAt(p)
+        if cs < 128
+          return -1 if asciiStop[cs]
+        else if !stopAsciiOnly
+          stopRe!.lastIndex = p
+          return -1 if stopRe!.test(input)
       p
 
   return (input: string, pos: number) =>

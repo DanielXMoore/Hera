@@ -1,7 +1,7 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
-import { MEMO_SLOTS } from ./machine.civet
+import { isCharClassRe, MEMO_SLOTS } from ./machine.civet
 
 export type MemoTiers = {
   /** Rules that do not depend on `memo.sk` (use stateless `$memoGet0`/`$memoSet0`). */
@@ -49,13 +49,45 @@ export type CompilerOptions = {
   memoTiers?: MemoTiers
 }
 
-let noMemoSet: Set<string> | undefined = undefined
-let memoBaseMap: Map<string, number> = new Map
-let memoStatelessSet: Set<string> | undefined = undefined
-let memoMasks: Record<string, number> | undefined = undefined
-let memoDefaultStateful = false
-let allRules: HeraRules = {}
-let subFnCounter = 0
+type CompileState = {
+  noMemoSet: Set<string> | undefined
+  memoBaseMap: Map<string, number>
+  memoStatelessSet: Set<string> | undefined
+  memoMasks: Record<string, number> | undefined
+  memoDefaultStateful: boolean
+  memoCount: number
+  allRules: HeraRules
+  subFnCounter: number
+  reDefs: string[]
+  laDefs: string[]
+  ccDefs: string[]
+  dynamicReDefs: RegExpPart[][]
+}
+
+createCompileState := (rules: HeraRules, options: CompilerOptions): CompileState ->
+  noMemoSet := if options.noMemo then new Set options.noMemo else undefined
+  memoBaseMap := new Map<string, number>()
+  memoCount .= 0
+  for name of Object.keys(rules)
+    unless noMemoSet?.has name
+      memoBaseMap.set name, memoCount * MEMO_SLOTS
+      memoCount++
+  {
+    noMemoSet
+    memoBaseMap
+    memoStatelessSet: if options.memoTiers?.stateless then new Set options.memoTiers.stateless else undefined
+    memoMasks: options.memoTiers?.masks
+    memoDefaultStateful: Boolean options.memoTiers?.defaultStateful
+    memoCount
+    allRules: rules
+    subFnCounter: 0
+    reDefs: []
+    laDefs: []
+    ccDefs: []
+    dynamicReDefs: []
+  }
+
+let state: CompileState = createCompileState({}, {})
 
 type MemoSpec =
   | { base: number, mode: "stateless" }
@@ -63,19 +95,14 @@ type MemoSpec =
   | { base: number, mode: "masked", mask: number }
 
 getMemoSpec := (name: string): MemoSpec ->
-  base := memoBaseMap.get(name)!
-  if memoStatelessSet?.has name
+  base := state.memoBaseMap.get(name)!
+  if state.memoStatelessSet?.has name
     return { base, mode: "stateless" }
-  if memoMasks and Object.prototype.hasOwnProperty.call(memoMasks, name)
-    return { base, mode: "masked", mask: memoMasks[name] }
-  if memoDefaultStateful
+  if state.memoMasks and Object.prototype.hasOwnProperty.call(state.memoMasks, name)
+    return { base, mode: "masked", mask: state.memoMasks[name] }
+  if state.memoDefaultStateful
     return { base, mode: "full" }
   { base, mode: "stateless" }
-
-reDefs: string[] := []
-laDefs: string[] := []
-ccDefs: string[] := []
-dynamicReDefs: RegExpPart[][] := []
 
 /**
 Return the `${prefix}${index}` identifier for `value`, adding it to `defs` on
@@ -91,22 +118,16 @@ intern := <T>(defs: T[], prefix: string, value: T, key: (v: T) => unknown = (v) 
   `${prefix}${index}`
 
 /** Define a RegExp terminal */
-defineRe := (re: string) -> intern reDefs, "$R", re
+defineRe := (re: string) -> intern state.reDefs, "$R", re
 
 /** Define a pure lookahead RegExp terminal (compiled via `$la(...)`) */
-defineLa := (re: string) -> intern laDefs, "$RL", re
+defineLa := (re: string) -> intern state.laDefs, "$RL", re
 
 /** Define a character-class RegExp terminal (compiled via `$cc(...)`) */
-defineCc := (re: string) -> intern ccDefs, "$RC", re
-
-const charClassSingleRe = /^(\[(?:\\.|[^\]\\])+\]|\\s|\\d|\\w|\.)([+*?])?$/
-const charClassIdentRe = /^(\[(?:\\.|[^\]\\])+\])(\[(?:\\.|[^\]\\])+\])([*+])(?:\(\?!(\[(?:\\.|[^\]\\])+\])\))?$/
-
-isCharClassRe := (source: string): boolean ->
-  charClassSingleRe.test(source) or charClassIdentRe.test(source)
+defineCc := (re: string) -> intern state.ccDefs, "$RC", re
 
 /** Define an interpolated (dynamic) RegExp terminal */
-defineDynamicRe := (parts: RegExpPart[]) -> intern dynamicReDefs, "$RD", parts, JSON.stringify
+defineDynamicRe := (parts: RegExpPart[]) -> intern state.dynamicReDefs, "$RD", parts, JSON.stringify
 
 isIdentifierExpression := (expression: string): boolean =>
   /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
@@ -180,8 +201,8 @@ handlerless single literals/regexes) so production callers skip function calls
 while `$$ctx.allEvents` still dispatches through the named rule.
 */
 getInlineableRule := (name: string, options: CompilerOptions): InlineableRule | undefined ->
-  return undefined if options.tokenize or not noMemoSet?.has name
-  r := allRules[name]
+  return undefined if options.tokenize or not state.noMemoSet?.has name
+  r := state.allRules[name]
   if typeof r is "string"
     return if r is name then undefined else { kind: "alias", target: r }
   if Array.isArray(r) and (r.length is 2 or isTypeOnlyHandler(r))
@@ -254,7 +275,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
     if retType then ` as ${retType.trim()} | typeof FAIL` else " as never"
   else ""
   nameLit := JSON.stringify name
-  if noMemoSet?.has name
+  if state.noMemoSet?.has name
     return ```
   \  if ($$ctx.allEvents && $$ctx.cacheEnter) {
       const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
@@ -297,7 +318,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
 // Emit the inline event/cache exit hook call.
 emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
   nameLit := JSON.stringify name
-  if noMemoSet?.has name
+  if state.noMemoSet?.has name
     return `if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
   spec := getMemoSpec name
   setCall := if spec.mode is "stateless"
@@ -390,7 +411,7 @@ compileSubFn := (ast: HeraAST, ruleName: string, defaultHandler: boolean, option
   if Array.isArray(ast) and typeof ast[0] is "object" and "name" in ast[0]
     return compileSubFn(ast[1], ruleName, defaultHandler, options, helpers)
 
-  fnName := `$$h_${subFnCounter++}`
+  fnName := `$$h_${state.subFnCounter++}`
   let localId = 0
   idGen := (prefix: string) -> `$$${prefix}${localId++}`
 
@@ -448,7 +469,7 @@ compileRecFn := (ast: HeraAST, ruleName: string, options: CompilerOptions, helpe
   { types } := options
   ctxType := types ? ": CursorContext" : ""
   retAnno := types ? ": boolean" : ""
-  fnName := `$$k_${subFnCounter++}`
+  fnName := `$$k_${state.subFnCounter++}`
   let localId = 0
   idGen := (prefix: string) -> `$$${prefix}${localId++}`
 
@@ -1222,13 +1243,16 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     h.f.split("\n").every((l) -> l.length is 0 or l.startsWith "    ")
     (not types or options.language is "civet" or /\breturn\b/.test(h.f))
 
-  if canInlineExpr
+  emitHandlerParams := (declKind: "const" | "let") ->
     for p, i of parameters
       typeAnno := if types then `: ${paramTypes[i]}` else ""
-      body.push `  const ${p}${typeAnno} = ${callArgs[i]};\n`
+      body.push `  ${declKind} ${p}${typeAnno} = ${callArgs[i]};\n`
     voidParameters := parameters.filter (p) => p.startsWith "$"
     if types and voidParameters.length
       body.push `  void ${voidParameters.join(", ")};\n`
+
+  if canInlineExpr
+    emitHandlerParams "const"
     handlerText := h.f.replace(/\n/g, "\n  ")
     if not wrapEvent
       body.push "  return "
@@ -1243,12 +1267,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
       body.push `  return $$m${retCast};`
   else if canInlineBlock
-    for p, i of parameters
-      typeAnno := if types then `: ${paramTypes[i]}` else ""
-      body.push `  let ${p}${typeAnno} = ${callArgs[i]};\n`
-    voidParameters := parameters.filter (p) => p.startsWith "$"
-    if types and voidParameters.length
-      body.push `  void ${voidParameters.join(", ")};\n`
+    emitHandlerParams "let"
     body.push { $loc: h.$loc, token: h.f.replace(/^  /gm, "") }
   else
     iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
@@ -1387,150 +1406,129 @@ export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: SourceMap }
   options := { ...defaultOptions, ...maybeOptions }
-
-  reDefs.length = 0
-  laDefs.length = 0
-  ccDefs.length = 0
-  dynamicReDefs.length = 0
-  subFnCounter = 0
-  allRules = rules
-  noMemoSet = if options.noMemo then new Set options.noMemo else undefined
-  memoStatelessSet = if options.memoTiers?.stateless then new Set options.memoTiers.stateless else undefined
-  memoMasks = options.memoTiers?.masks
-  memoDefaultStateful = Boolean options.memoTiers?.defaultStateful
-
   { language, module } := options
   types := options.types || language === 'typescript' || language === 'civet'
   options.types = types
   /* c8 ignore next */
-  libPath := options.libPath or defaultOptions.libPath
+  libPath := options.libPath or defaultOptions.libPath!
   ruleNames := Object.keys(rules)
 
-  memoBaseMap = new Map
-  memoCount .= 0
-  for name of ruleNames
-    unless noMemoSet?.has name
-      memoBaseMap.set name, memoCount * MEMO_SLOTS
-      memoCount++
+  prevState := state
+  state = createCompileState rules, options
+  try
+    body := ruleNames.flatMap (name) ->
+      [ compileRule(options, name, rules[name]), "\n\n"]
 
-  body := ruleNames.flatMap (name) ->
-    [ compileRule(options, name, rules[name]), "\n\n"]
+    reDefSource := state.reDefs.map (r, i) ->
+      `const $R${i} = /${r or "(?:)"}/suy;\n`
 
-  reDefSource := reDefs.map (r, i) ->
-    `const $R${i} = /${r or "(?:)"}/suy;\n`
+    laDefSource := state.laDefs.map (r, i) ->
+      `const $RL${i} = $la(/${r}/suy);\n`
 
-  laDefSource := laDefs.map (r, i) ->
-    `const $RL${i} = $la(/${r}/suy);\n`
+    ccDefSource := state.ccDefs.map (r, i) ->
+      `const $RC${i} = $cc(/${r}/suy);\n`
 
-  ccDefSource := ccDefs.map (r, i) ->
-    `const $RC${i} = $cc(/${r}/suy);\n`
+    dynamicReDefSource := state.dynamicReDefs.map (r, i) =>
+      if r.every((part) => part <? "string" or part.constant)
+        reDecl := types ? ": RegExp | undefined" : ""
+        retAnno := types ? ": RegExp" : ""
+        return [
+          `let $RD${i}_re${reDecl};\n`
+          `function $RD${i}()${retAnno} {\n`
+          `  if (!$RD${i}_re) {\n`
+          `    const $$source = ${heregexToExpression(r)};\n`
+          `    $RD${i}_re = new RegExp($$source, 'suy');\n`
+          `  }\n`
+          `  return $RD${i}_re;\n`
+          `}\n`
+        ].join("")
 
-  dynamicReDefSource := dynamicReDefs.map (r, i) =>
-    if r.every((part) => part <? "string" or part.constant)
+      constantParts := r.flatMap((part): RegExpExpression[] =>
+        if part <? "string" or not part.constant or isIdentifierExpression(part.expression) then [] else [part]
+      )
+      strDecl := types ? ": string | undefined" : ""
       reDecl := types ? ": RegExp | undefined" : ""
       retAnno := types ? ": RegExp" : ""
-      return [
+      nonNullAssert := types ? "!" : ""
+      constDecls := constantParts.map((_, index) => `let $RD${i}_c${index}${strDecl};\n`).join("")
+      constInits := constantParts.map((part, index) => `  if ($RD${i}_c${index} === undefined) $RD${i}_c${index} = String(${part.expression});\n`).join("")
+      [
+        `let $RD${i}_src${strDecl};\n`
         `let $RD${i}_re${reDecl};\n`
+        constDecls
         `function $RD${i}()${retAnno} {\n`
-        `  if (!$RD${i}_re) {\n`
-        `    const $$source = ${heregexToExpression(r)};\n`
+        constInits
+        `  const $$source = ${heregexToExpression(r, `$RD${i}_c`)};\n`
+        `  if ($$source !== $RD${i}_src) {\n`
+        `    $RD${i}_src = $$source;\n`
         `    $RD${i}_re = new RegExp($$source, 'suy');\n`
         `  }\n`
-        `  return $RD${i}_re;\n`
+        `  return $RD${i}_re${nonNullAssert};\n`
         `}\n`
       ].join("")
 
-    constantParts := r.flatMap((part): RegExpExpression[] =>
-      if part <? "string" or not part.constant or isIdentifierExpression(part.expression) then [] else [part]
-    )
-    strDecl := types ? ": string | undefined" : ""
-    reDecl := types ? ": RegExp | undefined" : ""
-    retAnno := types ? ": RegExp" : ""
-    nonNullAssert := types ? "!" : ""
-    constDecls := constantParts.map((_, index) => `let $RD${i}_c${index}${strDecl};\n`).join("")
-    constInits := constantParts.map((part, index) => `  if ($RD${i}_c${index} === undefined) $RD${i}_c${index} = String(${part.expression});\n`).join("")
-    [
-      `let $RD${i}_src${strDecl};\n`
-      `let $RD${i}_re${reDecl};\n`
-      constDecls
-      `function $RD${i}()${retAnno} {\n`
-      constInits
-      `  const $$source = ${heregexToExpression(r, `$RD${i}_c`)};\n`
-      `  if ($$source !== $RD${i}_src) {\n`
-      `    $RD${i}_src = $$source;\n`
-      `    $RD${i}_re = new RegExp($$source, 'suy');\n`
-      `  }\n`
-      `  return $RD${i}_re${nonNullAssert};\n`
-      `}\n`
-    ].join("")
+    genOpts: GenerateOptions := {}
 
-  genOpts: GenerateOptions := {}
-
-  let sm: SourceMap | undefined
-  if options.inlineMap or options.sourceMap
-    /* c8 ignore next */
-    unless options.source
+    let sm: SourceMap | undefined
+    if options.inlineMap or options.sourceMap
       /* c8 ignore next */
-      throw new Error "sourceMap requires source"
+      unless options.source
+        /* c8 ignore next */
+        throw new Error "sourceMap requires source"
 
-    sm = new SourceMap(options.source, options.filename!)
-    genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
+      sm = new SourceMap(options.source, options.filename!)
+      genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
 
-  head := if types
-    if language is 'civet' and !module
-      cjsHead
-    else
-      tsHead
-  else
-    if module then mjsHead else cjsHead
-  .replace("\"./machine.js\"", JSON.stringify(libPath))
-  tail := parserTail types
-  exp := (module ? mjsExport : cjsExport)
+    head := buildHead types, language, !!module, libPath
+    tail := parserTail types
+    exp := (module ? mjsExport : cjsExport)
 
-  codeBlocks := if options.tokenize then [] else
-    //@ts-ignore
-    rules[Symbol.for("code")]
-  code := generate [
-    head
-    `\n\nconst grammar = ${grammarMapBlock ruleNames};\n\n`
-    `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
-    `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
-    `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
-    `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
-    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
-    `const $mGet = $memoGet; void $mGet;\n`
-    `const $mGet0 = $memoGet0; void $mGet0;\n`
-    `const $mSet = $memoSet; void $mSet;\n`
-    `const $mSet0 = $memoSet0; void $mSet0;\n`
-    `const $memoRuleCount = ${memoCount};\n`
-    `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n\n`
-    reDefSource
-    "\n\n"
-    laDefSource
-    "\n\n"
-    ccDefSource
-    "\n\n"
-    dynamicReDefSource
-    "\n\n"
-    body
-    "\n\n"
-    tail
-    "\n\n"
-    exp
-    "\n\n"
-    compileExports(ruleNames, !!module)
-    "\n\n"
-    codeBlocks
-  ], genOpts
+    codeBlocks := if options.tokenize then [] else
+      //@ts-ignore
+      rules[Symbol.for("code")]
+    code := generate [
+      head
+      `\n\nconst grammar = ${grammarMapBlock ruleNames};\n\n`
+      `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
+      `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
+      `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
+      `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
+      `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+      `const $mGet = $memoGet; void $mGet;\n`
+      `const $mGet0 = $memoGet0; void $mGet0;\n`
+      `const $mSet = $memoSet; void $mSet;\n`
+      `const $mSet0 = $memoSet0; void $mSet0;\n`
+      `const $memoRuleCount = ${state.memoCount};\n`
+      `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n\n`
+      reDefSource
+      "\n\n"
+      laDefSource
+      "\n\n"
+      ccDefSource
+      "\n\n"
+      dynamicReDefSource
+      "\n\n"
+      body
+      "\n\n"
+      tail
+      "\n\n"
+      exp
+      "\n\n"
+      compileExports(ruleNames, !!module)
+      "\n\n"
+      codeBlocks
+    ], genOpts
 
-  if options.inlineMap
-    srcMapJSON := sm!.json(options.filename!)
-    // NOTE: separate comment to prevent this string getting picked up as actual sourceMappingURL in tools
-    return `${code}\n${"//#"} sourceMappingURL=data:application/json;base64,${base64Encode JSON.stringify(srcMapJSON)}\n`
-  else if options.sourceMap
-    return { code, sourceMap: sm! }
+    if options.inlineMap
+      srcMapJSON := sm!.json(options.filename!)
+      // NOTE: separate comment to prevent this string getting picked up as actual sourceMappingURL in tools
+      return `${code}\n${"//#"} sourceMappingURL=data:application/json;base64,${base64Encode JSON.stringify(srcMapJSON)}\n`
+    else if options.sourceMap
+      return { code, sourceMap: sm! }
 
-  return code
+    return code
+  finally
+    state = prevState
 
 isSimple := /^[^.*+?{}()\[\]^\\]*$/
 isSimpleCharacterClass := /^\[[^-^\\]*\]$/
@@ -1578,30 +1576,61 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
   /* c8 ignore next */
   throw new Error "unknown node type"
 
-cjsHead := """
-  const {
-    $adaptEvents,
-    $cc,
-    $isFail,
-    $la,
-    $memoGet,
-    $memoGet0,
-    $memoSet,
-    $memoSet0,
-    $wrap,
-    createMemoCache,
-    FAIL,
-    MISS,
-    ParseError,
-    SKIP,
-    Validator
-  } = require("./machine.js")
+runtimeImports := [
+  "$adaptEvents"
+  "$cc"
+  "$isFail"
+  "$la"
+  "$memoGet"
+  "$memoGet0"
+  "$memoSet"
+  "$memoSet0"
+  "$wrap"
+  "createMemoCache"
+  "FAIL"
+  "MISS"
+  "ParseError"
+  "SKIP"
+  "Validator"
+]
 
-"""
+typeImports := [
+  "CursorContext"
+  "CursorParser"
+  "FailSymbol"
+  "Loc"
+  "MaybeResult"
+  "MemoCache"
+  "MissSymbol"
+  "ParseResult"
+  "Parser"
+  "ParserContext"
+  "ParserOptions"
+  "ParseState"
+  "SkipSymbol"
+  "Unwrap"
+]
+
+buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string): string ->
+  pathLit := JSON.stringify libPath
+  valueList := runtimeImports.map((s) -> `  ${s}`).join(",\n")
+  if types and not (language is "civet" and not module)
+    typeList := typeImports.map((s) -> `  type ${s}`).join(",\n")
+    // Reference all imported types at value-position so TS doesn't flag them as unused.
+    typeUnion := [
+      "CursorContext", "CursorParser<any>", "Loc", "MaybeResult<any>", "MemoCache"
+      "ParseResult<any>", "Parser<any>", "ParserContext", "ParserOptions<any>"
+      "ParseState", "Unwrap<MaybeResult<any>>", "undefined"
+    ].join(" | ")
+    return `import {\n${valueList},\n${typeList},\n} from ${pathLit}\n\nvoid {\n${valueList},\n}\nconst _types: ${typeUnion} = undefined; void _types;\n\n`
+  if not types and module
+    return `import {\n${valueList},\n} from ${pathLit}\n\n`
+  `const {\n${valueList}\n} = require(${pathLit})\n\n`
 
 parserTail := (types: boolean): string ->
   t := (annotation: string) -> types ? annotation : ""
   cast := t " as CursorParser<ParserResult<Grammar[K]>>"
+  failCond := (v: string) -> types ? `$isFail(${v})` : `${v} === $FAIL`
   typeDefs: string[] := types ? [
     "type Grammar = typeof grammar;"
     "type GrammarDefaultRule = typeof grammarDefaultRule;"
@@ -1644,31 +1673,16 @@ parserTail := (types: boolean): string ->
     "    }"
     ""
     "    try {"
-    "      const val = parser(ctx)"
-    `      if (${types ? "$isFail(val)" : "val === $FAIL"}) {`
-    "        if (options.lazyErrors) {"
-    "          reset()"
-    "          ctx.pos = 0"
-    "          ctx.fail = fail"
-    "          if (ctx.memo) ctx.memo.reset()"
-    "          const val2 = parser(ctx)"
-    `          if (${types ? "$isFail(val2)" : "val2 === $FAIL"}) {`
-    `            return validate(input, undefined, { filename: filename })${t " as never"}`
-    "          }"
-    "          return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val2 }, { filename: filename })"
-    "        }"
-    `        return validate(input, undefined, { filename: filename })${t " as never"}`
-    "      }"
-    "      if (ctx.pos !== input.length && options.lazyErrors) {"
+    "      let val = parser(ctx)"
+    `      if (options.lazyErrors && (${failCond "val"} || ctx.pos !== input.length)) {`
     "        reset()"
     "        ctx.pos = 0"
     "        ctx.fail = fail"
     "        if (ctx.memo) ctx.memo.reset()"
-    "        const val2 = parser(ctx)"
-    `        if (${types ? "$isFail(val2)" : "val2 === $FAIL"}) {`
-    `          return validate(input, undefined, { filename: filename })${t " as never"}`
-    "        }"
-    "        return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val2 }, { filename: filename })"
+    "        val = parser(ctx)"
+    "      }"
+    `      if (${failCond "val"}) {`
+    `        return validate(input, undefined, { filename: filename })${t " as never"}`
     "      }"
     "      return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val }, {"
     "        filename: filename"
@@ -1687,81 +1701,6 @@ cjsExport := """
   exports.default = parser
   const parse = exports.parse = parser.parse
   void parse /* make TS ok if we don't use this variable */
-"""
-
-mjsHead := """
-  import {
-    $adaptEvents,
-    $cc,
-    $la,
-    $memoGet,
-    $memoGet0,
-    $memoSet,
-    $memoSet0,
-    $wrap,
-    createMemoCache,
-    FAIL,
-    MISS,
-    ParseError,
-    SKIP,
-    Validator,
-  } from "./machine.js"
-
-"""
-
-tsHead := """
-  import {
-    $adaptEvents,
-    $cc,
-    $isFail,
-    $la,
-    $memoGet,
-    $memoGet0,
-    $memoSet,
-    $memoSet0,
-    $wrap,
-    createMemoCache,
-    FAIL,
-    MISS,
-    ParseError,
-    SKIP,
-    Validator,
-    type CursorContext,
-    type CursorParser,
-    type FailSymbol,
-    type Loc,
-    type MaybeResult,
-    type MemoCache,
-    type MissSymbol,
-    type ParseResult,
-    type Parser,
-    type ParserContext,
-    type ParserOptions,
-    type ParseState,
-    type SkipSymbol,
-    type Unwrap,
-  } from "./machine.js"
-
-  void {
-    $adaptEvents,
-    $cc,
-    $isFail,
-    $la,
-    $memoGet,
-    $memoGet0,
-    $memoSet,
-    $memoSet0,
-    $wrap,
-    createMemoCache,
-    FAIL,
-    MISS,
-    ParseError,
-    SKIP,
-    Validator,
-  }
-  // Reference all imported types at value-position so TS doesn't flag them as unused.
-  const _types: CursorContext | CursorParser<any> | Loc | MaybeResult<any> | MemoCache | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;
-
 """
 
 mjsExport := """
