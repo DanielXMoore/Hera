@@ -583,9 +583,10 @@ export type ParserEvents = {
   cacheExit?: CursorContext["cacheExit"],
 }
 
-export type HeraGrammar = { [key: string]: Parser<any> | CursorParser<any> }
+export type HeraGrammar = { [key: string]: Parser<any> }
+export type CursorGrammar = { [key: string]: CursorParser<any> }
 
-export interface ParserOptions<T extends HeraGrammar> {
+export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T

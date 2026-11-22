@@ -249,6 +249,9 @@ usesIdentifier := (text: string, identifier: string): boolean ->
     identifierREs.set identifier, re
   re.test text
 
+wrapUnionMember := (t: string): string ->
+  if /=>|\bextends\b/.test(t) then `(${t})` else t
+
 // Compute the declared return type of a rule, if any.
 // For top-level choice: union of sub-rule types (only if all are annotated).
 // For single-body: the handler's h.t.
@@ -262,7 +265,7 @@ ruleReturnType := (rule: HeraAST): string | undefined ->
       return arg[2].t if arg.length is 3 and arg[2]
       return undefined
     if subTypes.every((t) -> t?)
-      return [...new Set(subTypes.map((t) -> t!.trim()))].join(" | ")
+      return [...new Set(subTypes.map((t) -> wrapUnionMember t!.trim()))].join(" | ")
     return undefined
   if rule.length is 3 and rule[2]
     return rule[2].t
@@ -272,7 +275,7 @@ ruleReturnType := (rule: HeraAST): string | undefined ->
 emitEventEnter := (options: CompilerOptions, name: string, retType: string | undefined): string ->
   { types } := options
   retAnno := if types
-    if retType then ` as ${retType.trim()} | typeof FAIL` else " as never"
+    if retType then ` as (${retType.trim()}) | typeof FAIL` else " as never"
   else ""
   nameLit := JSON.stringify name
   if state.noMemoSet?.has name
@@ -1243,10 +1246,14 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
 
   // Eliminate handler IIFE wrapper whenever safe:
-  // 1) Inline expression handlers without $skip / arguments (both top-level and choice alts)
+  // 1) Inline expression handlers without $skip / arguments / multiline templates
   // 2) Choice-alternative block handlers (!wrapEvent) without $skip / arguments / var
   //    (and with uniform 4-space indent + no multiline strings)
-  canInlineExpr := Boolean h.inline and not handlerUsesSkip and not usesIdentifier(h.f, "arguments")
+  canInlineExpr := (and)
+    Boolean h.inline
+    not handlerUsesSkip
+    not usesIdentifier(h.f, "arguments")
+    not (h.f.includes("\n") and /[`]|"""|'''/.test(h.f))
   canInlineBlock := (and)
     not h.inline
     not wrapEvent
@@ -1274,9 +1281,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       body.push ";"
     else
       handlerRetAnno := if types and h.t then `: ${h.t.trim()}` else ""
-      body.push `  const $$m${handlerRetAnno} = `
+      body.push `  const $$m${handlerRetAnno} = (`
       body.push { $loc: h.$loc, token: handlerText }
-      body.push ";\n"
+      body.push ");\n"
       body.push `  ${emitExitCall name, "$$m"}\n`
       retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
       body.push `  return $$m${retCast};`
@@ -1317,7 +1324,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
   isTopChoice := not (typeof rule is "string") and rule[0] is "/" and !rule[2]
   retType := ruleReturnType rule
-  cursorRetAnno := if types and retType then `: ${retType.trim()} | typeof FAIL` else ""
+  cursorRetAnno := if types and retType then `: (${retType.trim()}) | typeof FAIL` else ""
   legacyRetAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
 
   exportWrapper :=
@@ -1346,7 +1353,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
     { helpers, body, inlined } := compileRuleBodyInline(options, name, arg, false)
     allHelpers.push ...helpers
     subHandlerType := if inlined and Array.isArray(arg) and arg.length is 3 and arg[2] <? "object" and "f" in arg[2] and arg[2].t then arg[2].t.trim() else undefined
-    subRetAnno := if types and subHandlerType then `: ${subHandlerType} | typeof FAIL` else ""
+    subRetAnno := if types and subHandlerType then `: (${subHandlerType}) | typeof FAIL` else ""
     [
       `function ${subName}($$ctx${ctxType})${subRetAnno} {\n`
       body
@@ -1355,7 +1362,7 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
 
   finalWideDecl := if types
     if retType
-      `: ${retType.trim()} | typeof FAIL`
+      `: (${retType.trim()}) | typeof FAIL`
     else
       altUnion := altNames.map((fn) -> `Exclude<ReturnType<typeof ${fn}>, typeof FAIL>`).join(" | ")
       `: ${altUnion} | typeof FAIL`
@@ -1687,20 +1694,21 @@ parserTail := (types: boolean): string ->
     "    }"
     ""
     "    try {"
-    "      let val = parser(ctx)"
-    `      if (options.lazyErrors && (${failCond "val"} || ctx.pos !== input.length)) {`
+    "      const val = parser(ctx)"
+    "      const endPos = ctx.pos"
+    `      if (options.lazyErrors && (${failCond "val"} || endPos !== input.length)) {`
     "        reset()"
     "        ctx.pos = 0"
     "        ctx.fail = fail"
     "        if (ctx.memo) ctx.memo.reset()"
     "        delete ctx.cacheEnter"
     "        delete ctx.cacheExit"
-    "        val = parser(ctx)"
+    "        parser(ctx)"
     "      }"
     `      if (${failCond "val"}) {`
     `        return validate(input, undefined, { filename: filename })${t " as never"}`
     "      }"
-    "      return validate(input, { loc: { pos: 0, length: ctx.pos }, pos: ctx.pos, value: val }, {"
+    "      return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
     "        filename: filename"
     "      })"
     "    } finally {"

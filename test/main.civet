@@ -243,9 +243,9 @@ describe "Hera", ->
     """
     assert.deepEqual parser.parse("a"), { type: "X", value: 1 }
 
-    // Second: inspect the emitted code.  After the `const $$m = {` line,
-    // every continuation line up to and including the matching `};` must be
-    // indented strictly deeper than the `const $$m = {` declaration.
+    // Second: inspect the emitted code.  After the `const $$m = ({` line,
+    // every continuation line up to and including the matching `});` must be
+    // indented strictly deeper than the `const $$m = ({` declaration.
     code := compile """
       Rule
         "a" -> {
@@ -254,16 +254,16 @@ describe "Hera", ->
         }
     """
     lines := code.split("\n")
-    declIdx := lines.findIndex (l) -> /^\s+const \$\$m = \{\s*$/.test l
-    assert declIdx >= 0, "expected a `const $$m = {` line in emitted handler"
+    declIdx := lines.findIndex (l) -> /^\s+const \$\$m = \(\{\s*$/.test l
+    assert declIdx >= 0, "expected a `const $$m = ({` line in emitted handler"
     declIndent := lines[declIdx].match(/^(\s*)/)![1].length
-    // Find the closing `};` line of the object literal.
+    // Find the closing `});` line of the object literal.
     closeIdx .= -1
     for i of [declIdx + 1...lines.length]
-      if /^\s*\};$/.test(lines[i])
+      if /^\s*\}\);$/.test(lines[i])
         closeIdx = i
         break
-    assert closeIdx > declIdx, "expected closing `};` after `const $$m = {`"
+    assert closeIdx > declIdx, "expected closing `});` after `const $$m = ({`"
     for i of [declIdx + 1..closeIdx]
       continue if lines[i].trim() is ""
       indent := lines[i].match(/^(\s*)/)![1].length
@@ -1379,7 +1379,7 @@ describe "Hera", ->
       """
       result := compile(parse(grammar), language: 'javascript')
       assert.match result, /let a = \$\$v0;/m
-      assert.match result, /const \$\$m = a;/m
+      assert.match result, /const \$\$m = \(a\);/m
       assert.doesNotMatch result, /var a = \$1/
 
     it "should not void named parameters", ->
@@ -1773,7 +1773,7 @@ describe "Hera", ->
       // `const $$m =` declaration so downstream indent-sensitive parsers
       // (Civet) read them as the object body rather than separate statements.
       assert.match result, /let t: typeof \$\$v = \$\$v;/m
-      assert.match result, /const \$\$m: TypeSuffix = \{\n      type: "TypeSuffix",/m
+      assert.match result, /const \$\$m: TypeSuffix = \(\{\n      type: "TypeSuffix",/m
       assert.doesNotMatch result, /\(function\(t:/m
 
     it "should use CJS require() and not ESM import when language is 'civet' and module is not set", ->
@@ -2174,6 +2174,35 @@ describe "Hera", ->
       assert.equal mod.parse("e"), "E"
       assert.equal mod.parse("f"), 0
 
+      // Comma expressions in single-alternative inline handlers stay valid JS
+      commaParser := generate """
+        Root
+          "a" -> 1, 2
+      """
+      assert.equal commaParser.parse("a"), 2
+
+      // Multiline inline template literals keep IIFE indentation (exact whitespace)
+      tplGrammar := """
+        Root
+          "a" -> `line1
+            line2`
+      """
+      tplCode := compile(parse(tplGrammar))
+      assert.match tplCode, /\(function\(\)/
+      assert.equal (execMod(tplCode) as any).parse("a"), "line1\n        line2"
+
+      // Function-valued rules parenthesize their return type before `| typeof FAIL`
+      fnTsCode := compile(parse("""
+        Root :: () => number
+          "a" -> () => 1
+
+        Choice
+          "a" :: () => number -> () => 1
+          "b" :: string -> "b"
+      """), { types: true })
+      assert.match fnTsCode, /function \$\$r_Root\(\$\$ctx: CursorContext\): \(\(\) => number\) \| typeof FAIL/
+      assert.match fnTsCode, /function Choice\([\s\S]*?\): MaybeResult<\(\(\) => number\) \| string>/
+
     it "should preserve regex backtracking in $cc when lookahead fails", ->
       grammar := """
         Root
@@ -2255,3 +2284,17 @@ describe "Hera", ->
           }
         })
       , /Failed to parse/
+
+      // Verify lazyErrors keeps the first pass authoritative when an event hook rejects valid input
+      single := generate """
+        Root
+          "a"
+      """
+      assert.throws ->
+        single.parse("a", {
+          lazyErrors: true
+          events: {
+            enter: -> { cache: undefined }
+          }
+        })
+      , /No result/
