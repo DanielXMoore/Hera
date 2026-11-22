@@ -2181,6 +2181,38 @@ describe "Hera", ->
       """
       assert.equal commaParser.parse("a"), 2
 
+      // Inline handlers with trailing semicolons, line/block comments, and escaped strings stay inlined and valid
+      semiCode := compile(parse("""
+        Root
+          "a" -> 1;
+      """))
+      assert.doesNotMatch semiCode, /\(function\(/
+      assert.equal (execMod(semiCode) as any).parse("a"), 1
+
+      commentCode := compile(parse("""
+        Root
+          "a" -> 1 // trailing comment
+      """))
+      assert.doesNotMatch commentCode, /\(function\(/
+      assert.equal (execMod(commentCode) as any).parse("a"), 1
+
+      mixedCode := compile(parse("""
+        Root
+          "a" -> { // mid-line comment
+            url: "http://a\\"b;c" /* block */
+          }; /* end */ // eol
+      """))
+      assert.doesNotMatch mixedCode, /\(function\(/
+      assert.deepEqual (execMod(mixedCode) as any).parse("a"), { url: 'http://a"b;c' }
+
+      // Named parameters shadowing matcher identifiers (e.g. `undefined`) fall back to IIFE to avoid TDZ
+      shadowParser := generate """
+        Root
+          "a"?:undefined -> undefined
+      """
+      assert.equal shadowParser.parse(""), undefined
+      assert.equal shadowParser.parse("a"), "a"
+
       // Multiline inline template literals keep IIFE indentation (exact whitespace)
       tplGrammar := """
         Root
