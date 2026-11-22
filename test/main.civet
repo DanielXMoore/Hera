@@ -5,6 +5,7 @@ hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../sour
 { transpileTsToJs } from ../source/register/tsc/transpile.civet
 { SourceMap } from ../source/sourcemap.civet
 civet from @danielx/civet
+esbuild from esbuild
 
 describe "Hera", ->
   it "should do math example", ->
@@ -1892,7 +1893,7 @@ describe "Hera", ->
       assert dataLinesRes.sourceMap.lines.some (line) ->
         line.some (entry) -> entry.length is 4 and entry[2] is 1
 
-    it "should throw when transpileEmbedded output is missing __hera_code_end__ marker", ->
+    it "should throw when transpileEmbedded output is missing markers", ->
       grammar := """
         Rule
           "a" -> $1
@@ -1900,6 +1901,15 @@ describe "Hera", ->
       assert.throws
         -> compile grammar, { transpileEmbedded: -> "/* stripped */" }
         /missing __hera_code_end__ marker/
+      assert.throws
+        -> compile grammar, { transpileEmbedded: -> "function __hera_code_end__() {}\n" }
+        /missing __hera_h_0__ marker/
+      assert.throws
+        -> compile """
+          Rule
+            /// \${"a"} ///
+        """, { transpileEmbedded: -> "function __hera_code_end__() {}\n" }
+        /missing __hera_rd_0__ marker/
 
     it "should compose accurate source maps back to original .hera lines", ->
       grammar := """
@@ -2013,7 +2023,7 @@ describe "Hera", ->
       }
       assert.equal (execMod(jsInline) as any).parse("a"), 1
 
-    it "should avoid marker collisions when user code defines __hera_code_end__", ->
+    it "should avoid marker collisions when user code defines __hera_code_end__ (including unicode escapes)", ->
       grammar := """
         ```
         function __hera_code_end__() {}
@@ -2027,3 +2037,31 @@ describe "Hera", ->
         transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
       }
       assert.equal (execMod(js) as any).parse("a"), 42
+
+      // Transpiler normalizing unicode escapes (\u005f / \u{5f}) to underscores
+      escapedGrammar := """
+        ```
+        function \\u005f_hera_code_end__() {}
+        function \\u{5f}_hera__code_end__() {}
+        function getValue() { return 42 }
+        ```
+        Root
+          "a" -> getValue()
+      """
+      escapedJs := compile escapedGrammar, {
+        transpileEmbedded: (src) -> esbuild.transformSync(src).code
+      }
+      assert.equal (execMod(escapedJs) as any).parse("a"), 42
+
+    it "should extract chunks from compact/minified single-line transpiler output", ->
+      grammar := """
+        ```
+        function getPrefix() { return "ok" }
+        ```
+        Root
+          /// \${"a"} /// -> getPrefix() + ":" + $0
+      """
+      minifiedJs := compile grammar, {
+        transpileEmbedded: (src) -> esbuild.transformSync(src, { minify: true }).code
+      }
+      assert.equal (execMod(minifiedJs) as any).parse("a"), "ok:a"

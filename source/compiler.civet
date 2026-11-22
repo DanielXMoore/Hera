@@ -51,6 +51,7 @@ type EmbeddedHandlerSpec = {
 type CompiledChunk = {
   code: string
   sourceMapLines?: SourceMapEntry[][] | undefined
+  params?: string[] | undefined
 }
 
 strDefs: string[] := []
@@ -275,9 +276,21 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
 // function using early returns for the null/tokenize paths so the IIFE
 // lands at 2-space indent, while the handler body comes in at 4-space from
 // the grammar's source indent.
-emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string) ->
+emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string): ASTNode ->
   { types } := options
   handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
+
+  if options.transpileEmbedded
+    id := embeddedHandlers.length
+    embeddedHandlers.push { handler, parameters }
+    return {
+      embeddedHandler: id
+      paramTypes
+      handlerRetAnno
+      callArgs
+      baseIndent
+      types: Boolean types
+    }
 
   typedParameters := if types
     parameters.map (p, i) -> `${p}: ${paramTypes[i]}`
@@ -301,11 +314,7 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   // newline so the grammar's relative nesting is preserved inside the IIFE.
   handlerText := if handler.inline then handler.f.replace(/\n/g, `\n${bodyIndent}`) else handler.f
   handlerToken := { $loc: handler.$loc, token: handlerText }
-  handlerBody := if options.transpileEmbedded
-    id := embeddedHandlers.length
-    embeddedHandlers.push { handler, parameters }
-    { embeddedHandler: id }
-  else if handler.inline
+  handlerBody := if handler.inline
     [`${bodyIndent}return `, handlerToken]
   else
     handlerToken
@@ -641,6 +650,12 @@ defaultOptions: CompilerOptions :=
   types: false
   libPath: "@danielx/hera/lib"
 
+decodeUnicodeEscapes := (s: string): string ->
+  s.replace /\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))/g, (match, braced, hex) ->
+    cp := parseInt braced ?? hex, 16
+    /* c8 ignore next -- out-of-range unicode escape */
+    if cp <= 0x10FFFF then String.fromCodePoint(cp) else match
+
 /**
 Batch-transpile only the embedded user code (fenced code blocks, handler bodies,
 and dynamic regex expressions) via `options.transpileEmbedded`, returning the
@@ -665,13 +680,15 @@ transpileEmbeddedCode := (
     virtualGenOpts.updateSourceMap = virtualSM.updateSourceMap.bind(virtualSM)
 
   // Pick a deterministic marker prefix that does not appear anywhere in the
-  // user's embedded code so user declarations cannot collide with boundaries.
+  // user's embedded code (raw or after JS unicode-escape normalization) so user
+  // declarations cannot collide with boundaries.
   markerPrefix .= "__hera_"
-  userText := [
+  rawUserText := [
     generate codeBlocks, {}
     ...handlers.map (h) -> h.handler.f
     ...dynamicExprs
   ].join "\n"
+  userText := `${rawUserText}\n${decodeUnicodeEscapes rawUserText}`
   while userText.includes markerPrefix
     markerPrefix += "_"
 
@@ -706,58 +723,83 @@ transpileEmbeddedCode := (
     res.sourceMap?.lines ?? res.sourceMap?.data?.lines
 
   lines := compiledCode.split("\n")
-  codeEndRe := new RegExp `^function ${markerPrefix}code_end__\\(`
-  chunkRe := new RegExp `^function ${markerPrefix}(h|rd)_(\\d+)__\\(`
-  markers: { kind: "code_end" | "h" | "rd", id: number, line: number }[] := []
-  for line, idx of lines
-    if codeEndRe.test line
-      markers.push { kind: "code_end", id: 0, line: idx }
-    else if m := chunkRe.exec line
-      markers.push { kind: m[1] as "h" | "rd", id: Number(m[2]), line: idx }
+  markerRe := new RegExp `\\bfunction\\s+${markerPrefix}(code_end|(h|rd)_(\\d+))__\\s*\\(`, "g"
+  markers: { kind: "code_end" | "h" | "rd", id: number, index: number, line: number }[] := []
+  lineNum .= 0
+  lastIdx .= 0
+  while m := markerRe.exec compiledCode
+    for (let p = lastIdx; p < m.index; p++)
+      lineNum++ if compiledCode.charCodeAt(p) is 10
+    lastIdx = m.index
+    if m[1] is "code_end"
+      markers.push { kind: "code_end", id: 0, index: m.index, line: lineNum }
+    else
+      markers.push { kind: m[2] as "h" | "rd", id: Number(m[3]), index: m.index, line: lineNum }
 
-  // Slice lines before `${markerPrefix}code_end__` as the compiled fenced code
+  // Slice output before `${markerPrefix}code_end__` as the compiled fenced code
   // block (including any top-level runtime helpers hoisted by the transpiler).
   codeEndMarker := markers.find (m) -> m.kind is "code_end"
   unless codeEndMarker
     throw new Error `transpileEmbedded output is missing ${markerPrefix}code_end__ marker`
-  codeEndIdx := codeEndMarker.line
-  codeBlockLines := lines.slice(0, codeEndIdx)
-  codeBlock: CompiledChunk := {
-    code: codeBlockLines.join("\n")
-    sourceMapLines: compiledMapLines?.slice(0, codeEndIdx)
-  }
+  codeEndAtLineStart := codeEndMarker.index is 0 or compiledCode[codeEndMarker.index - 1] is "\n"
+  codeBlock: CompiledChunk := if codeEndAtLineStart
+    codeEndIdx := codeEndMarker.line
+    {
+      code: lines.slice(0, codeEndIdx).join("\n")
+      sourceMapLines: compiledMapLines?.slice(0, codeEndIdx)
+    }
+  else
+    {
+      code: compiledCode.slice(0, codeEndMarker.index)
+      sourceMapLines: undefined
+    }
 
   compiledHandlers: CompiledChunk[] := Array(handlers.length)
   compiledDynamicExprs: string[] := Array(dynamicExprs.length)
 
   for m, k of markers
     continue if m.kind is "code_end"
-    nextLine := if k + 1 < markers.length then markers[k + 1].line else lines.length
-    endLine .= nextLine - 1
+    nextMarker := markers[k + 1]
+    nextLine := if nextMarker then nextMarker.line else lines.length
+    nextIdx := if nextMarker then nextMarker.index else compiledCode.length
+    isLineAligned := compiledCode[m.index - 1] is "\n" and (not nextMarker or nextMarker.line > m.line)
+    endLine .= if isLineAligned then nextLine - 1 else m.line
     while endLine > m.line and not /^\s*\}/.test lines[endLine]
       endLine--
-    let bodyLines: string[]
+    chunk := compiledCode.slice m.index, nextIdx
+    parenStart := chunk.indexOf "("
+    parenEnd := chunk.indexOf ")", parenStart + 1
+    let bodyText: string
     let bodyMapLines: SourceMapEntry[][] | undefined
-    if endLine is m.line
-      lineText := lines[m.line]
-      openIdx := lineText.indexOf("{")
-      closeIdx := lineText.lastIndexOf("}")
-      bodyLines = [lineText.slice(openIdx + 1, closeIdx).trim()]
-    else
-      bodyLines = lines.slice(m.line + 1, endLine)
+    if endLine > m.line
+      bodyText = lines.slice(m.line + 1, endLine).join("\n")
       bodyMapLines = compiledMapLines?.slice(m.line + 1, endLine)
+    else
+      openIdx := chunk.indexOf "{", parenEnd + 1
+      closeIdx := chunk.lastIndexOf "}"
+      bodyText = chunk.slice(openIdx + 1, closeIdx).trim()
     if m.kind is "h"
+      rawParams := chunk.slice(parenStart + 1, parenEnd).trim()
+      params: string[] := if rawParams then rawParams.split(",").map(.trim()) else ([] as string[])
       compiledHandlers[m.id] = {
-        code: bodyLines.join("\n")
+        code: bodyText
         sourceMapLines: bodyMapLines
+        params
       }
     else
-      bodyStr := bodyLines.join("\n").trim()
-      retMatch := /^return\s+([\s\S]*?);?$/.exec bodyStr
+      bodyStr := bodyText.trim()
+      retMatch := /^return(?:\s+|(?=[("'`\[{!~+-]))([\s\S]*?);?$/.exec bodyStr
       if retMatch
         compiledDynamicExprs[m.id] = retMatch[1].trim()
       else
         compiledDynamicExprs[m.id] = `(() => {\n${bodyStr}\n})()`
+
+  for (let i = 0; i < handlers.length; i++)
+    unless compiledHandlers[i]
+      throw new Error `transpileEmbedded output is missing ${markerPrefix}h_${i}__ marker`
+  for (let j = 0; j < dynamicExprs.length; j++)
+    unless compiledDynamicExprs[j]?
+      throw new Error `transpileEmbedded output is missing ${markerPrefix}rd_${j}__ marker`
 
   { codeBlock, handlers: compiledHandlers, dynamicExprs: compiledDynamicExprs }
 
@@ -948,11 +990,19 @@ reTupleType := (types: boolean?, reSource: string) ->
     .join("|")
     |> `<[${&}]>`
 
+type EmbeddedHandlerNode = {
+  embeddedHandler: number
+  paramTypes: string[]
+  handlerRetAnno: string
+  callArgs: string[]
+  baseIndent: string
+  types: boolean
+}
 type ASTNode =
   | string
   | ASTNode[]
   | { $loc: { pos: number }, token: string, offset?: number }
-  | { embeddedHandler: number }
+  | EmbeddedHandlerNode
   | { compiled: CompiledChunk }
   | { children: ASTNode[] }
 type GenerateOptions = {
@@ -985,7 +1035,17 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
       options.updateSourceMap?(token, $loc.pos, offset)
       return token
     if "embeddedHandler" in node
-      return emitCompiledChunk options.compiledHandlers![node.embeddedHandler], options
+      chunk := options.compiledHandlers![node.embeddedHandler]
+      params := chunk.params!
+      typedParams := if node.types then params.map((p, i) -> `${p}: ${node.paramTypes[i]}`) else params
+      voidParams := params.filter (p) => p.startsWith "$"
+      voidLine := if node.types and voidParams.length then `    void ${voidParams.join(", ")};\n` else ""
+      head := `(function(${typedParams.join(", ")})${node.handlerRetAnno} {\n${voidLine}`
+      tail := `\n${node.baseIndent}})(${node.callArgs.join(", ")})`
+      options.updateSourceMap? head
+      body := emitCompiledChunk chunk, options
+      options.updateSourceMap? tail
+      return head + body + tail
     if "compiled" in node
       return emitCompiledChunk node.compiled, options
     /* c8 ignore next */
