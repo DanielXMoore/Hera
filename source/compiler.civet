@@ -771,6 +771,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
 
+  // Snapshot module-level definition tables before any user callback
+  // (`transpileEmbedded`) can re-enter `compile()` for another grammar.
+  localStrDefs := strDefs.slice()
+  localReDefs := reDefs.slice()
+  localDynamicReDefs := dynamicReDefs.slice()
+  localEmbeddedHandlers := embeddedHandlers.slice()
+
   // User code blocks (the ``` blocks in a .hera file) are appended verbatim
   // for handler-side imports/types.  In tokenize mode handlers are never
   // invoked, so these blocks are dead weight — and can carry TS-only syntax
@@ -790,29 +797,29 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   // code (fenced blocks, handlers, dynamic regex expressions) in a single call.
   let compiledHandlers: CompiledChunk[] | undefined
   let codeBlocks: ASTNode = rawCodeBlocks
-  let resolvedDynamicReDefs = dynamicReDefs
+  let resolvedDynamicReDefs = localDynamicReDefs
 
   if options.transpileEmbedded
     dynamicExprs: string[] := []
-    for r of dynamicReDefs
+    for r of localDynamicReDefs
       for part of r
         if not (part <? "string")
           dynamicExprs.push part.expression
 
-    if rawCodeBlocks.length > 0 or embeddedHandlers.length > 0 or dynamicExprs.length > 0
-      embedded := transpileEmbeddedCode(options, rawCodeBlocks, embeddedHandlers, dynamicExprs)
+    if rawCodeBlocks.length > 0 or localEmbeddedHandlers.length > 0 or dynamicExprs.length > 0
+      embedded := transpileEmbeddedCode(options, rawCodeBlocks, localEmbeddedHandlers, dynamicExprs)
       compiledHandlers = embedded.handlers
       codeBlocks = { compiled: embedded.codeBlock }
       if dynamicExprs.length > 0
         let exprIdx = 0
-        resolvedDynamicReDefs = dynamicReDefs.map (r) ->
+        resolvedDynamicReDefs = localDynamicReDefs.map (r) ->
           r.map (part) ->
             if part <? "string" then part else { ...part, expression: embedded.dynamicExprs[exprIdx++] }
 
-  strDefSource := strDefs.map (str, i) ->
+  strDefSource := localStrDefs.map (str, i) ->
     `const $L${i} = $L("${str}");\n`
 
-  reDefSource := reDefs.map (r, i) ->
+  reDefSource := localReDefs.map (r, i) ->
     `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
 
   dynamicReDefSource := resolvedDynamicReDefs.map (r, i) =>

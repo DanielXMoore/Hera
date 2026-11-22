@@ -1961,3 +1961,35 @@ describe "Hera", ->
       sm.appendMapped "jk", [[[1]]]
       assert.deepEqual sm.lines[2], [[4]]
       assert.equal sm.colOffset, 1
+
+    it "should preserve outer terminal and handler definitions across nested compile() calls", ->
+      outerGrammar := """
+        ```
+        tag := "outer"
+        ```
+        Outer
+          "hello" /\\d+/ /// -\${tag} /// ->
+            `\${tag}:\${$1}:\${$2[0]}`
+      """
+      innerGrammar := """
+        Inner
+          "world" /[a-z]+/ ->
+            $2[0].toUpperCase()
+      """
+
+      let innerParser: any
+      outerJs := compile outerGrammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) ->
+          // Re-enter Hera compile() with a completely different grammar
+          innerJs := compile innerGrammar, {
+            language: 'civet'
+            transpileEmbedded: (s, sm) -> civetJsTranspiler s, sm
+          }
+          innerParser = execMod innerJs
+          civetJsTranspiler src, upstreamSM
+      }
+
+      outerParser := execMod(outerJs) as any
+      assert.equal innerParser.parse("worldabc"), "ABC"
+      assert.equal outerParser.parse("hello42-outer"), "outer:hello:42"
