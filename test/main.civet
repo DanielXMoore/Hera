@@ -1378,7 +1378,7 @@ describe "Hera", ->
           "b"
       """
       result := compile(parse(grammar), language: 'javascript')
-      assert.match result, /const a = \$\$v0;/m
+      assert.match result, /let a = \$\$v0;/m
       assert.match result, /const \$\$m = a;/m
       assert.doesNotMatch result, /var a = \$1/
 
@@ -1388,7 +1388,7 @@ describe "Hera", ->
           "a":a -> a
       """
       result := compile(parse(grammar), language: 'typescript')
-      assert.match result, /const a: typeof \$\$v = \$\$v;/m
+      assert.match result, /let a: typeof \$\$v = \$\$v;/m
       assert.doesNotMatch result, /void[^;]*a;/
 
     it "should reject duplicate named parameters", ->
@@ -1772,7 +1772,7 @@ describe "Hera", ->
       // continuation lines shifted by 2 extra spaces past the 2-space
       // `const $$m =` declaration so downstream indent-sensitive parsers
       // (Civet) read them as the object body rather than separate statements.
-      assert.match result, /const t: typeof \$\$v = \$\$v;/m
+      assert.match result, /let t: typeof \$\$v = \$\$v;/m
       assert.match result, /const \$\$m: TypeSuffix = \{\n      type: "TypeSuffix",/m
       assert.doesNotMatch result, /\(function\(t:/m
 
@@ -2153,22 +2153,69 @@ describe "Hera", ->
             return `c`
           "d" ->
             void $0
+          "e":x -> (x = x.toUpperCase())
+          "f" -> arguments.length
           /foo|bar/ -> $1 || $0
           ///(\${"d"})/// -> $1 || $0
       """
       tsCode := compile(parse(grammar), { types: true })
-      assert.match tsCode, /const \$1: typeof \$\$v = \$\$v;/
+      assert.match tsCode, /let \$1: typeof \$\$v = \$\$v;/
       assert.match tsCode, /let x: typeof \$\$v = \$\$v;/
       // Returning block alts inline directly; non-returning TS block alt keeps IIFE for noImplicitReturns
       assert.doesNotMatch tsCode, /\(function\(x:/
       assert.match tsCode, /\(function\(\$0:/
       civetCode := compile(parse(grammar), { language: "civet" })
       assert.match civetCode, /let x: typeof \$\$v = \$\$v;\n  \/\/ comment/
-      // Backtick handler stays wrapped in IIFE to preserve template whitespace
+      // Backtick and `arguments` handlers stay wrapped in IIFE
       assert.match civetCode, /\(function\(\)/
       assert.match tsCode, /\(function\(\)/
+      // Parameter reassignment and `arguments` work identically at runtime
+      mod := execMod(compile(parse(grammar))) as any
+      assert.equal mod.parse("e"), "E"
+      assert.equal mod.parse("f"), 0
 
-    it "should support lazyErrors two-pass error tracking", ->
+    it "should preserve regex backtracking in $cc when lookahead fails", ->
+      grammar := """
+        Root
+          Pref "bx"
+
+        Pref
+          /[a][b]*(?![x])/
+      """
+      js := compile(parse(grammar))
+      assert.match js, /const \$RC\d+ = \$cc\(/
+      mod := execMod(js) as any
+      assert.deepEqual mod.parse("abx"), ["a", "bx"]
+
+    it "should keep allEvents enter/exit traces active when memo is enabled", ->
+      grammar := """
+        Root
+          Expr "!"
+          Expr "?"
+
+        Expr
+          "x"
+      """
+      parser := generate(grammar)
+      entered: string[] := []
+      exited: string[] := []
+      res := parser.parse("x?", {
+        memo: true
+        events: {
+          allEvents: true
+          enter: (name) ->
+            entered.push name
+            undefined
+          exit: (name) ->
+            exited.push name
+        }
+      })
+      assert.deepEqual res, ["x", "?"]
+      // Expr is entered and exited twice (miss on first branch, memo hit on second)
+      assert.deepEqual entered, ["Root", "Expr", "Expr"]
+      assert.deepEqual exited, ["Expr", "Expr", "Root"]
+
+    it "should support lazyErrors two-pass error tracking (including with external event caches)", ->
       grammar := """
         Root
           Spaces Word ->
@@ -2194,3 +2241,17 @@ describe "Hera", ->
       assert.throws ->
         mod.parse("  hello trailing", { memo: true, lazyErrors: true })
       , /Unconsumed input/
+      // Verify lazyErrors clears external cacheEnter/cacheExit caches on the error pass
+      cache := new Map<string, any>()
+      assert.throws ->
+        mod.parse("  !!!", {
+          lazyErrors: true
+          events: {
+            cacheEnter: (name: string, pos: number) ->
+              k := `${name}:${pos}`
+              if cache.has k then cache.get k else Symbol.for("@danielx/hera/MISS")
+            cacheExit: (name: string, startPos: number, _endPos: number, val: unknown) ->
+              cache.set `${name}:${startPos}`, val
+          }
+        })
+      , /Failed to parse/

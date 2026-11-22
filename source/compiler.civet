@@ -289,8 +289,15 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   \  const $$mc = $$ctx.memo;
     let $$s = 0;
     if ($$mc) {
+      if ($$ctx.allEvents && $$ctx.cacheEnter) {
+        const $$e = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
+        if ($$e !== $MISS) return $$e${retAnno};
+      }
       const $$c = $mGet0($$mc, ${spec.base}, $$p0, $$ctx);
-      if ($$c !== $MISS) return $$c${retAnno};
+      if ($$c !== $MISS) {
+        if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, $$ctx.pos, $$c);
+        return $$c${retAnno};
+      }
       $$s = $$mc.s;
     } else if ($$ctx.cacheEnter) {
       const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
@@ -304,9 +311,16 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   let $$sk = 0;
   let $$s = 0;
   if ($$mc) {
+    if ($$ctx.allEvents && $$ctx.cacheEnter) {
+      const $$e = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
+      if ($$e !== $MISS) return $$e${retAnno};
+    }
     $$sk = ${skExpr};
     const $$c = $mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx);
-    if ($$c !== $MISS) return $$c${retAnno};
+    if ($$c !== $MISS) {
+      if ($$ctx.allEvents && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, $$ctx.pos, $$c);
+      return $$c${retAnno};
+    }
     $$s = $$mc.s;
   } else if ($$ctx.cacheEnter) {
     const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);
@@ -325,7 +339,7 @@ emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent
     `$mSet0($$mc, $$s, $$p0, ${endPosExpr}, ${valExpr})`
   else
     `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
-  `if ($$mc) ${setCall};\n${indent}if (!$$mc && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+  `if ($$mc) ${setCall};\n${indent}if ((!$$mc || $$ctx.allEvents) && $$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
 
 /** Guard `$$ctx.fail(...)` so lazy-error parses skip all expectation tracking on the fast path. */
 emitFailCall := (exp: string): string ->
@@ -1229,10 +1243,10 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
 
   // Eliminate handler IIFE wrapper whenever safe:
-  // 1) Inline expression handlers without $skip (both top-level and choice alts)
+  // 1) Inline expression handlers without $skip / arguments (both top-level and choice alts)
   // 2) Choice-alternative block handlers (!wrapEvent) without $skip / arguments / var
-  //    (and with uniform 4-space indent + no multiline strings in Civet mode)
-  canInlineExpr := Boolean h.inline and not handlerUsesSkip
+  //    (and with uniform 4-space indent + no multiline strings)
+  canInlineExpr := Boolean h.inline and not handlerUsesSkip and not usesIdentifier(h.f, "arguments")
   canInlineBlock := (and)
     not h.inline
     not wrapEvent
@@ -1243,16 +1257,16 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     h.f.split("\n").every((l) -> l.length is 0 or l.startsWith "    ")
     (not types or options.language is "civet" or /\breturn\b/.test(h.f))
 
-  emitHandlerParams := (declKind: "const" | "let") ->
+  emitHandlerParams := ->
     for p, i of parameters
       typeAnno := if types then `: ${paramTypes[i]}` else ""
-      body.push `  ${declKind} ${p}${typeAnno} = ${callArgs[i]};\n`
+      body.push `  let ${p}${typeAnno} = ${callArgs[i]};\n`
     voidParameters := parameters.filter (p) => p.startsWith "$"
     if types and voidParameters.length
       body.push `  void ${voidParameters.join(", ")};\n`
 
   if canInlineExpr
-    emitHandlerParams "const"
+    emitHandlerParams()
     handlerText := h.f.replace(/\n/g, "\n  ")
     if not wrapEvent
       body.push "  return "
@@ -1267,7 +1281,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       retCast := if types and retType then ` as unknown as ${retType.trim()}` else ""
       body.push `  return $$m${retCast};`
   else if canInlineBlock
-    emitHandlerParams "let"
+    emitHandlerParams()
     body.push { $loc: h.$loc, token: h.f.replace(/^  /gm, "") }
   else
     iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
@@ -1679,6 +1693,8 @@ parserTail := (types: boolean): string ->
     "        ctx.pos = 0"
     "        ctx.fail = fail"
     "        if (ctx.memo) ctx.memo.reset()"
+    "        delete ctx.cacheEnter"
+    "        delete ctx.cacheExit"
     "        val = parser(ctx)"
     "      }"
     `      if (${failCond "val"}) {`

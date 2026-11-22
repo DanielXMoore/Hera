@@ -371,11 +371,18 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
       return -1 if requireCont and p is pos + 1
       if asciiStop and p < len
         cs := input.charCodeAt(p)
-        if cs < 128
-          return -1 if asciiStop[cs]
+        hitStop := if cs < 128
+          asciiStop[cs] is 1
         else if !stopAsciiOnly
           stopRe!.lastIndex = p
-          return -1 if stopRe!.test(input)
+          stopRe!.test(input)
+        else
+          false
+        if hitStop
+          // Backtrack via the original regex (e.g. /[a][b]*(?![x])/ on "abx" -> "a")
+          re.lastIndex = pos
+          m := re.exec(input)
+          return if m then pos + m[0].length else -1
       p
 
   return (input: string, pos: number) =>
@@ -576,7 +583,7 @@ export type ParserEvents = {
   cacheExit?: CursorContext["cacheExit"],
 }
 
-export type HeraGrammar = { [key: string]: CursorParser<any> }
+export type HeraGrammar = { [key: string]: Parser<any> | CursorParser<any> }
 
 export interface ParserOptions<T extends HeraGrammar> {
   /** The name of the file being parsed */
