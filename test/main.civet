@@ -1993,3 +1993,37 @@ describe "Hera", ->
       outerParser := execMod(outerJs) as any
       assert.equal innerParser.parse("worldabc"), "ABC"
       assert.equal outerParser.parse("hello42-outer"), "outer:hello:42"
+
+    it "should ignore trailing sourceMappingURL comments from transpileEmbedded", ->
+      grammar := """
+        Root
+          "a" -> 1
+      """
+      // External sourceMappingURL comment (e.g. from tsc)
+      jsExternal := compile grammar, {
+        transpileEmbedded: (src) -> `${src}\n//# sourceMappingURL=out.js.map\n`
+      }
+      assert.equal (execMod(jsExternal) as any).parse("a"), 1
+
+      // Civet with inlineMap: true returning trailing base64 sourceMappingURL
+      jsInline := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) ->
+          civet.compile(src, { sync: true, js: true, inlineMap: true, filename: "t.hera" }) as string
+      }
+      assert.equal (execMod(jsInline) as any).parse("a"), 1
+
+    it "should avoid marker collisions when user code defines __hera_code_end__", ->
+      grammar := """
+        ```
+        function __hera_code_end__() {}
+        function getValue() { return 42 }
+        ```
+        Root
+          "a" -> getValue()
+      """
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+      assert.equal (execMod(js) as any).parse("a"), 42

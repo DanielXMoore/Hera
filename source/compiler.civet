@@ -664,27 +664,38 @@ transpileEmbeddedCode := (
     virtualSM = new SourceMap(options.source!, options.filename!)
     virtualGenOpts.updateSourceMap = virtualSM.updateSourceMap.bind(virtualSM)
 
+  // Pick a deterministic marker prefix that does not appear anywhere in the
+  // user's embedded code so user declarations cannot collide with boundaries.
+  markerPrefix .= "__hera_"
+  userText := [
+    generate codeBlocks, {}
+    ...handlers.map (h) -> h.handler.f
+    ...dynamicExprs
+  ].join "\n"
+  while userText.includes markerPrefix
+    markerPrefix += "_"
+
   virtualNodes: ASTNode[] := []
   if codeBlocks.length
     virtualNodes.push codeBlocks, "\n"
-  virtualNodes.push "function __hera_code_end__() {}\n"
+  virtualNodes.push `function ${markerPrefix}code_end__() {}\n`
 
   for { handler, parameters }, i of handlers
     params := parameters.join(", ")
     if handler.inline
       handlerText := handler.f.replace(/\n/g, "\n    ")
       virtualNodes.push
-        `function __hera_h_${i}__(${params}) {\n    return `
+        `function ${markerPrefix}h_${i}__(${params}) {\n    return `
         { $loc: handler.$loc, token: handlerText }
         "\n}\n"
     else
       virtualNodes.push
-        `function __hera_h_${i}__(${params}) {\n`
+        `function ${markerPrefix}h_${i}__(${params}) {\n`
         { $loc: handler.$loc, token: handler.f }
         "\n}\n"
 
   for expr, j of dynamicExprs
-    virtualNodes.push `function __hera_rd_${j}__() {\n  return ${expr}\n}\n`
+    virtualNodes.push `function ${markerPrefix}rd_${j}__() {\n  return ${expr}\n}\n`
 
   virtualSrc := generate virtualNodes, virtualGenOpts
   res := options.transpileEmbedded!(virtualSrc, virtualSM)
@@ -695,18 +706,20 @@ transpileEmbeddedCode := (
     res.sourceMap?.lines ?? res.sourceMap?.data?.lines
 
   lines := compiledCode.split("\n")
+  codeEndRe := new RegExp `^function ${markerPrefix}code_end__\\(`
+  chunkRe := new RegExp `^function ${markerPrefix}(h|rd)_(\\d+)__\\(`
   markers: { kind: "code_end" | "h" | "rd", id: number, line: number }[] := []
   for line, idx of lines
-    if /^function __hera_code_end__\(/.test line
+    if codeEndRe.test line
       markers.push { kind: "code_end", id: 0, line: idx }
-    else if m := /^function __hera_(h|rd)_(\d+)__\(/.exec line
+    else if m := chunkRe.exec line
       markers.push { kind: m[1] as "h" | "rd", id: Number(m[2]), line: idx }
 
-  // Slice lines before `__hera_code_end__` as the compiled fenced code block
-  // (including any top-level runtime helpers hoisted by the transpiler).
+  // Slice lines before `${markerPrefix}code_end__` as the compiled fenced code
+  // block (including any top-level runtime helpers hoisted by the transpiler).
   codeEndMarker := markers.find (m) -> m.kind is "code_end"
   unless codeEndMarker
-    throw new Error "transpileEmbedded output is missing __hera_code_end__ marker"
+    throw new Error `transpileEmbedded output is missing ${markerPrefix}code_end__ marker`
   codeEndIdx := codeEndMarker.line
   codeBlockLines := lines.slice(0, codeEndIdx)
   codeBlock: CompiledChunk := {
@@ -721,7 +734,7 @@ transpileEmbeddedCode := (
     continue if m.kind is "code_end"
     nextLine := if k + 1 < markers.length then markers[k + 1].line else lines.length
     endLine .= nextLine - 1
-    while endLine > m.line and lines[endLine].trim() is ""
+    while endLine > m.line and not /^\s*\}/.test lines[endLine]
       endLine--
     let bodyLines: string[]
     let bodyMapLines: SourceMapEntry[][] | undefined

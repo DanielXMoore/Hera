@@ -61,6 +61,7 @@ export compileCivetEmbedded := (
     ...(filename and { filename })
     js: true
     sync: true
+    inlineMap: false
     ...(upstreamSourceMap and { sourceMap: true, upstreamSourceMap })
   }
   civet.compile(src, options) as unknown as EmbeddedTranspileResult
