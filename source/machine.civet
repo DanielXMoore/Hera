@@ -102,6 +102,10 @@ export function $EXPECT<T>(parser: Parser<T>, expectation: Expectation): Parser<
 
 /**
  * Match a string literal.
+ *
+ * Compares code units, so a literal ending in a lead surrogate could stop
+ * inside a surrogate pair.  The compiler rejects those literals, so the
+ * cursor always stays on a code point boundary, where Unicode regexes start.
  */
 export function $L<T extends string>(str: T): Parser<T> {
   return function (_ctx, state) {

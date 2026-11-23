@@ -38,8 +38,25 @@ intern := <T>(defs: T[], prefix: string, value: T, key: (v: T) => unknown = (v) 
     defs.push value
   `${prefix}${index}`
 
+/**
+Decode a grammar string literal into the string the generated parser matches,
+the same way the emitted `"..."` decodes.
+
+Rejects a literal that ends in a lead surrogate: it could match half of a
+surrogate pair and leave the cursor inside it, where a Unicode regex would
+start matching from the lead half, before the cursor.  A regex like
+`/\uD83D/` matches an unpaired lead surrogate without splitting a pair.
+*/
+decodeLiteral := (lit: string): string ->
+  decoded: string := (new Function `return "${lit}"`)()
+  if (decoded.charCodeAt(decoded.length - 1) & 0xFC00) is 0xD800
+    throw new Error `String literal "${lit}" ends in a lead surrogate, so it could match half of a surrogate pair. Use a regex instead, which only matches an unpaired surrogate.`
+  decoded
+
 /** Define a literal string terminal */
-defineTerminal := (lit: string) -> intern strDefs, "$L", lit
+defineTerminal := (lit: string) ->
+  decodeLiteral lit
+  intern strDefs, "$L", lit
 
 /** Define a RegExp terminal */
 defineRe := (re: string) -> intern reDefs, "$R", re

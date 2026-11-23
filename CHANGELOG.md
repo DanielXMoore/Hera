@@ -4,6 +4,13 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- A string literal that ends in a lead surrogate (such as `"\uD83D"`) is now
+  a compile error. It could match half of a surrogate pair, after which a
+  regex advanced the cursor past the end of its match and `validate` could
+  throw a `TypeError`. Use a regex like `/\uD83D/`, which matches only an
+  unpaired surrogate (#110).
+
 ## [0.9.9] - 2026-10-13
 
 ### Added

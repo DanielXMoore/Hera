@@ -1336,6 +1336,30 @@ describe "Hera", ->
 
       return true
 
+  it "should reject a literal ending in a lead surrogate", ->
+    // "\uD83D" is the lead half of 😀.  A literal ending in it could match
+    // half of the pair and leave the cursor inside it, where a Unicode regex
+    // matches from the lead half, before the cursor
+    for lit of ["\\uD83D", "a\\uD83D", "\\u{D83D}", "\uDBFF"]
+      assert.throws (-> generate `Root\n  "${lit}"`), /ends in a lead surrogate/
+
+  it "should allow literals containing whole surrogate pairs", ->
+    {parse} := generate """
+      Root
+        "\\uD83D\\uDE00" "😀" "\\uDE00" -> "ok"
+    """
+    assert.equal parse("😀😀\uDE00"), "ok"
+
+  it "should match an unpaired lead surrogate with a regex", ->
+    // What the error suggests instead: a Unicode regex never splits a pair
+    {parse} := generate """
+      Root
+        /\\uD83D/ /.+/ -> "half"
+        /.+/ -> "whole"
+    """
+    assert.equal parse("😀az"), "whole"
+    assert.equal parse("\uD83Daz"), "half"
+
   it "should skip rules programmatically", ->
     {parse} := generate """
       Rule
