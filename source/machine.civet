@@ -530,7 +530,11 @@ export function Validator() {
   const failHintRegex = /\S+|\s+|$/y
 
   // Error tracking
-  // Goal is zero allocations
+  // Goal is zero allocations.  Only `failIndex` is reset when the furthest
+  // failure position advances: setting `failExpected.length = 0` makes V8
+  // drop the backing store and reallocate it on the next store, which cost
+  // 20-50% of parse throughput with eager error tracking.  Entries past
+  // `failIndex` are stale and never read.
   const failExpected = Array(16)
   let failIndex = 0
   let maxFailPos = 0
@@ -540,7 +544,7 @@ export function Validator() {
 
     if (pos > maxFailPos) {
       maxFailPos = pos
-      failExpected.length = failIndex = 0
+      failIndex = 0
     }
 
     failExpected[failIndex++] = expected
@@ -603,7 +607,6 @@ Found: ${hint}
   function reset() {
     failIndex = 0
     maxFailPos = 0
-    failExpected.length = 0
   }
 
   return {
