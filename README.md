@@ -147,6 +147,10 @@ it does not get wrapped in a length-1 array.
 A string literal (surrounded by double quotes).
 The entire string must be matched at the exact position.
 Terminal strings return the matched string when they match.
+A terminal string can't end in a lead surrogate (`\uD800`–`\uDBFF`),
+since it could match half of a surrogate pair;
+use a regular expression like `/\uD83D/` instead,
+which matches only an unpaired surrogate.
 
 **Terminal regular expression** (`/.../`):
 A regular expression, normally surrounded by forward slashes.
