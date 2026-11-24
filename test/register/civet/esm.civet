@@ -1,8 +1,12 @@
 assert from assert
 { execMod } from ../../../source/main.civet
 { initialize, load } from ../../../source/register/civet/esm.civet
+{ initialize: initializeBase } from ../../../source/esm.civet
 
 describe "Civet ESM hook", ->
+  // The base hook's options apply here too, so start from its defaults
+  beforeEach -> initializeBase {}
+
   grammar := """
     Rule
       "a" ->
@@ -40,6 +44,13 @@ describe "Civet ESM hook", ->
     coffee := await (load as any) "file:///tmp/coffee.hera", {}, (_url: string, context: any) ->
       { source: 'Rule\n  "a" ->\n    return "#{\'ok\'}"\n', format: context.format }
     assert.doesNotMatch coffee.source, /#\{/
+
+  it "should apply the options the base hook was registered with, under its own", ->
+    initializeBase { language: 'civet', module: false, tokenize: true }
+    initialize { hera: { tokenize: false } }
+    { result } := await run "file:///tmp/grammar.hera"
+    assert.equal result.format, "commonjs"
+    assert.equal (execMod(result.source) as any).parse("a"), "ok"
 
   it "should report being registered twice", ->
     initialize()

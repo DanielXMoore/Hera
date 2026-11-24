@@ -21,7 +21,8 @@ All notable changes to `@danielx/hera` will be documented in this file.
 - The `@danielx/hera/register/civet/esm` hook compiles `.hera` files itself,
   so it no longer needs the base `register/esm` hook registered before it.
   Its `data` takes `{ hera, civet }` compiler options. The old setup, with
-  the base hook registered first and Civet options as `data`, still works.
+  the base hook registered first (with the Hera options) and Civet options as
+  `data`, still works.
 - A string literal that ends in a lead surrogate (such as `"\uD83D"`) is now
   a compile error. It could match half of a surrogate pair, after which a
   regex advanced the cursor past the end of its match and `validate` could

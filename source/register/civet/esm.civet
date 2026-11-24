@@ -9,6 +9,7 @@ type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
 { compile: heraCompile } from ../../main.civet
 { compileCivetEmbedded } from ./transpile.civet
 
+{ registeredOptions } from ../../esm.civet
 export { resolve } from ../../esm.civet
 
 // Appended to the URL when loading the grammar's source.  Other Hera hooks
@@ -56,7 +57,9 @@ export load: LoadHook := async (url, context, next) =>
   assert heraSource, `${url} file source was not loaded`
 
   filename := fileURLToPath url
-  options: HeraCompilerOptions := { module: true, ...heraOptions }
+  // A chain set up the old way registered the base `register/esm` hook, in
+  // the same thread, with the Hera options
+  options: HeraCompilerOptions := { module: true, ...registeredOptions(), ...heraOptions }
   source := heraCompile heraSource.toString(), {
     inlineMap: true
     filename
