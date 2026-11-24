@@ -594,6 +594,7 @@ Compiles a Hera grammar into parser source code.
 - `inlineMap?: boolean`: Append an inline source map comment to the generated output. Default: `false`.
 - `sourceMap?: boolean`: Return `{ code, sourceMap }` instead of a code string. Default: `false`.
 - `libPath?: string`: Import path for the Hera runtime library used by generated parsers. Default: `"@danielx/hera/lib"`.
+- `trace?: boolean`: Compile in calls to the `trace` parse option's hooks around every rule, for debugging and profiling: `parse(input, { trace: { enter(rule, pos) {}, exit(rule, pos, end, value, cached) {} } })`. `value` is `FAIL` when the rule didn't match. Without it the parser contains no hook calls, and passing `trace` to `parse` throws. Default: `false`.
 - `transpileEmbedded?: (source, upstreamSourceMap?) => string | { code, sourceMap? }`: Transpiles only the grammar's embedded code. Hera puts the code blocks, handlers, and heregex interpolations into one module (one named function per handler and per interpolation) and calls `transpileEmbedded` on it once; the parser calls those functions by name. Hera writes the rest of the parser in plain JavaScript (TypeScript with `types`), so a Civet grammar no longer has to be compiled through Civet as a whole. When a source map is requested, Hera passes the module's map to the grammar as `upstreamSourceMap`; return a map composed with it (as Civet's `upstreamSourceMap` option does), and Hera splices its lines into the parser's map. With `types`, handler parameters have the same types as without `transpileEmbedded`.
 
   ```js

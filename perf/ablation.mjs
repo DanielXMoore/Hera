@@ -134,6 +134,9 @@ const variants = [
   { name: "current again", ref: "current" },
   ...optimizations.map((o) => ({ name: `${o} off`, compile: { disableOptimizations: [o] }, ref: "current" })),
   { name: "lazyErrors", parse: { lazyErrors: true }, ref: "current" },
+  // Hooks compiled in but no tracer passed: what a parser that supports
+  // tracing costs when it isn't tracing
+  { name: "trace (unused)", compile: { trace: true }, ref: "current" },
 ].filter((v) => !args.variants || args.variants.split(",").includes(v.name) || ["baseline", "current", "current again"].includes(v.name))
 
 // ---- run -------------------------------------------------------------------

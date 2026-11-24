@@ -44,12 +44,6 @@ export const FAIL: unique symbol = Symbol.for("@danielx/hera/FAIL") as any
 export type FailSymbol = typeof FAIL
 
 /**
- * Sentinel returned by `cacheEnter` to signal a cache miss.
- */
-export const MISS: unique symbol = Symbol.for("@danielx/hera/MISS") as any
-export type MissSymbol = typeof MISS
-
-/**
  * Type-guard helper for TypeScript mode so checking `FAIL` on a value whose
  * static type may not include `typeof FAIL` (e.g. infallible `*`/`?` rules)
  * narrows cleanly without triggering TS2367.
@@ -61,6 +55,8 @@ export function $isFail(v: unknown): v is typeof FAIL {
 export type ParserContext = {
   expectation: string
   fail: Fail
+  // Event hooks of the legacy combinators, which only parsers compiled by
+  // earlier Hera versions use
   enter?(name: string, state: ParseState): {
     /**
      * If a key named `cache` is present then its value is returned immediately
@@ -80,17 +76,22 @@ export interface CursorContext {
   expectation: string
   /** Records a failure, or is `undefined` in the first pass of a `lazyErrors` parse */
   fail?: Fail | undefined
+  trace?: Tracer | undefined
+}
+
+/**
+ * Hooks that a parser compiled with `trace: true` calls around every rule,
+ * for debugging and profiling.  They observe the parse and can't change it.
+ */
+export interface Tracer {
+  /** `rule` starts matching at `pos`. */
+  enter(rule: string, pos: number): void
   /**
-   * Fast zero-allocation cache enter hook:
-   * - return `MISS` on cache miss
-   * - return `FAIL` on cached failure
-   * - advance `ctx.pos` and return cached value directly on cached success
+   * `rule`, entered at `pos`, ends at `end` with `value`, which is `FAIL` if
+   * it didn't match.  `cached` is true when the memo supplied the result
+   * without running the rule.
    */
-  cacheEnter?(name: string, pos: number, ctx: CursorContext): unknown
-  /**
-   * Fast zero-allocation cache exit hook (`value === FAIL` on failure).
-   */
-  cacheExit?(name: string, startPos: number, endPos: number, value: unknown): void
+  exit(rule: string, pos: number, end: number, value: unknown, cached: boolean): void
 }
 
 export interface Parser<T> {
@@ -241,56 +242,6 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
   return (input: string, pos: number) => reEnd(re, input, pos)
 
 /**
- * Wire `events` onto a `CursorContext`. Fast `cacheEnter`/`cacheExit` hooks are
- * attached directly; legacy `enter`/`exit` hooks are adapted once per parse so
- * generated rules only check a single fast hook.
- */
-export function $adaptEvents(ctx: CursorContext, events: ParserEvents): void
-  { cacheEnter, cacheExit, enter, exit } := events
-  if cacheEnter or cacheExit
-    ctx.cacheEnter = cacheEnter if cacheEnter
-    ctx.cacheExit = cacheExit if cacheExit
-    return
-  return if not enter and not exit
-  const stateStack: ParseState[] = []
-  const dataStack: unknown[] = []
-  if (enter) {
-    ctx.cacheEnter = (name: string, pos: number, c: CursorContext) => {
-      const st: ParseState = { input: c.input, pos }
-      const res = enter(name, st)
-      if (res && "cache" in res) {
-        const cached = res.cache
-        if (!cached) return FAIL
-        c.pos = cached.pos
-        return cached.value
-      }
-      if (exit) {
-        stateStack.push(st)
-        dataStack.push(res?.data)
-      }
-      return MISS
-    }
-  } else if (exit) {
-    ctx.cacheEnter = (_name: string, pos: number, c: CursorContext) => {
-      stateStack.push({ input: c.input, pos })
-      dataStack.push(undefined)
-      return MISS
-    }
-  }
-  if (exit) {
-    ctx.cacheExit = (name: string, startPos: number, endPos: number, value: unknown) => {
-      const st = stateStack.pop()!
-      const data = dataStack.pop()
-      const res: MaybeResult<unknown> = value === FAIL ? undefined : {
-        loc: { pos: startPos, length: endPos - startPos },
-        pos: endPos,
-        value,
-      }
-      exit(name, st, res, data)
-    }
-  }
-
-/**
  * Adapt an internal cursor-based rule function to the legacy exported
  * `(ctx: ParserContext, state: ParseState) => MaybeResult<T>` signature.
  */
@@ -305,9 +256,6 @@ export function $wrap<R>(
     pos: state.pos,
     expectation: ctx.expectation,
     fail: ctx.fail,
-  }
-  if (ctx.enter || ctx.exit) {
-    $adaptEvents(c, ctx)
   }
   const val = fn(c)
   if (val === FAIL) return undefined
@@ -428,13 +376,6 @@ export class ParseError extends Error {
   }
 }
 
-export type ParserEvents = {
-  enter?: ParserContext["enter"],
-  exit?: ParserContext["exit"],
-  cacheEnter?: CursorContext["cacheEnter"],
-  cacheExit?: CursorContext["cacheExit"],
-}
-
 export type HeraGrammar = { [key: string]: Parser<any> }
 export type CursorGrammar = { [key: string]: CursorParser<any> }
 
@@ -443,10 +384,10 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
   filename?: string
   startRule?: keyof T
   /**
-   * @deprecated Hooks called around every rule. The next release replaces
-   * them with the `trace` and `memo` compile options (#120).
+   * Hooks to call around every rule, for parsers compiled with `trace: true`.
+   * With `lazyErrors`, they see only the first pass.
    */
-  events?: ParserEvents
+  trace?: Tracer
   /**
    * Opt-in lazy error tracking: the parse first runs without recording
    * failure expectations, and only a failed (or incomplete) parse runs again
@@ -454,7 +395,7 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
    * expectation bookkeeping, which matters most for backtracking-heavy
    * grammars.  A failing parse runs its handlers twice, so handlers must be
    * safe to re-run, and state they keep must be reset at the start of a parse
-   * (e.g. by a Reset rule).  Ignored when `events` are given.
+   * (e.g. by a Reset rule).
    */
   lazyErrors?: boolean
 }

@@ -4,14 +4,14 @@ import type {
   HeraRules,
   ParserOptions,
 } from ./hera-types.civet
-import type { Loc, Token } from ./machine.civet
+import type { Loc, Token, Tracer } from ./machine.civet
 
 import type {
   CompilerOptions,
   EmbeddedTranspileResult,
 } from ./compiler.civet
 
-export type CompilerOptions, EmbeddedTranspileResult, HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
+export type CompilerOptions, EmbeddedTranspileResult, HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token, Tracer
 
 import { createRequire } from "module"
 
@@ -66,10 +66,12 @@ parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
 interface GenerateOptions
   transpile: (src: string) => string
   tokenize: boolean
+  trace: boolean
 
 defaultGenerateOptions: GenerateOptions :=
   transpile: (src) => src
   tokenize: false
+  trace: false
 
 // Tokenize-mode `generate` returns a parser that yields a Token tree, while
 // the regular path returns whatever the user grammar's handlers produce.
@@ -80,11 +82,11 @@ type GeneratedTokenParser<T extends HeraGrammar> = { parse: (input: string, opti
 function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> & { tokenize: true }): GeneratedTokenParser<T>
 function generate<T extends HeraGrammar>(heraSrc: string, options?: Partial<GenerateOptions>): GeneratedParser<T>
 function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {})
-  { transpile, tokenize } := { ...defaultGenerateOptions, ...options }
+  { transpile, tokenize, trace } := { ...defaultGenerateOptions, ...options }
 
   heraSrc
     |> parse
-    |> compile ., { tokenize }
+    |> compile ., { tokenize, trace }
     |> transpile
     |> execMod(.) as GeneratedParser<T>
 
