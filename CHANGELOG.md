@@ -21,7 +21,8 @@ All notable changes to `@danielx/hera` will be documented in this file.
   maps to the alternative it's parsing, so a stack trace through the parser
   reads as the path through the grammar. Handler and code block text has a
   segment at each word, so columns stay exact for tools that don't
-  interpolate within a segment (c8, Node.js, esbuild). Maps are 2-3x larger.
+  interpolate within a segment (c8, Node.js, esbuild). Maps are about 3x
+  larger.
 - In typed output's source maps, type errors point at the `::Type` they come
   from: a rule's or alternative's result that doesn't match its type, and an
   unknown name in a type, map to the annotation, and an inline handler's
@@ -66,6 +67,8 @@ All notable changes to `@danielx/hera` will be documented in this file.
   maps to it: Node.js maps a line without segments by the last segment
   before it, so stack frames in Hera's own parser code could point into the
   grammar.
+- In a source map, the end of a grammar without a final newline maps to its
+  last line, not to a line past the end of the file.
 
 ## [0.9.9] - 2026-10-13
 
