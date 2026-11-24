@@ -38,6 +38,9 @@ intern := <T>(defs: T[], prefix: string, value: T, key: (v: T) => unknown = (v) 
     defs.push value
   `${prefix}${index}`
 
+singleCharEscapes: Record<string, string> :=
+  b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v"
+
 /**
 Decode a grammar string literal into the string the generated parser matches,
 the same way the emitted `"..."` decodes.
@@ -48,7 +51,20 @@ start matching from the lead half, before the cursor.  A regex like
 `/\uD83D/` matches an unpaired lead surrogate without splitting a pair.
 */
 decodeLiteral := (lit: string): string ->
-  decoded: string := (new Function `return "${lit}"`)()
+  // Decoded by hand rather than evaluated, so compiling works where code
+  // generation from strings is disallowed (CSP, --disallow-code-generation-from-strings)
+  decoded := lit.replace /\\(?:x([\da-fA-F]{2})|u([\da-fA-F]{4})|u\{([\da-fA-F]+)\}|([0-3][0-7]{0,2}|[4-7][0-7]?)|(\r\n|[\n\r\u2028\u2029])|([^]))/g,
+    (_, hex2: string?, hex4: string?, codePoint: string?, octal: string?, lineContinuation: string?, char: string?) ->
+      if hex2 or hex4
+        String.fromCharCode parseInt (hex2 or hex4)!, 16
+      else if codePoint
+        String.fromCodePoint parseInt codePoint, 16
+      else if octal
+        String.fromCharCode parseInt octal, 8
+      else if lineContinuation
+        ""
+      else
+        singleCharEscapes[char!] ?? char!
   if (decoded.charCodeAt(decoded.length - 1) & 0xFC00) is 0xD800
     throw new Error `String literal "${lit}" ends in a lead surrogate, so it could match half of a surrogate pair. Use a regex instead, which only matches an unpaired surrogate.`
   decoded
