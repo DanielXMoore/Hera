@@ -69,6 +69,9 @@ All notable changes to `@danielx/hera` will be documented in this file.
   grammar.
 - In a source map, the end of a grammar without a final newline maps to its
   last line, not to a line past the end of the file.
+- A triple-slash regex whose interpolations are all `${const ...}` is built
+  once, as documented. The rules kept the function that builds it, so it was
+  rebuilt from the interpolations' current values on every match.
 
 ## [0.9.9] - 2026-10-13
 
