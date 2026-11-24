@@ -5,6 +5,11 @@ All notable changes to `@danielx/hera` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- The `lazyErrors` parse option: the parse first runs without recording
+  what it expected at each failure, and only a failed or incomplete parse
+  runs again to build the error message. Hera's sample grammars parse 21-116%
+  faster warm with it, but a failing parse runs its handlers twice, so this
+  is opt-in. It is ignored when `events` are given.
 - `events.cacheEnter` and `events.cacheExit`: hooks for an external cache
   that allocate nothing. `cacheEnter(name, pos, ctx)` returns `MISS`, `FAIL`
   for a cached failure, or a cached value after advancing `ctx.pos`;

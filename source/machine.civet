@@ -78,7 +78,8 @@ export interface CursorContext {
   input: string
   pos: number
   expectation: string
-  fail: Fail
+  /** Records a failure, or is `undefined` in the first pass of a `lazyErrors` parse */
+  fail?: Fail | undefined
   /**
    * Fast zero-allocation cache enter hook:
    * - return `MISS` on cache miss
@@ -446,6 +447,16 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
    * them with the `trace` and `memo` compile options (#120).
    */
   events?: ParserEvents
+  /**
+   * Opt-in lazy error tracking: the parse first runs without recording
+   * failure expectations, and only a failed (or incomplete) parse runs again
+   * from the start to build the error message.  Successful parses skip all
+   * expectation bookkeeping, which matters most for backtracking-heavy
+   * grammars.  A failing parse runs its handlers twice, so handlers must be
+   * safe to re-run, and state they keep must be reset at the start of a parse
+   * (e.g. by a Reset rule).  Ignored when `events` are given.
+   */
+  lazyErrors?: boolean
 }
 
 // Minimal legacy combinators kept solely for backwards compatibility with

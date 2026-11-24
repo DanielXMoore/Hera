@@ -328,9 +328,9 @@ emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos"): strin
   nameLit := JSON.stringify name
   `if ($$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
 
-/** Record that `exp` was expected at the cursor. */
+/** Record that `exp` was expected at the cursor, unless a lazyErrors parse's first pass isn't tracking errors. */
 emitFailCall := (exp: string): string ->
-  `$$ctx.fail($$ctx.pos, ${exp});`
+  `if ($$ctx.fail) $$ctx.fail($$ctx.pos, ${exp});`
 
 /**
 Emit a failure check expression for `expr`. In TS mode, uses `$isFail(expr)`
@@ -721,7 +721,7 @@ emitMatch := (
         [`  const ${reVar} = `, mapped(rdId, cx.alternative?.start), "();"]
         `  ${reVar}.lastIndex = $$ctx.pos;`
         `  const ${mVar} = ${reVar}.exec($$ctx.input);`
-        `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
+        `  if (!${mVar}) ${failBlock `${emitFailCall `\`${ruleName} /\${${reVar}.source}/\``}\n    ${onFail}`}`
         `  $$ctx.pos += ${mVar}[0].length;`
       ]
       lines.push `  const ${varName} = ${defaultHandler ? `${mVar}[0]` : mVar};` if varName
@@ -742,10 +742,10 @@ emitMatch := (
           typeAnno := if types then `: "${lit}" | undefined` else ""
           return [
             `  let ${varName}${typeAnno} = undefined;`
-            `  if (${test}) {\n    $$ctx.pos += ${len};\n    ${varName} = "${lit}";\n  } else {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
+            `  if (${test}) {\n    $$ctx.pos += ${len};\n    ${varName} = "${lit}";\n  } else if ($$ctx.fail) {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
           ]
         return [
-          `  if (${test}) {\n    $$ctx.pos += ${len};\n  } else {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
+          `  if (${test}) {\n    $$ctx.pos += ${len};\n  } else if ($$ctx.fail) {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
         ]
       if varName
         fn := compileSubFn child, defaultHandler, cx
@@ -1661,7 +1661,12 @@ parserTail := (types: boolean): string ->
     "const parser = {"
     `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
-    `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail }`
+    // Lazy errors are opt-in and never combined with event hooks, whose
+    // caches would replay results without recording expectations.
+    "    const $$lazy = !!options.lazyErrors && !options.events"
+    `    let $$fail${t ": ((pos: number, expected: unknown) => void) | undefined"}`
+    "    if (!$$lazy) $$fail = fail"
+    `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail: $$fail }`
     ""
     '    if (typeof input !== "string") throw new Error("Input must be a string")'
     ""
@@ -1680,6 +1685,15 @@ parserTail := (types: boolean): string ->
     ""
     "    const val = parser(ctx)"
     "    const endPos = ctx.pos"
+    // Lazy errors: the first pass skips recording failure expectations; only
+    // a failed or incomplete parse re-runs from the start with full error
+    // tracking.
+    `    if ($$lazy && (${failCond "val"} || endPos !== input.length)) {`
+    "      reset()"
+    "      ctx.pos = 0"
+    "      ctx.fail = fail"
+    "      parser(ctx)"
+    "    }"
     `    if (${failCond "val"}) {`
     `      return validate(input, undefined, { filename: filename })${t " as never"}`
     "    }"
