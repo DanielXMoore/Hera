@@ -2171,28 +2171,32 @@ describe "Hera", ->
       }
       assert.equal (execMod(jsInline) as any).parse("a"), 1
 
-      // The same text inside a string on the last line of user code is kept
-      literalGrammar := """
-        ```
-        exports.literal = "x//# sourceMappingURL=y"
-        ```
-        Root
-          "a"
-      """
-      // ...and so is the last line of a template literal that is only that text
-      templateGrammar := """
-        ```
-        exports.literal = `
-        //# sourceMappingURL=y`
-        ```
-        Root
-          "a"
-      """
-      for transpileEmbedded of [((src: string) -> src), ((src: string) -> civet.compile(src, { sync: true, js: true }) as string)]
-        jsLiteral := compile literalGrammar, { language: 'civet', transpileEmbedded }
-        assert.equal (execMod(jsLiteral) as any).literal, "x//# sourceMappingURL=y"
-        jsTemplate := compile templateGrammar, { language: 'civet', transpileEmbedded }
-        assert.equal (execMod(jsTemplate) as any).literal, "\n//# sourceMappingURL=y"
+      // esbuild, minifying, with an inline map
+      jsMinified := compile grammar, {
+        transpileEmbedded: (src) -> esbuild.transformSync(src, { loader: "ts", minify: true, sourcemap: "inline" }).code
+      }
+      assert.equal (execMod(jsMinified) as any).parse("a"), 1
+      assert !jsMinified.includes "sourceMappingURL"
+
+      // The same text in user code is kept, even as the last line a minifier
+      // leaves: a line that ends a string, template literal or block comment
+      // holds what closes it
+      userCode := [
+        ['exports.literal = "x//# sourceMappingURL=y"', "x//# sourceMappingURL=y"]
+        ["exports.literal = `\n//# sourceMappingURL=y`", "\n//# sourceMappingURL=y"]
+        ['exports.literal = "x\\\n//# sourceMappingURL=y"', "x//# sourceMappingURL=y"]
+        ["exports.literal = 1\n/*\n//# sourceMappingURL=y*/", 1]
+      ]
+      transpilers := [
+        (src: string) -> src
+        (src: string) -> civet.compile(src, { sync: true, js: true }) as string
+        (src: string) -> esbuild.transformSync(src, { minifySyntax: true }).code
+        (src: string) -> esbuild.transformSync(src, { minify: true }).code
+      ]
+      for [code, literal] of userCode
+        for transpileEmbedded of transpilers
+          js := compile `\`\`\`\n${code}\n\`\`\`\nRoot\n  "a"\n`, { language: 'civet', transpileEmbedded }
+          assert.equal (execMod(js) as any).literal, literal, code
 
     it "should avoid name collisions when user code uses the __hera_ prefix (including unicode escapes)", ->
       grammar := """

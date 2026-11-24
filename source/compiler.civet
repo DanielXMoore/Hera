@@ -744,29 +744,22 @@ embeddedPrefixFor := (rules: HeraRules, codeBlocks: ASTNode[]): string ->
   prefix
 
 /**
-Last line of the transpileEmbedded virtual module.  A string statement is a
-no-op that transpilers keep (esbuild drops comments and `void 0`), and unlike
-an unused function it doesn't trip `noUnusedLocals`.
-*/
-embeddedEndMarker := '"end of Hera embedded code";\n'
-
-/**
 Remove a trailing `//# sourceMappingURL=` footer that the transpiler appended,
 since Hera's own code (and map comment) follows the spliced chunk.  A footer
-is a whole line, so the match must start at a line start.  The virtual module
-ends with `embeddedEndMarker`, so the last line of user code (e.g. inside a
-template literal) is never taken for a footer.
+is a whole line, and its URL has no quote, backtick or asterisk.  A last line
+that ends a string, template literal or block comment holds the quote,
+backtick or asterisk that closes it, so user code is never taken for a
+footer, whatever a minifier leaves at the end.
 */
 stripSourceMappingURL := (code: string): string ->
-  code.replace /(?:^|\n)[ \t]*\/\/[#@][ \t]*sourceMappingURL=[^\n]*\s*$/, ""
+  code.replace /(?:^|\n)[ \t]*\/\/[#@][ \t]*sourceMappingURL=[^\s'"`*]*\s*$/, ""
 
 /**
 Transpile the embedded user code via `options.transpileEmbedded`: the code
 blocks, then `function <prefix>h_<i>__(params)` per handler and
-`function <prefix>rd_<j>__()` per heregex interpolation, then
-`embeddedEndMarker`.  The result is spliced into the parser as one contiguous
-chunk and the parser calls those functions by name, so nothing is extracted
-back out of the transpiler output.
+`function <prefix>rd_<j>__()` per heregex interpolation.  The result is
+spliced into the parser as one contiguous chunk and the parser calls those
+functions by name, so nothing is extracted back out of the transpiler output.
 */
 transpileEmbeddedCode := (options: CompilerOptions, codeBlocks: ASTNode[], prefix: string, handlers: EmbeddedHandler[], dynamicExprs: string[]): CompiledChunk ->
   let virtualSM: SourceMap | undefined
@@ -787,7 +780,6 @@ transpileEmbeddedCode := (options: CompilerOptions, codeBlocks: ASTNode[], prefi
   // by automatic semicolon insertion after `return`
   for expr, j of dynamicExprs
     nodes.push `function ${prefix}rd_${j}__() {\n  return (${expr})\n}\n`
-  nodes.push embeddedEndMarker
 
   res := options.transpileEmbedded!(generate(nodes, genOpts), virtualSM)
   if typeof res is "string"
