@@ -28,7 +28,8 @@ VLQ_VALUE_MASK := VLQ_CONTINUATION_BIT - 1
 
 /**
 Table of end offsets (exclusive) for each line of `input`, used to convert a
-position into line/column.
+position into line/column.  A last line without a line break ends past the
+input, so that the input's end is on it.
 */
 locationTable := (input: string): number[] ->
   linesRe := /([^\r\n]*)(\r\n|\r|\n|$)/y
@@ -37,17 +38,22 @@ locationTable := (input: string): number[] ->
 
   while match := linesRe.exec input
     pos += match[0].length
-    lines.push pos
+    lines.push match[2] ? pos : pos + 1
     break if pos is input.length
 
   lines
 
 lookupLineColumn := (table: number[], pos: number): [number, number] ->
+  // Binary search for the first line that ends after `pos`
   line .= 0
-  prevEnd .= 0
-  while table[line] <= pos
-    prevEnd = table[line++]
-  [line, pos - prevEnd]
+  end .= table.length
+  while line < end
+    mid := (line + end) >> 1
+    if table[mid] <= pos
+      line = mid + 1
+    else
+      end = mid
+  [line, pos - (line and table[line - 1])]
 
 encodeVlq := (value: number): string ->
   signBit := value < 0 ? 1 : 0
@@ -148,10 +154,12 @@ segments are kept only where they end a mapping; the rest carry nothing and
 would only bloat the map.
 */
 export composeLines := (upstream: SourceMapEntry[][], downstream: SourceMapEntry[][]): SourceMapEntry[][] ->
+  // Whether the last kept segment, on this line or an earlier one, is mapped.
+  // Node.js maps a position to the last segment before it on any line.
+  mapped .= false
   downstream.map (entries) ->
     composed: SourceMapEntry[] := []
     colDelta .= 0 // columns since the last kept segment
-    mapped .= false // whether the last kept segment is mapped
     for entry of entries
       colDelta += entry[0]
       position := if entry.length is 4 then remapPosition upstream, entry[2], entry[3]
@@ -172,6 +180,8 @@ export class SourceMap
   lines: SourceMapEntry[][] = [[]]
   line = 0
   colOffset = 0
+  /** Whether the last segment, on this line or an earlier one, is mapped */
+  mapped = false
   srcLine = 0
   srcColumn = 0
   srcTable: number[]
@@ -233,9 +243,11 @@ export class SourceMap
         srcCol = colOffset unless anchored
         @srcColumn = srcCol
 
+      // Columns since the line's last segment (or its start)
       l := @colOffset
-      @colOffset = line.length
       @srcColumn += line.length
+      // Empty text needs no segment, which could share a column with the next
+      continue unless line
 
       if anchored
         @lines[@line].push [l, 0, srcLine, srcCol]
@@ -245,10 +257,19 @@ export class SourceMap
           @lines[@line].push [index - segmentStart, 0, srcLine, srcCol]
           segmentStart = index
         @colOffset = line.length - segmentStart
+        @mapped = true
       else if inputPos?
         @lines[@line].push [l, 0, srcLine + i, srcCol]
-      else if l is not 0
+        @colOffset = line.length
+        @mapped = true
+      else if @mapped
+        // Unmapped text after a mapping ends it.  Node.js maps a line without
+        // segments by the line before, so this holds across lines too.
         @lines[@line].push [l]
+        @colOffset = line.length
+        @mapped = false
+      else
+        @colOffset = l + line.length
 
   /**
   Append pre-compiled `outputStr` whose lines already have composed source map
@@ -276,5 +297,11 @@ export class SourceMap
             [first[0] + @colOffset] as SourceMapEntry
           @lines[@line].push shifted, ...entries.slice(1)
         @colOffset = line.length - sum
+        @mapped = entries[entries.length - 1].length is 4
+      else if @mapped and line
+        // Code without segments after a mapping ends it, as in updateSourceMap
+        @lines[@line].push [@colOffset]
+        @colOffset = line.length
+        @mapped = false
       else
         @colOffset += line.length

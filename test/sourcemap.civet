@@ -2,7 +2,7 @@ assert from assert
 { TraceMap, decodedMappings } from @jridgewell/trace-mapping
 { parse } from ../source/main.civet
 { compile } from ../source/compiler.civet
-{ composeLines, decodeMappings, type SourceMapEntry } from ../source/sourcemap.civet
+{ composeLines, decodeMappings, SourceMap, type SourceMapEntry } from ../source/sourcemap.civet
 { readFile } from ./helper.civet
 
 describe "sourcemap", ->
@@ -53,7 +53,8 @@ describe "sourcemap", ->
         // before the token (dropped: nothing to end), in it, at the unmapped
         // code after it (kept), past it (dropped), in it again
         [[0, 0, 0, 1], [1, 0, 0, 2], [1, 0, 0, 6], [1, 0, 0, 9], [1, 0, 0, 3]]
-        // an empty upstream line, and an already unmapped segment
+        // an empty upstream line (kept: it ends the previous line's mapping),
+        // and an already unmapped segment
         [[1, 0, 1, 0], [1]]
         // past the upstream map's last line
         [[0, 0, 7, 0]]
@@ -63,7 +64,26 @@ describe "sourcemap", ->
       assert.deepEqual composeLines(upstream, downstream), [
         // dropped segments' columns carry into the next kept one
         [[1, 0, 5, 1], [1], [2, 0, 5, 2]]
-        []
+        [[1]]
         []
         [[0, 0, 5, 2], [2]]
       ]
+
+  describe "SourceMap", ->
+    // Node.js maps a line without segments by the last segment before it
+    it "should end a mapping on a later line", ->
+      sm := new SourceMap "abc\n", "a.hera"
+      sm.updateSourceMap "x", 0
+      sm.updateSourceMap "\n\ny"
+      assert.deepEqual sm.lines, [[[0, 0, 0, 0]], [], [[0]]]
+
+    it "should end a mapping before appended code without segments", ->
+      sm := new SourceMap "abc\n", "a.hera"
+      sm.updateSourceMap "x", 0
+      sm.appendMapped "y\nz\n", [[[0, 0, 0, 1]], [], []]
+      assert.deepEqual sm.lines, [[[0, 0, 0, 0], [1, 0, 0, 1]], [[0]], []]
+
+    it "should map the end of a source without a final line break to its last line", ->
+      sm := new SourceMap "ab\ncd", "a.hera"
+      sm.updateSourceMap "x", 5
+      assert.deepEqual sm.lines, [[[0, 0, 1, 2]]]

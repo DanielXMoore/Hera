@@ -43,6 +43,10 @@ All notable changes to `@danielx/hera` will be documented in this file.
   hooks left Hera's map on the shifted JavaScript tsc emitted, so stack traces
   and coverage pointed at the wrong lines, and the Civet hooks emitted no map
   at all (supersedes #100).
+- In a source map, code that follows a mapping on a later line no longer
+  maps to it: Node.js maps a line without segments by the last segment
+  before it, so stack frames in Hera's own parser code could point into the
+  grammar.
 
 ## [0.9.9] - 2026-10-13
 
