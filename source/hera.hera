@@ -259,18 +259,6 @@ Backslash
 TripleSlash
   "///"
 
-OpenBrace
-  /\{\s*/
-
-CloseBrace
-  /\}[ \t]*/
-
-OpenBracket
-  /\[\s*/
-
-CloseBracket
-  /\][ \t]*/
-
 OpenParenthesis
   /\([ \t]*/
 

@@ -971,22 +971,6 @@
       "L",
       "///"
     ],
-    "OpenBrace": [
-      "R",
-      "\\{\\s*"
-    ],
-    "CloseBrace": [
-      "R",
-      "\\}[ \\t]*"
-    ],
-    "OpenBracket": [
-      "R",
-      "\\[\\s*"
-    ],
-    "CloseBracket": [
-      "R",
-      "\\][ \\t]*"
-    ],
     "OpenParenthesis": [
       "R",
       "\\([ \\t]*"
@@ -1037,7 +1021,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 7963,
+          "pos": 7867,
           "length": 4
         },
         "inline": true
@@ -1052,7 +1036,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 8023,
+          "pos": 7927,
           "length": 73
         },
         "t": " CodeBlockNode "
