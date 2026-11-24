@@ -2759,3 +2759,95 @@ describe "Hera", ->
       assert.match js, /const \$RC\d+ = \$cc\(/
       mod := execMod(js) as any
       assert.deepEqual mod.parse("abx"), ["a", "bx"]
+
+    it "should track errors in one pass by default and lazily with lazyErrors", ->
+      grammar := """
+        Root
+          Start "x"
+
+        Start
+          "" ->
+            seen.push(seen.length)
+            return 1
+
+        ```
+        const seen = []
+        exports.takeSeen = () => seen.splice(0)
+        ```
+      """
+      mod := execMod(compile(parse(grammar))) as any
+      // Default: one pass, whether the parse succeeds or fails
+      assert.deepEqual mod.parse("x"), [1, "x"]
+      assert.deepEqual mod.takeSeen(), [0]
+      assert.throws (-> mod.parse("y")), /Expected:\s+Root "x"/
+      assert.deepEqual mod.takeSeen(), [0]
+      // lazyErrors: success takes one pass; failure re-runs with error
+      // tracking and reports the same message
+      assert.deepEqual mod.parse("x", { lazyErrors: true }), [1, "x"]
+      assert.deepEqual mod.takeSeen(), [0]
+      assert.throws (-> mod.parse("y", { lazyErrors: true })), /Expected:\s+Root "x"/
+      assert.deepEqual mod.takeSeen(), [0, 1]
+      // lazyErrors is ignored when event hooks are given
+      assert.throws (-> mod.parse("y", { lazyErrors: true, events: { enter: -> undefined } })), /Expected:\s+Root "x"/
+      assert.deepEqual mod.takeSeen(), [0]
+
+    it "should support lazyErrors two-pass error tracking, and one pass with event hooks", ->
+      grammar := """
+        Root
+          Spaces Word ->
+            return [$1.token, $2]
+
+        Spaces
+          /[ \\t]+/ -> { $loc, token: $0 }
+
+        Word
+          /[a-z]+/ ->
+            return $0.toUpperCase()
+          /[0-9]+/ ->
+            return Number($0)
+          "?"?
+      """
+      mod := execMod(compile(parse(grammar))) as any
+      assert.deepEqual mod.parse("  hello", { lazyErrors: true }), ["  ", "HELLO"]
+      assert.deepEqual mod.parse("  42", { lazyErrors: true }), ["  ", 42]
+      // A failed parse and unconsumed input both re-parse with full error
+      // tracking, for the same message as without lazyErrors
+      for [input, error] of [["  !!!", /Expected:/], ["  hello trailing", /Unconsumed input/]] as const
+        message := (opts?: {}) ->
+          try
+            mod.parse input, opts
+            return
+          catch e
+            return (e as Error).message
+        assert.equal message({ lazyErrors: true }), message()
+        assert.match message()!, error
+      // With external cacheEnter/cacheExit caches, lazyErrors is ignored and
+      // errors are tracked in the single pass
+      cache := new Map<string, any>()
+      assert.throws ->
+        mod.parse("  !!!", {
+          lazyErrors: true
+          events: {
+            cacheEnter: (name: string, pos: number) ->
+              k := `${name}:${pos}`
+              if cache.has k then cache.get k else Symbol.for("@danielx/hera/MISS")
+            cacheExit: (name: string, startPos: number, _endPos: number, val: unknown) ->
+              cache.set `${name}:${startPos}`, val
+          }
+        })
+      , /Expected:/
+
+      // An event hook that rejects valid input decides the result: there is
+      // no second pass without the hook to contradict it
+      single := generate """
+        Root
+          "a"
+      """
+      assert.throws ->
+        single.parse("a", {
+          lazyErrors: true
+          events: {
+            enter: -> { cache: undefined }
+          }
+        })
+      , /No result/

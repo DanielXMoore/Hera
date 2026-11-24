@@ -79,7 +79,8 @@ points with identical code.  `ablation.mjs` instead:
   compared.
 
 Variants can set compiler options or parse options; `cc off` turns off the
-`$cc` matchers with the internal `disableOptimizations` compiler option.
+`$cc` matchers with the internal `disableOptimizations` compiler option, and
+`lazyErrors` sets that parse option.
 Writes `perf/ablation-report.txt` (gitignored).
 
 ## Extending

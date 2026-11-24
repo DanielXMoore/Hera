@@ -1,7 +1,8 @@
 // Differential test for `disableOptimizations`: every codegen optimization
 // must be semantics-preserving, so a parser compiled with any subset of them
 // turned off has to produce identical results (values and error messages)
-// to the fully optimized parser.
+// to the fully optimized parser, including under the lazyErrors runtime
+// option.
 
 assert from assert
 fs from fs
@@ -31,9 +32,9 @@ cases: [string, string[]][] := [
   ]
 ]
 
-outcome := (parser: any, input: string) ->
+outcome := (parser: any, input: string, opts?: any) ->
   try
-    JSON.stringify { ok: parser.parse(input) }
+    JSON.stringify { ok: parser.parse(input, opts) }
   catch e
     JSON.stringify { error: (e as Error).message }
 
@@ -51,6 +52,7 @@ describe "disableOptimizations", ->
         for [label, disabled] of variants
           parser := execMod compile(grammar, { disableOptimizations: disabled })
           assert.equal outcome(parser, input), expected, `${name} (${label}) on ${JSON.stringify input.slice(0, 40)}`
+        assert.equal outcome(reference, input, { lazyErrors: true }), expected, `${name} with lazyErrors on ${JSON.stringify input.slice(0, 40)}`
 
   it "should actually remove each optimization from the generated code", ->
     grammar := """
