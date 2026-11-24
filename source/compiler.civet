@@ -596,13 +596,14 @@ firstHandlerPos := (node: unknown): number | undefined ->
     return pos if pos?
   undefined
 
-// With transpileEmbedded, the rule's generated code maps to its first
-// handler.  Without transpileEmbedded the downstream compiler maps that code
-// itself, but with it, nothing else would map type errors in it (such as in a
-// `::Type`) back to the grammar.
+// With transpileEmbedded and `types`, the rule's generated code maps to its
+// first handler.  Without transpileEmbedded the downstream compiler maps that
+// code itself, but with it, nothing else would map type errors in it (such as
+// in a `::Type`) back to the grammar.  Untyped code has no type errors to map,
+// and mapping it would charge its branches to the handler in coverage reports.
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode ->
   nodes := compileRuleNodes options, name, rule
-  anchor := if embeddedPrefix? then firstHandlerPos rule
+  anchor := if embeddedPrefix? and options.types then firstHandlerPos rule
   anchor? ? { anchor, children: nodes } : nodes
 
 compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode[] ->
