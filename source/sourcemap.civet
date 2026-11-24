@@ -102,8 +102,13 @@ export class SourceMap
   /**
   Append `outputStr` to the generated output.  When `inputPos` is given, the
   appended text maps back to that position in the source (plus `colOffset`).
+  Line `i` of the text maps to source line `i` after it, unless `anchored`,
+  for generated code: then the text maps to `inputPos` itself, with a segment
+  at every identifier.  A consumer may interpolate columns within a segment
+  (Civet does), which would carry a generated column past the end of the
+  source line.
   */
-  updateSourceMap(outputStr: string, inputPos?: number, colOffset = 0): void
+  updateSourceMap(outputStr: string, inputPos?: number, colOffset = 0, anchored = false): void
     outLines := outputStr.split EOL
     let srcLine = 0, srcCol = 0
 
@@ -119,13 +124,51 @@ export class SourceMap
         @srcLine++
         @colOffset = 0
         @lines[@line] = []
-        @srcColumn = srcCol = colOffset
+        srcCol = colOffset unless anchored
+        @srcColumn = srcCol
 
       l := @colOffset
       @colOffset = line.length
       @srcColumn += line.length
 
-      if inputPos?
+      if anchored
+        @lines[@line].push [l, 0, srcLine, srcCol]
+        segmentStart .= 0
+        for { index } of line.matchAll /(?<![\w$])[\w$]/g
+          continue if index is 0
+          @lines[@line].push [index - segmentStart, 0, srcLine, srcCol]
+          segmentStart = index
+        @colOffset = line.length - segmentStart
+      else if inputPos?
         @lines[@line].push [l, 0, srcLine + i, srcCol]
       else if l is not 0
         @lines[@line].push [l]
+
+  /**
+  Append pre-compiled `outputStr` whose lines already have composed source map
+  entries (`mappedLines`) mapping back to this map's original source.
+  */
+  appendMapped(outputStr: string, mappedLines: SourceMapEntry[][]): void
+    outLines := outputStr.split EOL
+    for each line, i of outLines
+      if i > 0
+        @line++
+        @colOffset = 0
+        @lines[@line] = []
+      entries := mappedLines[i]
+      if entries and entries.length
+        sum .= 0
+        for e of entries
+          sum += e[0]
+        if @colOffset is 0
+          @lines[@line].push ...entries
+        else
+          first := entries[0]
+          shifted: SourceMapEntry := if first.length is 4
+            [first[0] + @colOffset, first[1], first[2], first[3]] as SourceMapEntry
+          else
+            [first[0] + @colOffset] as SourceMapEntry
+          @lines[@line].push shifted, ...entries.slice(1)
+        @colOffset = line.length - sum
+      else
+        @colOffset += line.length

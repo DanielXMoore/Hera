@@ -5,7 +5,7 @@ type { Module } from node:module
 
 type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
 { compile: heraCompile } from ../../main.civet
-{ compileCivetToJs } from ./transpile.civet
+{ compileCivetEmbedded } from ./transpile.civet
 
 export options := {
   hera: {} as HeraCompilerOptions
@@ -22,8 +22,10 @@ if require.extensions
       |> heraCompile(., {
           filename,
           inlineMap: true
+          transpileEmbedded: (src, upstreamSourceMap) =>
+            compileCivetEmbedded(src, filename, options.civet, upstreamSourceMap)
           ...options.hera
           language: 'civet'
+          types: false
         })
-      |> compileCivetToJs(., filename, options.civet)
       |> (module as any)._compile(., filename)

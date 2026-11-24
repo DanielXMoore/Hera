@@ -4,7 +4,25 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `transpileEmbedded` compile option: only the grammar's embedded code
+  (code blocks, handlers, and heregex interpolations) goes to a downstream
+  compiler such as Civet, as one module that the parser calls into by name.
+  Hera writes the rest of the parser itself, so Civet no longer re-parses the
+  generated scaffolding: Civet's own grammar builds in 4.4 s and 0.63 GB
+  instead of 19.9 s and 2.06 GB. With `types`, handler parameters keep their
+  types, and type errors in a rule's generated code map to its first handler.
+
 ### Changed
+- The esbuild plugin with `language: "civet"`, and the
+  `@danielx/hera/register/civet` hooks, use `transpileEmbedded`. A Civet
+  grammar compiled with `transpileEmbedded` defaults to untyped output; pass
+  `types: true` for TypeScript.
+- The `@danielx/hera/register/civet/esm` hook compiles `.hera` files itself,
+  so it no longer needs the base `register/esm` hook registered before it.
+  Its `data` takes `{ hera, civet }` compiler options. The old setup, with
+  the base hook registered first (with the Hera options) and Civet options as
+  `data`, still works.
 - A string literal that ends in a lead surrogate (such as `"\uD83D"`) is now
   a compile error. It could match half of a surrogate pair, after which a
   regex advanced the cursor past the end of its match and `validate` could

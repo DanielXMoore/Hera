@@ -40,3 +40,21 @@ civet source/cli-bin.civet --types --module --libPath ./machine.js -o parsers \
 
 cp test/inference.test-d.ts parsers/inference.test-d.ts
 cp test/skip.test-d.ts parsers/skip.test-d.ts
+
+# The same grammars and type tests again, compiled with transpileEmbedded.
+mkdir -p ./parsers/embedded
+cp parsers/machine.js parsers/machine.d.ts parsers/hera-types.ts parsers/*.test-d.ts parsers/embedded/
+civet build/typed-embedded-samples.civet parsers/embedded \
+  source/hera.hera \
+  samples/code.hera \
+  samples/regex.hera \
+  samples/heregex.hera \
+  samples/url.hera \
+  samples/coffee.hera \
+  samples/structural-mapping.hera \
+  samples/math.hera \
+  samples/named-params.hera \
+  samples/skip.hera \
+  samples/unary-subtract.hera \
+  samples/types.hera \
+  test/inference.fixture.hera

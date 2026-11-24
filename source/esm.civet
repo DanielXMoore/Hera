@@ -24,6 +24,13 @@ export function initialize(data: CompilerOptions = {})
     ...data
   }
 
+/**
+The options this hook was registered with, or undefined if it wasn't
+registered.  The Civet hook, which compiles `.hera` files itself, applies them
+so that chains registered with this hook first keep their Hera options.
+*/
+export registeredOptions := (): CompilerOptions | undefined -> heraOptions
+
 
 export resolve: ResolveHook := (specifier, context, next) =>
   return next(specifier, context) unless extensionsRegex.test(specifier)

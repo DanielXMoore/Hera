@@ -1,21 +1,77 @@
-// Module hook that compiles Civet to JavaScript
+// ESM hook: Hera compile with transpileEmbedded (only the grammar's embedded
+// Civet code goes through Civet), like the CJS hook
 
-type { LoadHook } from node:module
 assert from node:assert
+{ fileURLToPath } from node:url
+type { LoadHook } from node:module
 
-{ compileCivetToJs } from ./transpile.civet
+type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
+{ compile: heraCompile } from ../../main.civet
+{ compileCivetEmbedded } from ./transpile.civet
+
+{ registeredOptions } from ../../esm.civet
+export { resolve } from ../../esm.civet
+
+// Appended to the URL when loading the grammar's source.  Other Hera hooks
+// only handle URLs that end in `.hera`, so one registered further down the
+// chain (as the base `register/esm` hook used to be) passes the source
+// through instead of compiling it first.  A second copy of this hook raises
+// an error for it instead, as the base hook does for its own tag.
+sourceTag := '#hera-civet-esm-source'
+
+export type CivetLoaderOptions = {
+  hera?: HeraCompilerOptions
+  civet?: object
+}
 
 // module-level state set via initialize()
+let heraOptions: HeraCompilerOptions = {}
 let civetOptions: object = {}
 
-export function initialize(data: object = {})
-  civetOptions = data
+/**
+`data` is `{ hera?, civet? }`: options for the Hera and Civet compilers.
+Civet compile options passed directly as `data` are also accepted, the form
+this hook took when it post-processed the base `register/esm` hook's output.
+*/
+export function initialize(data: CivetLoaderOptions | object = {})
+  if "hera" in data or "civet" in data
+    { hera = {}, civet = {} } := data as CivetLoaderOptions
+    heraOptions = hera
+    civetOptions = civet
+  else
+    heraOptions = {}
+    civetOptions = data
 
 export load: LoadHook := async (url, context, next) =>
-  result := await next(url, context)
-  return result unless /\.hera$/.test(url)
+  if url.endsWith sourceTag
+    throw new Error """
+      The Hera Civet ESM loader has already been registered. Use --import instead of -r/--require.
+      If you require an ESM module (which this is) with -r/--require it gets loaded twice.
+    """
 
-  assert result.source, `${url} file source was not loaded`
-  source := compileCivetToJs(result.source.toString(), url, civetOptions)
+  return next(url, context) unless /\.hera$/.test(url)
 
-  { ...result, source }
+  // Without format 'module', Node.js would take the .hera file for JavaScript
+  // and try to compile it as a CJS module.
+  { source: heraSource } := await next `${url}${sourceTag}`, { ...context, format: 'module' }
+  assert heraSource, `${url} file source was not loaded`
+
+  filename := fileURLToPath url
+  // A chain set up the old way registered the base `register/esm` hook, in
+  // the same thread, with the Hera options
+  options: HeraCompilerOptions := { module: true, ...registeredOptions(), ...heraOptions }
+  source := heraCompile heraSource.toString(), {
+    inlineMap: true
+    filename
+    transpileEmbedded: (src, upstreamSourceMap) =>
+      compileCivetEmbedded(src, filename, civetOptions, upstreamSourceMap)
+    ...options
+    language: 'civet'
+    types: false
+  }
+
+  {
+    source
+    format: options.module ? "module" : "commonjs"
+    shortCircuit: true
+  }

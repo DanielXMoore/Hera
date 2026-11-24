@@ -1,0 +1,67 @@
+assert from assert
+{ execMod } from ../../../source/main.civet
+{ initialize, load } from ../../../source/register/civet/esm.civet
+{ initialize: initializeBase } from ../../../source/esm.civet
+
+describe "Civet ESM hook", ->
+  // The base hook's options apply here too, so start from its defaults
+  beforeEach -> initializeBase {}
+
+  grammar := """
+    Rule
+      "a" ->
+        x := "ok"
+        x
+  """
+
+  run := (url: string) ->
+    calls: { url: string, context: any }[] := []
+    next := (url: string, context: any) ->
+      calls.push { url, context }
+      { source: grammar, format: context.format }
+    result := await (load as any) url, { format: undefined }, next
+    { calls, result }
+
+  it "should compile a grammar's source, passing only its embedded code to Civet", ->
+    initialize { hera: { module: false } }
+    { calls, result } := await run "file:///tmp/grammar.hera"
+
+    // The source is loaded under a URL that other Hera hooks pass through
+    assert.equal calls.length, 1
+    assert.equal calls[0].url, "file:///tmp/grammar.hera#hera-civet-esm-source"
+    assert.equal calls[0].context.format, "module"
+
+    assert.equal result.format, "commonjs"
+    assert.equal result.shortCircuit, true
+    assert.match result.source, /function __hera_h_0__\(\) \{/
+    assert.equal (execMod(result.source) as any).parse("a"), "ok"
+
+  it "should emit ESM by default and accept Civet options as `data` directly", ->
+    // coffeeCompat makes `#{...}` string interpolation
+    initialize { parseOptions: { coffeeCompat: true } }
+    { result } := await run "file:///tmp/grammar.hera"
+    assert.equal result.format, "module"
+    coffee := await (load as any) "file:///tmp/coffee.hera", {}, (_url: string, context: any) ->
+      { source: 'Rule\n  "a" ->\n    return "#{\'ok\'}"\n', format: context.format }
+    assert.doesNotMatch coffee.source, /#\{/
+
+  it "should apply the options the base hook was registered with, under its own", ->
+    initializeBase { language: 'civet', module: false, tokenize: true }
+    initialize { hera: { tokenize: false } }
+    { result } := await run "file:///tmp/grammar.hera"
+    assert.equal result.format, "commonjs"
+    assert.equal (execMod(result.source) as any).parse("a"), "ok"
+
+  it "should report being registered twice", ->
+    initialize()
+    await assert.rejects (load as any)("file:///tmp/grammar.hera#hera-civet-esm-source", {}, ->), /already been registered/
+
+  it "should pass other URLs on unchanged", ->
+    initialize()
+    context := { format: "module" }
+    passed := { source: "export default 1", format: "module" }
+    result := await (load as any) "file:///tmp/a.js", context, (url: string, ctx: any) ->
+      assert.equal url, "file:///tmp/a.js"
+      assert.equal ctx, context
+      passed
+    assert.equal result, passed

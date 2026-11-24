@@ -1,4 +1,4 @@
-import { Mini, Block, Num, LongChoice, LongSequence } from "./inference.fixture.hera"
+import { Mini, Block, Num, LongChoice, LongSequence, Pair } from "./inference.fixture.hera"
 
 // Type-level assertion helpers, mirroring the core of TypeStrong/ts-expect.
 const expectType = <T>(_: T): void => void 0
@@ -11,6 +11,7 @@ type BlockValue = NonNullable<ReturnType<typeof Block>>["value"]
 type NumValue = NonNullable<ReturnType<typeof Num>>["value"]
 type LongChoiceValue = NonNullable<ReturnType<typeof LongChoice>>["value"]
 type LongSequenceValue = NonNullable<ReturnType<typeof LongSequence>>["value"]
+type PairValue = NonNullable<ReturnType<typeof Pair>>["value"]
 
 // Discriminator literals survive inference (not widened to `string`).
 expectType<"Block">((null as unknown as BlockValue).type)
@@ -20,6 +21,7 @@ expectType<"Num">((null as unknown as NumValue).type)
 expectType<TypeEqual<MiniValue, BlockValue | NumValue>>(true)
 expectType<TypeEqual<LongChoiceValue, "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j">>(true)
 expectType<TypeEqual<LongSequenceValue, ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]>>(true)
+expectType<TypeEqual<PairValue, number>>(true)
 
 // Discriminated narrowing: each branch only sees its own fields.
 declare const m: MiniValue

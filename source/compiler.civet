@@ -19,11 +19,51 @@ export type CompilerOptions = {
    * any handler bodies.
    */
   tokenize?: boolean
+  /**
+   * Transpiler for the grammar's embedded code (code blocks, handler bodies,
+   * and heregex interpolations).  Hera puts only that code into one virtual
+   * module (the code blocks, then one named function per handler and per
+   * interpolation), calls `transpileEmbedded` on it once, and splices the
+   * result into the parser, which calls those functions by name.  A
+   * downstream compiler such as Civet then never re-parses Hera's generated
+   * scaffolding.  With `types`, handler parameters get the same types as
+   * without `transpileEmbedded`.
+   */
+  transpileEmbedded?: (
+    source: string
+    upstreamSourceMap?: SourceMap
+  ) => EmbeddedTranspileResult
+}
+
+export type EmbeddedTranspileResult =
+  | string
+  | {
+      code: string
+      sourceMap?: {
+        lines?: SourceMapEntry[][]
+        data?: { lines?: SourceMapEntry[][] }
+      }
+    }
+
+type Handler = { $loc: any, f: string, t?: string, inline?: boolean }
+
+type EmbeddedHandler = {
+  handler: Handler
+  parameters: string[]
+  paramTypes: string[]
+}
+
+type CompiledChunk = {
+  code: string
+  sourceMapLines?: SourceMapEntry[][] | undefined
 }
 
 strDefs: string[] := []
 reDefs: string[] := []
 dynamicReDefs: RegExpPart[][] := []
+/** Name prefix for transpileEmbedded functions; undefined without transpileEmbedded. */
+let embeddedPrefix: string | undefined
+let embeddedHandlers: EmbeddedHandler[] = []
 
 /**
 Return the `${prefix}${index}` identifier for `value`, adding it to `defs` on
@@ -257,26 +297,18 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
   else ""
   tokenWrap + `  $$ctx.exit?.(${nameLit}, $$state, $$final, $$eventData);\n`
 
-// Emit an inline IIFE that applies the handler to the parser result.
+// `<declaration>(params)<ret> {\n<void line><body>`, shared by handler IIFEs
+// and the named functions in the transpileEmbedded virtual module.
 //
-// The IIFE's parameter types reference typeof on rule-local variables (so TS
-// contextually types `$0`, `$1`, ... from the parser's concrete result shape
-// at each call site — `V[i]` in a generic top-level helper wouldn't:
-// TS type-checks a generic function body once with `V` unresolved, which
-// leaves `.reduce`, `.filter`, etc. inside handler bodies with no known
-// method signatures).
+// `parameters` / `paramTypes` are parallel arrays: the formal parameter
+// names and their TS types.
 //
-// `parameters` / `paramTypes` / `callArgs` are parallel arrays: the formal
-// parameter names, their TS types (referencing `typeof $$value[i]`), and the
-// matching argument expressions used to invoke the IIFE.
-//
-// Civet's indent-sensitive parser is happy as long as the IIFE body sits at
-// a strictly-deeper indent than the IIFE declaration.  We rely on the rule
-// function using early returns for the null/tokenize paths so the IIFE
+// Civet's indent-sensitive parser is happy as long as the function body sits
+// at a strictly-deeper indent than the function declaration.  We rely on the
+// rule function using early returns for the null/tokenize paths so the IIFE
 // lands at 2-space indent, while the handler body comes in at 4-space from
 // the grammar's source indent.
-emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t?: string, inline?: boolean }, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string) ->
-  { types } := options
+handlerFunctionParts := (declaration: string, types: boolean | undefined, handler: Handler, parameters: string[], paramTypes: string[]): ASTNode[] ->
   handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
 
   typedParameters := if types
@@ -301,7 +333,7 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   // newline so the grammar's relative nesting is preserved inside the IIFE.
   handlerText := if handler.inline then handler.f.replace(/\n/g, `\n${bodyIndent}`) else handler.f
   handlerToken := { $loc: handler.$loc, token: handlerText }
-  handlerBody := if handler.inline
+  handlerBody: ASTNode := if handler.inline
     [`${bodyIndent}return `, handlerToken]
   else
     handlerToken
@@ -318,17 +350,30 @@ emitHandlerIIFE := (options: CompilerOptions, handler: { $loc: any, f: string, t
   voidLine := if types and voidParameters.length then `${bodyIndent}void ${voidParameters.join(", ")};\n` else ""
 
   [
-    `(function(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    `${declaration}(${typedParameters.join(", ")})${handlerRetAnno} {\n`
     voidLine
     handlerBody
+  ]
+
+// Emit an inline IIFE that applies the handler to the parser result.
+//
+// The IIFE's parameter types reference typeof on rule-local variables (so TS
+// contextually types `$0`, `$1`, ... from the parser's concrete result shape
+// at each call site — `V[i]` in a generic top-level helper wouldn't:
+// TS type-checks a generic function body once with `V` unresolved, which
+// leaves `.reduce`, `.filter`, etc. inside handler bodies with no known
+// method signatures).  `callArgs` are the matching argument expressions.
+emitHandlerIIFE := (options: CompilerOptions, handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string): ASTNode ->
+  [
+    ...handlerFunctionParts("(function", options.types, handler, parameters, paramTypes)
     `\n${baseIndent}})(${callArgs.join(", ")})`
   ]
 
-conditionalExpression := (options: CompilerOptions, condition: string, consequent: string, alternate: string) =>
-  if options.language is 'civet'
-    `if ${condition} then ${consequent} else ${alternate}`
-  else
-    `${condition} ? ${consequent} : ${alternate}`
+// With transpileEmbedded: record the handler for the virtual module, and
+// emit a call to its named function there.
+emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[]): string ->
+  id := embeddedHandlers.push({ handler, parameters, paramTypes }) - 1
+  `${embeddedPrefix}h_${id}__(${callArgs.join(", ")})`
 
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
@@ -464,6 +509,14 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   parameters = usedParameterIndexes.map (i) -> parameters[i]
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
+
+  // A transpileEmbedded handler is a top-level function, which can't name
+  // this rule function's `$$value`.  The rule's top-level `$parser` has the
+  // same value type, so its parameter types name that instead: the parser
+  // serves as the type witness.
+  witnessType := `Unwrap<ReturnType<typeof ${fnName}$parser>>`
+  embeddedParamTypes := paramTypes.map .replace /typeof \$\$value/g, => witnessType
+
   valueUseCount := (callArgs.filter usesIdentifier ., "$$value")#
   valueDecl := if valueUseCount > 1
     "  const $$value = $$r.value;\n"
@@ -476,7 +529,10 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // handler body (which comes in at 4-space from the grammar source) is
   // strictly deeper than the IIFE's declaration line — civet's parser
   // needs that for block vs object-literal disambiguation.
-  iife := emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
+  iife := if embeddedPrefix?
+    emitEmbeddedHandlerCall h, parameters, embeddedParamTypes, callArgs
+  else
+    emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
 
   // Compose the rule body with early returns for the null / skip paths;
   // all exits route through a single exit-hook helper.  The hook only fires
@@ -516,11 +572,7 @@ ${valueDecl}  const $$m = `
   if handlerUsesSkip
     skipCast := types ? " as any" : ""
     body.push ```
-    \  const $$final${finalType && `: ${finalType}`} = ${conditionalExpression options,
-        `($$m${skipCast}) !== SKIP`
-        `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
-        "undefined"
-      };
+    \  const $$final${finalType && `: ${finalType}`} = ($$m${skipCast}) !== SKIP ? (($$r${rValueCast}).value = $$m, $$r${rValueCast}) : undefined;
       ${exitHook("$$final")}
       return $$final;
     ```
@@ -532,7 +584,29 @@ ${valueDecl}  const $$m = `
     ```
   return { helpers, body }
 
-compileRule := (options: CompilerOptions, name: string, rule: HeraAST) ->
+/**
+Source position of the first handler in `node`, if any.
+*/
+firstHandlerPos := (node: unknown): number | undefined ->
+  return unless Array.isArray node
+  for child of node
+    if child <? "object" and child and "$loc" in child and "f" in child
+      return (child as Handler).$loc.pos
+    pos := firstHandlerPos child
+    return pos if pos?
+  undefined
+
+// With transpileEmbedded and `types`, the rule's generated code maps to its
+// first handler.  Without transpileEmbedded the downstream compiler maps that
+// code itself, but with it, nothing else would map type errors in it (such as
+// in a `::Type`) back to the grammar.  Untyped code has no type errors to map,
+// and mapping it would charge its branches to the handler in coverage reports.
+compileRule := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode ->
+  nodes := compileRuleNodes options, name, rule
+  anchor := if embeddedPrefix? and options.types then firstHandlerPos rule
+  anchor? ? { anchor, children: nodes } : nodes
+
+compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode[] ->
   { types } := options
   stateType := types ? ": ParseState" : ""
   ctxType := types ? ": ParserContext" : ""
@@ -637,7 +711,74 @@ defaultOptions: CompilerOptions :=
   types: false
   libPath: "@danielx/hera/lib"
 
-{ SourceMap, base64Encode } from ./sourcemap.civet
+{ SourceMap, base64Encode, type SourceMapEntry } from ./sourcemap.civet
+
+decodeUnicodeEscapes := (s: string): string ->
+  s.replace /\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))/g, (match, braced, hex) ->
+    cp := parseInt braced ?? hex, 16
+    /* c8 ignore next -- out-of-range unicode escape */
+    if cp <= 0x10FFFF then String.fromCodePoint(cp) else match
+
+/**
+Pick the transpileEmbedded function-name prefix: one that appears nowhere in
+the grammar's user code, raw or after the JS unicode-escape normalization a
+transpiler may apply (`\u005f_hera_` → `__hera_`), so generated names cannot
+collide with user identifiers.
+*/
+embeddedPrefixFor := (rules: HeraRules, codeBlocks: ASTNode[]): string ->
+  raw := JSON.stringify(rules) + "\n" + generate(codeBlocks, {})
+  userText := `${raw}\n${decodeUnicodeEscapes raw}`
+  prefix .= "__hera_"
+  while userText.includes prefix
+    prefix += "_"
+  prefix
+
+/**
+Remove a trailing `//# sourceMappingURL=` footer that the transpiler appended,
+since Hera's own code (and map comment) follows the spliced chunk.  A footer
+is a whole line, and its URL has no quote, backtick or asterisk.  A last line
+that ends a string, template literal or block comment holds the quote,
+backtick or asterisk that closes it, so user code is never taken for a
+footer, whatever a minifier leaves at the end.
+*/
+stripSourceMappingURL := (code: string): string ->
+  code.replace /(?:^|\n)[ \t]*\/\/[#@][ \t]*sourceMappingURL=[^\s'"`*]*\s*$/, ""
+
+/**
+Transpile the embedded user code via `options.transpileEmbedded`: the code
+blocks, then `function <prefix>h_<i>__(params)` per handler and
+`function <prefix>rd_<j>__()` per heregex interpolation.  The result is
+spliced into the parser as one contiguous chunk and the parser calls those
+functions by name, so nothing is extracted back out of the transpiler output.
+*/
+transpileEmbeddedCode := (options: CompilerOptions, codeBlocks: ASTNode[], prefix: string, handlers: EmbeddedHandler[], dynamicExprs: string[]): CompiledChunk ->
+  let virtualSM: SourceMap | undefined
+  genOpts: GenerateOptions := {}
+  if options.inlineMap or options.sourceMap
+    virtualSM = new SourceMap(options.source!, options.filename!)
+    genOpts.updateSourceMap = virtualSM.updateSourceMap.bind(virtualSM)
+
+  nodes: ASTNode[] := [codeBlocks, "\n"]
+  for { handler, parameters, paramTypes }, i of handlers
+    nodes.push
+      anchor: handler.$loc.pos
+      children: [
+        handlerFunctionParts(`function ${prefix}h_${i}__`, options.types, handler, parameters, paramTypes)
+        "\n}\n"
+      ]
+  // Parenthesized, so an expression that starts on a new line isn't cut off
+  // by automatic semicolon insertion after `return`
+  for expr, j of dynamicExprs
+    nodes.push `function ${prefix}rd_${j}__() {\n  return (${expr})\n}\n`
+
+  res := options.transpileEmbedded!(generate(nodes, genOpts), virtualSM)
+  if typeof res is "string"
+    { code: stripSourceMappingURL res }
+  else
+    {
+      code: stripSourceMappingURL res.code
+      sourceMapLines: res.sourceMap?.lines ?? res.sourceMap?.data?.lines
+    }
 
 export function compile(rules: HeraRules, options: CompilerOptions & { sourceMap: true }): { code: string, sourceMap: SourceMap }
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string
@@ -649,14 +790,43 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   dynamicReDefs.length = 0
 
   { language, module } := options
-  types := options.types || language === 'typescript' || language === 'civet'
+  // transpileEmbedded output skips the downstream Civet pass over Hera's
+  // scaffolding, so Civet grammars default to untyped (plain JS) scaffolding
+  // there unless `types: true` is requested explicitly.
+  types := Boolean(options.types) or language is 'typescript' or (language is 'civet' and not options.transpileEmbedded)
   options.types = types
   /* c8 ignore next */
   libPath := options.libPath or defaultOptions.libPath
   ruleNames := Object.keys(rules)
 
+  // User code blocks (the ``` blocks in a .hera file) are appended verbatim
+  // for handler-side imports/types.  In tokenize mode handlers are never
+  // invoked, so these blocks are dead weight — and can carry TS-only syntax
+  // (`import type ...`) that breaks plain-JS execution of the bundled
+  // tokenize parser.  Skip them.
+  codeBlocks: ASTNode[] := if options.tokenize then [] else
+    (rules as any)[Symbol.for("code")] ?? []
+
+  embeddedPrefix = if options.transpileEmbedded then embeddedPrefixFor rules, codeBlocks
+  embeddedHandlers = []
+
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]
+
+  // With transpileEmbedded, heregex interpolations become calls to their
+  // transpiled named functions.  An identifier stays a direct read of the
+  // binding, as without transpileEmbedded (an identifier `const` part isn't
+  // cached).
+  prefix := embeddedPrefix
+  dynamicExprs: string[] := []
+  dynamicDefs := if prefix?
+    dynamicReDefs.map (r) ->
+      r.map (part) ->
+        return part if part <? "string" or isIdentifierExpression part.expression
+        j := dynamicExprs.push(part.expression) - 1
+        { ...part, expression: `${prefix}rd_${j}__()` }
+  else
+    dynamicReDefs
 
   strDefSource := strDefs.map (str, i) ->
     `const $L${i} = $L("${str}");\n`
@@ -664,7 +834,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
 
-  dynamicReDefSource := dynamicReDefs.map (r, i) =>
+  dynamicReDefSource := dynamicDefs.map (r, i) =>
     rdType := types ? " as Parser<RegExpMatchArray> & { source?: string }" : ""
     ctxType := types ? ": ParserContext" : ""
     stateType := types ? ": ParseState" : ""
@@ -702,6 +872,13 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       `})${cacheType};\n`
     ].join("")
 
+  // The code blocks and the handler and regex functions, transpiled as one
+  // chunk.  This runs after everything above has read the module-level
+  // tables, so a compile() inside the callback can't clobber them.
+  handlers := embeddedHandlers
+  embeddedChunk := if prefix? and (codeBlocks.length or handlers.length or dynamicExprs.length)
+    transpileEmbeddedCode options, codeBlocks, prefix, handlers, dynamicExprs
+
   genOpts: GenerateOptions := {}
 
   let sm: SourceMap | undefined
@@ -713,6 +890,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
     sm = new SourceMap(options.source, options.filename!)
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
+    genOpts.appendMapped = sm.appendMapped.bind(sm)
 
   head := if types
     if language is 'civet' and !module
@@ -725,14 +903,6 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   tail := parserTail types
   exp := (module ? mjsExport : cjsExport)
 
-  // User code blocks (the ``` blocks in a .hera file) are appended verbatim
-  // for handler-side imports/types.  In tokenize mode handlers are never
-  // invoked, so these blocks are dead weight — and can carry TS-only syntax
-  // (`import type ...`) that breaks plain-JS execution of the bundled
-  // tokenize parser.  Skip them.
-  codeBlocks := if options.tokenize then [] else
-    //@ts-ignore
-    rules[Symbol.for("code")]
   code := generate [
     head
     `\n\nconst grammar = ${ruleNameBlock ruleNames};\n\n`
@@ -752,7 +922,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     "\n\n"
     compileExports(ruleNames, !!module)
     "\n\n"
-    codeBlocks
+    embeddedChunk ? { compiled: embeddedChunk } : codeBlocks
   ], genOpts
 
   if options.inlineMap
@@ -787,14 +957,26 @@ reTupleType := (types: boolean?, reSource: string) ->
     .join("|")
     |> `<[${&}]>`
 
-type ASTNode = string | ASTNode[] | { $loc: { pos: number }, token: string, offset?: number } | { children: ASTNode[] }
+type ASTNode =
+  | string
+  | ASTNode[]
+  | { $loc: { pos: number }, token: string, offset?: number }
+  | { compiled: CompiledChunk }
+  | { anchor: number, children: ASTNode[] }
+  | { children: ASTNode[] }
 type GenerateOptions = {
-  updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number) => void
+  updateSourceMap?: (outputStr: string, inputPos?: number, offset?: number, anchored?: boolean) => void
+  appendMapped?: (outputStr: string, mappedLines: SourceMapEntry[][]) => void
+  /** Source position that generated text maps to (see the `anchor` node). */
+  anchor?: number
 }
 generate := (node: ASTNode, options: GenerateOptions): string ->
   if typeof node is "string"
     // increment output line/column
-    options.updateSourceMap? node
+    if options.anchor?
+      options.updateSourceMap? node, options.anchor, 0, true
+    else
+      options.updateSourceMap? node
 
     return node
 
@@ -808,6 +990,17 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
       {token, $loc, offset} := node
       options.updateSourceMap?(token, $loc.pos, offset)
       return token
+    if "compiled" in node
+      // Pre-transpiled chunk: splice its composed map lines when available
+      { code, sourceMapLines } := node.compiled
+      if sourceMapLines and options.appendMapped
+        options.appendMapped code, sourceMapLines
+      else
+        options.updateSourceMap? code
+      return code
+    if "anchor" in node
+      // Generated code that maps, line by line, to one source position
+      return generate node.children, { ...options, anchor: node.anchor }
     /* c8 ignore next */
     return generate node.children, options
   /* c8 ignore next */
