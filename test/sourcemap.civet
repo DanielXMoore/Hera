@@ -228,6 +228,9 @@ describe "sourcemap", ->
         Empty
           "e" ::
           "f" ::
+
+        Spaced
+          "s" :: number -> 4
       """
       { code, sourceMap } := compile parse(source), { source, filename: "t.hera", sourceMap: true, types: true }
       map := new TraceMap sourceMap.json "t.ts"
@@ -251,6 +254,9 @@ describe "sourcemap", ->
       assert.deepEqual at("Wide", "$$final:"), [10, 7]
       assert.deepEqual at("Alts", "$$final:"), [6, 0]
       assert.deepEqual at("Alts", "MaybeResult<number> =", 12), [7, 8]
+      // A type after a space, whether copied as written or trimmed
+      assert.deepEqual at("Spaced", "):  number", 4), [19, 9]
+      assert.deepEqual at("Spaced", "MaybeResult<number> {", 12), [19, 9]
       // Empty annotations don't type the rule
       assert.doesNotMatch lines.find(.startsWith "function Empty(")!, /MaybeResult/
 

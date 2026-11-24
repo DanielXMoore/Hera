@@ -280,7 +280,7 @@ unknown name, then point at the annotation.
 */
 typeText := (t: string, tPos: number | undefined, trim = true): ASTNode ->
   token := trim ? t.trim() : t
-  mapped token, if tPos? then tPos + t.length - t.trimStart().length
+  mapped token, if tPos? then tPos + (trim ? t.length - t.trimStart().length : 0)
 
 /**
 A rule's declared return type: `type`, copied from its `::Type` annotations,
