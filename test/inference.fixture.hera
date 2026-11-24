@@ -20,3 +20,11 @@ LongChoice
 
 LongSequence
   "a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k"
+
+# A handler's parameters are typed from what the rule matched, with or
+# without transpileEmbedded: if `$1` were `any`, the directive would be unused.
+Pair
+  "a" Num ->
+    // @ts-expect-error $1 is "a", which has no toFixed
+    $1.toFixed()
+    return $2.value * 2

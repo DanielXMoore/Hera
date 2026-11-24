@@ -1,0 +1,19 @@
+// Compile grammars as `build/typed-parser-samples` does, but with
+// transpileEmbedded, so tsc can check that handlers get the same types either
+// way.  The samples' embedded code is TypeScript, so the transpiler returns
+// it unchanged.
+//
+// Usage: civet build/typed-embedded-samples.civet <outDir> <grammar.hera>...
+{ readFileSync, writeFileSync, mkdirSync } from node:fs
+{ basename } from node:path
+{ compile } from ../source/main.civet
+
+[outDir, ...files] := process.argv.slice 2
+mkdirSync outDir, recursive: true
+for file of files
+  writeFileSync `${outDir}/${basename file}.ts`, compile readFileSync(file, "utf8"),
+    filename: file
+    types: true
+    module: true
+    libPath: "./machine.js"
+    transpileEmbedded: (src) -> src

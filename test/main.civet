@@ -3,6 +3,9 @@ typescript from typescript
 { readFile } from ./helper.civet
 hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../source/main.civet
 { transpileTsToJs } from ../source/register/tsc/transpile.civet
+{ SourceMap } from ../source/sourcemap.civet
+civet from @danielx/civet
+esbuild from esbuild
 
 describe "Hera", ->
   it "should do math example", ->
@@ -1751,3 +1754,456 @@ describe "Hera", ->
       assert.match result, /\$\$value = \$\$r\.value/
       assert.match result, /\$\$value = \$\$r\.value;[\s\S]*\}\)\(\$\$value, \$\$value\)/m
       assert.match result, /void \$0, \$1;/
+
+  describe "transpileEmbedded", ->
+    civetJsTranspiler := (src: string, upstreamSourceMap?: SourceMap) ->
+      civet.compile src, {
+        sync: true
+        js: true
+        filename: "test.hera"
+        ...(upstreamSourceMap and { sourceMap: true, upstreamSourceMap })
+      } as any
+
+    it "should batch-transpile Civet code blocks, handlers, inline handlers, $skip, and dynamic regexes in a single call", ->
+      grammar := """
+        ```
+        helper := (s: string) -> s.toUpperCase()
+        prefix := "x"
+        flag := true
+        ```
+
+        Start
+          SkipCheck
+          DynCheck
+          BlockCheck
+          InlineCheck
+          MultiInlineCheck
+
+        SkipCheck
+          "skip" ->
+            $skip
+
+        DynCheck
+          /// p-\${prefix}-\${if flag then "y" else "z"} /// ->
+            helper $0
+
+        BlockCheck
+          "b" /\\d+/:num ->
+            n := Number(num)
+            n * 2
+
+        InlineCheck
+          "i" -> helper "inline"
+
+        MultiInlineCheck
+          "m" -> {
+            kind: "multi"
+            val: helper $1
+          }
+      """
+
+      calls .= 0
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) ->
+          calls++
+          civetJsTranspiler src, upstreamSM
+      }
+
+      assert.equal calls, 1
+      // Handlers are never inlined or IIFE-wrapped: the parser calls each
+      // handler's transpiled named function, and dynamic regexes call theirs
+      assert.doesNotMatch js, /\(function\(/
+      assert.match js, /const \$\$m = __hera_h_\d+__\(/
+      assert.match js, /__hera_rd_\d+__\(\)/
+      assert.match js, /function __hera_h_\d+__\(/
+
+      parser := execMod(js) as any
+      assert.throws -> parser.parse("skip")
+      assert.equal parser.parse("p-x-y"), "P-X-Y"
+      assert.equal parser.parse("b21"), 42
+      assert.equal parser.parse("i"), "INLINE"
+      assert.deepEqual parser.parse("m"), { kind: "multi", val: "M" }
+
+    it "should support explicit types: true with transpileEmbedded", ->
+      grammar := """
+        Rule :: string
+          "a" ->
+            x: string := $1
+            x
+      """
+      ts := compile grammar, {
+        language: 'civet'
+        types: true
+        transpileEmbedded: (src) ->
+          civet.compile(src, { sync: true }) as string
+      }
+      assert.match ts, /: MaybeResult<string>/
+      assert.match ts, /const x: string = \$1/
+
+    it "should skip calling transpileEmbedded when grammar has no embedded user code", ->
+      grammar := """
+        Rule
+          "a" "b"
+      """
+      calls .= 0
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) ->
+          calls++
+          src
+      }
+      assert.equal calls, 0
+      parser := execMod(js) as any
+      assert.deepEqual parser.parse("ab"), ["a", "b"]
+
+      // Also works with hand-crafted HeraRules lacking Symbol.for("code")
+      handCrafted := compile { Rule: ["L", "a"] }, {
+        transpileEmbedded: (src) ->
+          calls++
+          src
+      }
+      assert.equal calls, 0
+      assert.equal (execMod(handCrafted) as any).parse("a"), "a"
+
+    it "should handle grammar with only a fenced code block and no handlers", ->
+      grammar := """
+        ```
+        exports.answer = 42
+        ```
+        Rule
+          "a"
+      """
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) -> civetJsTranspiler src
+      }
+      mod := execMod(js) as any
+      assert.equal mod.answer, 42
+      assert.equal mod.parse("a"), "a"
+
+    it "should handle single-line stub output, object without sourceMap, and data.lines sourceMap", ->
+      grammar := """
+        Rule
+          "a" -> $1
+      """
+      // Plain string with sourceMap: true (falls back to unmapped updateSourceMap)
+      plainRes := compile parse(grammar), {
+        source: grammar
+        filename: "plain.hera"
+        sourceMap: true
+        transpileEmbedded: (src) -> src
+      }
+      assert.equal (execMod(plainRes.code) as any).parse("a"), "a"
+
+      // Object without sourceMap + single-line stub output + trailing blank lines
+      objRes := compile grammar, {
+        transpileEmbedded: (_src) ->
+          code: "function __hera_h_0__($1) { return $1.toUpperCase() }\n\n"
+      }
+      assert.equal (execMod(objRes) as any).parse("a"), "A"
+
+      // Transpiled functions may contain arbitrary statements; they are called, not extracted
+      multiStmtRd := compile """
+        Rule
+          /// \${val} /// -> $0
+      """, {
+        transpileEmbedded: (_src) ->
+          """
+          function __hera_h_0__($0) {
+            return $0
+          }
+          function __hera_rd_0__() {
+            const pat = "ok";
+            return pat;
+          }
+          """
+      }
+      assert.equal (execMod(multiStmtRd) as any).parse("ok"), "ok"
+
+      // Object with a sourceMap while no source map was requested: map is ignored
+      unmappedRes := compile grammar, {
+        transpileEmbedded: (src) -> { code: src, sourceMap: { lines: [] } }
+      }
+      assert.equal (execMod(unmappedRes) as any).parse("a"), "a"
+
+      // Object with sourceMap.data.lines
+      dataLinesRes := compile parse(grammar), {
+        source: grammar
+        filename: "data-lines.hera"
+        sourceMap: true
+        transpileEmbedded: (src, upstreamSM) ->
+          compiled := civetJsTranspiler src, upstreamSM
+          { code: compiled.code, sourceMap: { data: { lines: compiled.sourceMap.lines } } }
+      }
+      assert.equal (execMod(dataLinesRes.code) as any).parse("a"), "a"
+      assert dataLinesRes.sourceMap.lines.some (line) ->
+        line.some (entry) -> entry.length is 4 and entry[2] is 1
+
+    it "should pass one virtual module of code blocks plus named handler and regex functions", ->
+      grammar := """
+        ```
+        const k = 1
+        ```
+        Rule
+          "a" -> $1 + k
+        Block
+          "b" ->
+            return $0
+        Dyn
+          /// \${"c"} ///
+      """
+      let seen = ""
+      js := compile grammar, {
+        transpileEmbedded: (src) ->
+          seen = src
+          src
+      }
+      // Code blocks come first, then one named function per handler / interpolation
+      assert.match seen, /^\nconst k = 1\n/
+      assert.match seen, /function __hera_h_0__\(\$1\) \{\n    return \$1 \+ k\n\}/
+      assert.match seen, /function __hera_h_1__\(\$0\) \{\n    return \$0\n\}/
+      assert.match seen, /function __hera_rd_0__\(\) \{\n  return "c"\n\}/
+      mod := execMod(js) as any
+      assert.equal mod.parse("a"), "a1"
+      assert.equal mod.parse("b", { startRule: "Block" }), "b"
+      assert.equal mod.parse("c", { startRule: "Dyn" }), "c"
+
+      // Typed handler functions take their parameter types from the rule's
+      // top-level parser, `void` unused $-params, and keep the declared return type
+      let typedSeen = ""
+      compile """
+        Rule
+          "a" "b" :: string ->
+            return $2
+      """, {
+        types: true
+        transpileEmbedded: (src) ->
+          typedSeen = src
+          src
+      }
+      assert.match typedSeen, /function __hera_h_0__\(\$2: Unwrap<ReturnType<typeof Rule\$parser>>\[1\]\):\s*string\s*\{\n    void \$2;\n/
+
+      // A transpiler that drops a handler function yields a parser that fails loudly at parse time
+      broken := execMod(compile(grammar, { transpileEmbedded: -> "const k = 1" })) as any
+      assert.throws (-> broken.parse("a")), /__hera_h_0__ is not defined/
+
+    it "should map each rule's generated code to its first handler", ->
+      grammar := """
+        Rule ::number
+          "a" Num ->
+            return $2.value
+
+        Num
+          /\\d+/ -> { value: 1 }
+
+        Bare
+          "b"
+      """
+      { code, sourceMap } := compile parse(grammar), {
+        source: grammar
+        filename: "anchored.hera"
+        language: 'civet'
+        types: true
+        sourceMap: true
+        transpileEmbedded: (src, upstreamSM) ->
+          civet.compile src, { sync: true, sourceMap: true, upstreamSourceMap: upstreamSM, filename: "anchored.hera" } as any
+      }
+      outLines := code.split "\n"
+      sources := (match: string) ->
+        i := outLines.findIndex .includes match
+        assert i >= 0, match
+        sourceMap.lines[i].filter((e) -> e.length is 4).map (e) -> [e[2], e[3]]
+
+      // Rule's header, typed with its `::number`, maps to the handler (source
+      // line 2), with a segment at each identifier so that a consumer that
+      // interpolates columns stays on the handler's position
+      header := sources "function Rule("
+      assert header.length > 5
+      assert.deepEqual new Set(header.map(JSON.stringify)), new Set [JSON.stringify [2, 0]]
+      // So does the handler's function, through the transpiler's map
+      handlerHeader := sources "function __hera_h_0__("
+      assert handlerHeader.length > 0
+      assert handlerHeader.every ([line]) -> line is 2
+      // A rule without a handler isn't mapped
+      assert.deepEqual sources("function Bare("), []
+
+    it "should compose accurate source maps back to original .hera lines", ->
+      grammar := """
+        ```
+        tag := (s) -> `[${s}]`
+        ```
+
+        Rule
+          "a" ->
+            val := tag $1
+            val
+      """
+      { code, sourceMap } := compile parse(grammar), {
+        source: grammar
+        filename: "mapped.hera"
+        language: 'civet'
+        sourceMap: true
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+
+      parser := execMod(code) as any
+      assert.equal parser.parse("a"), "[a]"
+
+      // Find the line in generated output containing `const val = tag($1)`
+      outLines := code.split "\n"
+      valLineIdx := outLines.findIndex (l) -> l.includes "const val = tag($1)"
+      assert valLineIdx >= 0, "expected compiled handler line"
+      // Original `    val := tag $1` is at 0-based line 6 in `grammar`
+      entries := sourceMap.lines[valLineIdx]
+      assert entries.some (e) -> e.length is 4 and e[2] is 6
+
+      // Also verify inlineMap embeds valid base64 source map
+      inlineCode := compile grammar, {
+        filename: "mapped.hera"
+        language: 'civet'
+        inlineMap: true
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+      assert.match inlineCode, /sourceMappingURL=data:application\/json;base64,/
+
+    it "should splice mid-line and empty entries cleanly in SourceMap.appendMapped", ->
+      sm := new SourceMap("line0\nline1\n", "test.hera")
+      sm.updateSourceMap "prefix"
+      // Mid-line append with 4-tuple first entry, followed by 1-tuple line, followed by empty line
+      sm.appendMapped "abc\ndef\nghi", [
+        [[0, 0, 1, 2], [2, 0, 1, 4]]
+        [[1]]
+        []
+      ]
+      // First line had colOffset=6 ("prefix"), so first entry colDelta becomes 6
+      assert.deepEqual sm.lines[0], [[6, 0, 1, 2], [2, 0, 1, 4]]
+      // Second line started at colOffset=0
+      assert.deepEqual sm.lines[1], [[1]]
+      // Third line had no mapped entries, colOffset advanced by "ghi".length
+      assert.deepEqual sm.lines[2], []
+      assert.equal sm.colOffset, 3
+
+      // Mid-line append whose first entry is a 1-tuple
+      sm.appendMapped "jk", [[[1]]]
+      assert.deepEqual sm.lines[2], [[4]]
+      assert.equal sm.colOffset, 1
+
+    it "should preserve outer terminal and handler definitions across nested compile() calls", ->
+      outerGrammar := """
+        ```
+        tag := "outer"
+        ```
+        Outer
+          "hello" /\\d+/ /// -\${tag} /// ->
+            `\${tag}:\${$1}:\${$2[0]}`
+      """
+      innerGrammar := """
+        Inner
+          "world" /[a-z]+/ ->
+            $2[0].toUpperCase()
+      """
+
+      let innerParser: any
+      outerJs := compile outerGrammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) ->
+          // Re-enter Hera compile() with a completely different grammar
+          innerJs := compile innerGrammar, {
+            language: 'civet'
+            transpileEmbedded: (s, sm) -> civetJsTranspiler s, sm
+          }
+          innerParser = execMod innerJs
+          civetJsTranspiler src, upstreamSM
+      }
+
+      outerParser := execMod(outerJs) as any
+      assert.equal innerParser.parse("worldabc"), "ABC"
+      assert.equal outerParser.parse("hello42-outer"), "outer:hello:42"
+
+    it "should ignore trailing sourceMappingURL comments from transpileEmbedded", ->
+      grammar := """
+        Root
+          "a" -> 1
+      """
+      // External sourceMappingURL comment (e.g. from tsc)
+      jsExternal := compile grammar, {
+        transpileEmbedded: (src) -> `${src}\n//# sourceMappingURL=out.js.map\n`
+      }
+      assert.equal (execMod(jsExternal) as any).parse("a"), 1
+
+      // Civet with inlineMap: true returning trailing base64 sourceMappingURL
+      jsInline := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) ->
+          civet.compile(src, { sync: true, js: true, inlineMap: true, filename: "t.hera" }) as string
+      }
+      assert.equal (execMod(jsInline) as any).parse("a"), 1
+
+      // The same text inside a string on the last line of user code is kept
+      literalGrammar := """
+        ```
+        exports.literal = "x//# sourceMappingURL=y"
+        ```
+        Root
+          "a"
+      """
+      // ...and so is the last line of a template literal that is only that text
+      templateGrammar := """
+        ```
+        exports.literal = `
+        //# sourceMappingURL=y`
+        ```
+        Root
+          "a"
+      """
+      for transpileEmbedded of [((src: string) -> src), ((src: string) -> civet.compile(src, { sync: true, js: true }) as string)]
+        jsLiteral := compile literalGrammar, { language: 'civet', transpileEmbedded }
+        assert.equal (execMod(jsLiteral) as any).literal, "x//# sourceMappingURL=y"
+        jsTemplate := compile templateGrammar, { language: 'civet', transpileEmbedded }
+        assert.equal (execMod(jsTemplate) as any).literal, "\n//# sourceMappingURL=y"
+
+    it "should avoid name collisions when user code uses the __hera_ prefix (including unicode escapes)", ->
+      grammar := """
+        ```
+        function __hera_h_0__() { return 40 }
+        function getValue() { return __hera_h_0__() + 2 }
+        ```
+        Root
+          "a" -> getValue()
+      """
+      js := compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src, upstreamSM) -> civetJsTranspiler src, upstreamSM
+      }
+      assert.match js, /__hera__h_0__\(/
+      assert.equal (execMod(js) as any).parse("a"), 42
+
+      // Transpiler normalizing unicode escapes (\u005f / \u{5f}) to underscores
+      escapedGrammar := """
+        ```
+        function \\u005f_hera_h_0__() { return 40 }
+        function \\u{5f}_hera__h_0__() { return 0 }
+        function getValue() { return __hera_h_0__() + __hera__h_0__() + 2 }
+        ```
+        Root
+          "a" -> getValue()
+      """
+      escapedJs := compile escapedGrammar, {
+        transpileEmbedded: (src) -> esbuild.transformSync(src).code
+      }
+      assert.match escapedJs, /__hera___h_0__\(/
+      assert.equal (execMod(escapedJs) as any).parse("a"), 42
+
+    it "should work with compact/minified single-line transpiler output", ->
+      grammar := """
+        ```
+        function getPrefix() { return "ok" }
+        ```
+        Root
+          /// \${"a"} /// -> getPrefix() + ":" + $0
+      """
+      minifiedJs := compile grammar, {
+        transpileEmbedded: (src) -> esbuild.transformSync(src, { minify: true }).code
+      }
+      assert.equal (execMod(minifiedJs) as any).parse("a"), "ok:a"

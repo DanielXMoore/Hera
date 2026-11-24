@@ -414,9 +414,10 @@ Loads .hera files that compile to TypeScript.
 Attempts to load the `typescript` npm module to transpile the resulting TypeScript to JavaScript.
 
 ### `--import/--require @danielx/hera/register/civet`
-Loads .hera files that compile to Civet.
+Loads .hera files whose handlers and code blocks are written in Civet.
 
-Attempts to load the `@danielx/civet` npm module to transpile the resulting Civet to JavaScript.
+Attempts to load the `@danielx/civet` npm module to transpile the grammar's
+embedded Civet code to JavaScript (see `transpileEmbedded` below).
 
 ### Specifying Hera compiler options
 
@@ -524,7 +525,9 @@ heraPlugin({ language: "civet" })
 ```
 
 The plugin chooses the appropriate esbuild loader automatically,
-though you can override it with the `loader` option.
+though you can override it with the `loader` option. With
+`language: "civet"`, it passes only the grammar's embedded code to Civet (see
+`transpileEmbedded` below).
 
 Editor tooling
 ---
@@ -580,10 +583,19 @@ Compiles a Hera grammar into parser source code.
 `compile()` accepts these options:
 
 - `language?: "javascript" | "typescript" | "civet"`: Language used for handler bodies and code blocks. Default: `"javascript"`.
-- `types?: boolean`: Generate TypeScript-flavored parser output. Default: `false` when `language` is unspecified or `"javascript"`, and `true` when `language` is `"typescript"` or `"civet"`.
+- `types?: boolean`: Generate TypeScript-flavored parser output. Default: `false` when `language` is unspecified or `"javascript"`, and `true` when `language` is `"typescript"`, or `"civet"` without `transpileEmbedded`.
 - `module?: boolean`: Emit ESM instead of CJS output. Default: `false`.
 - `filename?: string`: Filename used in generated source maps. Default: `"anonymous"`.
 - `source?: string`: Original grammar source text. Required when `inlineMap` or `sourceMap` is enabled.
 - `inlineMap?: boolean`: Append an inline source map comment to the generated output. Default: `false`.
 - `sourceMap?: boolean`: Return `{ code, sourceMap }` instead of a code string. Default: `false`.
 - `libPath?: string`: Import path for the Hera runtime library used by generated parsers. Default: `"@danielx/hera/lib"`.
+- `transpileEmbedded?: (source, upstreamSourceMap?) => string | { code, sourceMap? }`: Transpiles only the grammar's embedded code. Hera puts the code blocks, handlers, and heregex interpolations into one module (one named function per handler and per interpolation) and calls `transpileEmbedded` on it once; the parser calls those functions by name. Hera writes the rest of the parser in plain JavaScript (TypeScript with `types`), so a Civet grammar no longer has to be compiled through Civet as a whole. When a source map is requested, Hera passes the module's map to the grammar as `upstreamSourceMap`; return a map composed with it (as Civet's `upstreamSourceMap` option does), and Hera splices its lines into the parser's map. With `types`, handler parameters have the same types as without `transpileEmbedded`.
+
+  ```js
+  import { compile as civet } from "@danielx/civet"
+  compile(grammar, {
+    language: "civet",
+    transpileEmbedded: (src) => civet(src, { js: true, sync: true }),
+  })
+  ```
