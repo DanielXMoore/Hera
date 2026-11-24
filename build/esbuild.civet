@@ -87,6 +87,7 @@ esbuild.build {
     "source/register/civet/esm.civet"
     "source/register/civet/index.civet"
     "source/register/civet/transpile.civet"
+    "source/sourcemap.civet"
   ]
   format: "cjs"
   bundle: false

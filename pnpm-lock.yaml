@@ -14,6 +14,9 @@ importers:
       '@danielx/hera-previous':
         specifier: npm:@danielx/hera@0.9.0
         version: '@danielx/hera@0.9.0'
+      '@jridgewell/trace-mapping':
+        specifier: 0.3.31
+        version: 0.3.31
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10

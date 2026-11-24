@@ -1,0 +1,69 @@
+assert from assert
+{ TraceMap, decodedMappings } from @jridgewell/trace-mapping
+{ parse } from ../source/main.civet
+{ compile } from ../source/compiler.civet
+{ composeLines, decodeMappings, type SourceMapEntry } from ../source/sourcemap.civet
+{ readFile } from ./helper.civet
+
+describe "sourcemap", ->
+  // A real map: multi-line handlers and code blocks, negative and multi-digit deltas
+  heraMap := ->
+    source := readFile "source/hera.hera"
+    compile(parse(source), { filename: "hera.hera", source, sourceMap: true }).sourceMap
+
+  describe "decodeMappings", ->
+    it "should invert renderMappings", ->
+      sourceMap := heraMap()
+      assert.deepEqual decodeMappings(sourceMap.renderMappings()), sourceMap.lines
+
+    it "should agree with an independent decoder", ->
+      json := heraMap().json "hera.js"
+      absolute := decodeMappings(json.mappings).map (line) ->
+        column .= 0
+        line.map ([delta, ...rest]) ->
+          column += delta
+          [column, ...rest]
+      assert.deepEqual absolute, decodedMappings new TraceMap json
+
+    it "should decode negative deltas and drop name indexes", ->
+      assert.deepEqual decodeMappings("AACCC;AADD,E"), [
+        [[0, 0, 1, 1]]
+        [[0, 0, 0, 0], [2]]
+      ]
+
+    it "should throw on malformed mappings", ->
+      // bad character, non-ASCII character, truncated VLQ, 2- and 3-field segments
+      for mappings of ["A!", "Aé", "g", "AA", "AAA"]
+        assert.throws (=> decodeMappings mappings), /Malformed source map mappings/, mappings
+
+  describe "composeLines", ->
+    // Intermediate -> original.  Line 0 holds a token at columns 2-5 copied
+    // from original 5:1, followed by unmapped code.  Line 1 has no segments.
+    upstream: SourceMapEntry[][] := [
+      [[2, 0, 5, 1], [4]]
+      []
+    ]
+
+    it "should map through the covering upstream segment, interpolating the column", ->
+      downstream: SourceMapEntry[][] := [[[0, 0, 0, 3], [4, 0, 0, 2]]]
+      assert.deepEqual composeLines(upstream, downstream), [[[0, 0, 5, 2], [4, 0, 5, 1]]]
+
+    it "should keep only the unmapped segments that end a mapping", ->
+      downstream: SourceMapEntry[][] := [
+        // before the token (dropped: nothing to end), in it, at the unmapped
+        // code after it (kept), past it (dropped), in it again
+        [[0, 0, 0, 1], [1, 0, 0, 2], [1, 0, 0, 6], [1, 0, 0, 9], [1, 0, 0, 3]]
+        // an empty upstream line, and an already unmapped segment
+        [[1, 0, 1, 0], [1]]
+        // past the upstream map's last line
+        [[0, 0, 7, 0]]
+        // an already unmapped segment ending a mapping (kept), then another
+        [[0, 0, 0, 3], [2], [1]]
+      ]
+      assert.deepEqual composeLines(upstream, downstream), [
+        // dropped segments' columns carry into the next kept one
+        [[1, 0, 5, 1], [1], [2, 0, 5, 2]]
+        []
+        []
+        [[0, 0, 5, 2], [2]]
+      ]
