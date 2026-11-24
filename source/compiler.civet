@@ -783,8 +783,10 @@ transpileEmbeddedCode := (options: CompilerOptions, codeBlocks: ASTNode[], prefi
         handlerFunctionParts(`function ${prefix}h_${i}__`, options.types, handler, parameters, paramTypes)
         "\n}\n"
       ]
+  // Parenthesized, so an expression that starts on a new line isn't cut off
+  // by automatic semicolon insertion after `return`
   for expr, j of dynamicExprs
-    nodes.push `function ${prefix}rd_${j}__() {\n  return ${expr}\n}\n`
+    nodes.push `function ${prefix}rd_${j}__() {\n  return (${expr})\n}\n`
   nodes.push embeddedEndMarker
 
   res := options.transpileEmbedded!(generate(nodes, genOpts), virtualSM)
@@ -830,13 +832,15 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     [ compileRule(options, name, rules[name]), "\n\n"]
 
   // With transpileEmbedded, heregex interpolations become calls to their
-  // transpiled named functions.
+  // transpiled named functions.  An identifier stays a direct read of the
+  // binding, as without transpileEmbedded (an identifier `const` part isn't
+  // cached).
   prefix := embeddedPrefix
   dynamicExprs: string[] := []
   dynamicDefs := if prefix?
     dynamicReDefs.map (r) ->
       r.map (part) ->
-        return part if part <? "string"
+        return part if part <? "string" or isIdentifierExpression part.expression
         j := dynamicExprs.push(part.expression) - 1
         { ...part, expression: `${prefix}rd_${j}__()` }
   else

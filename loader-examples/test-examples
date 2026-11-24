@@ -76,4 +76,8 @@ test_example node --require ./civet-custom/register.js ./civet-custom/use.cjs
 
 expect_fail node --require  ./civet-custom/register.js ./civet-custom/use.mjs
 
+# The same, with the hooks registered as they used to have to be: the base
+# Hera ESM hook, then the Civet hook with Civet options as its data
+test_example node --import  ./civet-custom/register-chained.js ./civet-custom/use.mjs
+
 

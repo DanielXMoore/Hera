@@ -461,8 +461,11 @@ or [`loader-examples/civet-custom`](./loader-examples/civet-custom)
 for examples of passing in options to the TypeScript or Civet compiler.
 
 #### ESM
-Instead of using `--import @danielx/hera/register/tsc` or `--import @danielx/hera/register/civet`, register the `register/esm` and `register/tsc/esm` or `register/civet/esm` modules yourself and pass the options you want.
-(Note that you still need to register the base `register/esm` module, because the ESM loaders chain together.)
+Instead of using `--import @danielx/hera/register/tsc`, register the `register/esm` and `register/tsc/esm` modules yourself and pass the options you want.
+(Note that you still need to register the base `register/esm` module, because the TypeScript hook transpiles its output.)
+
+Instead of using `--import @danielx/hera/register/civet`, register just the `register/civet/esm` module, which compiles `.hera` files itself.
+Its `data` takes `hera` (Hera compiler options) and `civet` (Civet compiler options).
 
 E.g.
 ```js
@@ -473,13 +476,13 @@ const { pathToFileURL } = require("node:url")
 register("@danielx/hera/register/esm", pathToFileURL(__filename), {
   data: heraOptions
 })
-
 register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
   data: tscCompilerOptions,
 })
-// OR
+
+// OR, for Civet
 register("@danielx/hera/register/civet/esm", pathToFileURL(__filename), {
-  data: civetCompilerOptions,
+  data: { hera: heraOptions, civet: civetCompilerOptions },
 })
 ```
 

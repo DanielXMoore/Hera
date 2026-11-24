@@ -6,10 +6,8 @@ const civetParseOptions = { parseOptions: { coffeeCompat: true } };
 // ESM
 const { register } = require("node:module");
 const { pathToFileURL } = require("node:url");
-// First, register basic Hera ESM loader with language:'civet'
-register("@danielx/hera/register/esm", pathToFileURL(__filename), { data: { language: 'civet' } });
-// Then, register the Civet post-processor hook with custom parseOptions
-register("@danielx/hera/register/civet/esm", pathToFileURL(__filename), { data: civetParseOptions });
+// The Civet hook compiles .hera files itself; `hera` would hold Hera options
+register("@danielx/hera/register/civet/esm", pathToFileURL(__filename), { data: { civet: civetParseOptions } });
 
 
 // CJS

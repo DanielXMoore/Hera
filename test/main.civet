@@ -1906,7 +1906,7 @@ describe "Hera", ->
       // Transpiled functions may contain arbitrary statements; they are called, not extracted
       multiStmtRd := compile """
         Rule
-          /// \${val} /// -> $0
+          /// \${val()} /// -> $0
       """, {
         transpileEmbedded: (_src) ->
           """
@@ -1963,7 +1963,7 @@ describe "Hera", ->
       assert.match seen, /^\nconst k = 1\n/
       assert.match seen, /function __hera_h_0__\(\$1\) \{\n    return \$1 \+ k\n\}/
       assert.match seen, /function __hera_h_1__\(\$0\) \{\n    return \$0\n\}/
-      assert.match seen, /function __hera_rd_0__\(\) \{\n  return "c"\n\}/
+      assert.match seen, /function __hera_rd_0__\(\) \{\n  return \("c"\)\n\}/
       mod := execMod(js) as any
       assert.equal mod.parse("a"), "a1"
       assert.equal mod.parse("b", { startRule: "Block" }), "b"
@@ -1987,6 +1987,37 @@ describe "Hera", ->
       // A transpiler that drops a handler function yields a parser that fails loudly at parse time
       broken := execMod(compile(grammar, { transpileEmbedded: -> "const k = 1" })) as any
       assert.throws (-> broken.parse("a")), /__hera_h_0__ is not defined/
+
+    it "should keep heregex interpolations' values and identifier reads", ->
+      grammar := """
+        ```
+        let shared = "a"
+        let dynamic = ""
+        exports.setShared = (s) => { shared = s }
+        ```
+        Rule
+          /// ${const shared}${dynamic} ///
+        Multiline
+          /// ${
+            "m" + "l"
+          } ///
+      """
+      for transpileEmbedded of [undefined, ((src: string) -> src)]
+        mod := execMod(compile grammar, { transpileEmbedded }) as any
+        assert.equal mod.parse("ml", { startRule: "Multiline" }), "ml"
+        // An identifier `const` part is read directly, not cached
+        assert.equal mod.parse("a"), "a"
+        mod.setShared "b"
+        assert.equal mod.parse("b"), "b"
+
+      // The same through Civet
+      civetMod := execMod(compile grammar, {
+        language: 'civet'
+        transpileEmbedded: (src) -> civetJsTranspiler src
+      }) as any
+      assert.equal civetMod.parse("ml", { startRule: "Multiline" }), "ml"
+      civetMod.setShared "c"
+      assert.equal civetMod.parse("c"), "c"
 
     it "should map each rule's generated code to its first handler", ->
       grammar := """
