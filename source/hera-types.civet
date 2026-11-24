@@ -7,7 +7,12 @@ import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine.c
 export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
-export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean } | { t: string }
+/**
+A `::Type` annotation: the type's text, and where it starts in the grammar
+(after the `::`)
+*/
+export type TypeAnnotationNode = { t: string, tPos: number }
+export type Handler = { $loc: Loc, f: string, t?: string, tPos?: number, inline?: boolean } | { t: string, tPos?: number }
 export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
 export type TerminalOp = "L" | "R" | "RD"
 export type SequenceOp = "S" | "/"
@@ -24,9 +29,19 @@ export type NameNode = [{ name: string }, HeraAST, Handler?]
 export type PrimaryNode = TerminalNode | SequenceNode | NameNode
 export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
 
+/**
+Where a rule starts in the grammar source (its name), where each of its
+alternatives starts (after its line's two-space indent), and where each
+alternative's expression ends (before its handler, if any)
+*/
+export type RulePositions = { name: number, alternatives: number[], ends: number[] }
+
 export const CodeSymbol = Symbol.for("code")
+export const PositionsSymbol = Symbol.for("positions")
 
 export type HeraRules = {
   [key: string]: HeraAST,
   [CodeSymbol]?: CodeBlockNode[]
+  /** Rule names to their positions, for source maps */
+  [PositionsSymbol]?: Map<string, RulePositions>
 }

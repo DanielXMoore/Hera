@@ -1,9 +1,12 @@
 // Minimal source map generator, adapted from @danielx/civet's sourcemap.civet.
 //
-// Only the pieces the Hera compiler needs are kept: appending output while
-// tracking the source position, and rendering a v3 JSON map.  Vendoring this
+// Only the pieces Hera needs are kept: appending output while tracking the
+// source position and rendering a v3 JSON map (the compiler), plus decoding
+// and composing mappings (the tsc register hooks, whose `transpileEmbedded`
+// composes tsc's map with Hera's).  Vendoring this
 // instead of importing it from Civet keeps the whole Civet compiler out of
-// the `dist/main.js` bundle.
+// the `dist/main.js` bundle, and composing here instead of with a library
+// keeps Hera free of runtime dependencies.
 
 /** A mapping entry: [colDelta] or [colDelta, sourceIndex, srcLine, srcCol]. */
 export type SourceMapEntry = [number] | [number, number, number, number]
@@ -18,6 +21,9 @@ export type SourceMapJSON = {
 }
 
 EOL := /\r?\n|\r/
+LINE_BREAK := /[\r\n]/
+WORD := /[\w$]+/g
+WORD_CHAR := /[\w$]/
 BASE64_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 VLQ_SHIFT := 5
 VLQ_CONTINUATION_BIT := 1 << VLQ_SHIFT
@@ -25,7 +31,8 @@ VLQ_VALUE_MASK := VLQ_CONTINUATION_BIT - 1
 
 /**
 Table of end offsets (exclusive) for each line of `input`, used to convert a
-position into line/column.
+position into line/column.  A last line without a line break ends past the
+input, so that the input's end is on it.
 */
 locationTable := (input: string): number[] ->
   linesRe := /([^\r\n]*)(\r\n|\r|\n|$)/y
@@ -34,17 +41,22 @@ locationTable := (input: string): number[] ->
 
   while match := linesRe.exec input
     pos += match[0].length
-    lines.push pos
+    lines.push match[2] ? pos : pos + 1
     break if pos is input.length
 
   lines
 
 lookupLineColumn := (table: number[], pos: number): [number, number] ->
+  // Binary search for the first line that ends after `pos`
   line .= 0
-  prevEnd .= 0
-  while table[line] <= pos
-    prevEnd = table[line++]
-  [line, pos - prevEnd]
+  end .= table.length
+  while line < end
+    mid := (line + end) >> 1
+    if table[mid] <= pos
+      line = mid + 1
+    else
+      end = mid
+  [line, pos - (line and table[line - 1])]
 
 encodeVlq := (value: number): string ->
   signBit := value < 0 ? 1 : 0
@@ -59,6 +71,111 @@ encodeVlq := (value: number): string ->
 
   answer
 
+/**
+Decode a v3 `mappings` string into mapping lines, the inverse of
+`SourceMap.renderMappings`.  A segment's name index is dropped.  Throws on
+malformed input.
+*/
+export decodeMappings := (mappings: string): SourceMapEntry[][] ->
+  // Built per call rather than at module level so bundles that never decode
+  // (dist/main.js) can tree-shake them.
+  COMMA := ",".charCodeAt 0
+  SEMICOLON := ";".charCodeAt 0
+  base64Values := new Int8Array(128).fill -1
+  for i of [0...BASE64_CHARS.length]
+    base64Values[BASE64_CHARS.charCodeAt i] = i
+
+  current: SourceMapEntry[] .= []
+  lines: SourceMapEntry[][] := [current]
+  // Fields decoded so far in the current segment.  The source fields are
+  // deltas from the previous segment's, so they accumulate as they arrive.
+  fieldCount .= 0
+  colDelta .= 0
+  sourceIndex .= 0
+  srcLine .= 0
+  srcCol .= 0
+  value .= 0
+  shift .= 0
+
+  for i .= 0; i <= mappings.length; i++
+    c := mappings.charCodeAt i // NaN past the end
+    if c is COMMA or c is SEMICOLON or i is mappings.length
+      if shift or fieldCount is 2 or fieldCount is 3
+        throw new Error "Malformed source map mappings"
+      if fieldCount is 1
+        current.push [colDelta]
+      else if fieldCount
+        current.push [colDelta, sourceIndex, srcLine, srcCol]
+      fieldCount = 0
+      if c is SEMICOLON
+        current = []
+        lines.push current
+    else
+      digit := c < 128 ? base64Values[c] : -1
+      throw new Error "Malformed source map mappings" if digit < 0
+      value += (digit & VLQ_VALUE_MASK) << shift
+      if digit & VLQ_CONTINUATION_BIT
+        shift += VLQ_SHIFT
+      else
+        field := value & 1 ? -(value >>> 1) : value >>> 1
+        switch fieldCount++
+          when 0 then colDelta = field
+          when 1 then sourceIndex += field
+          when 2 then srcLine += field
+          when 3 then srcCol += field
+        value = shift = 0
+
+  lines
+
+/**
+The original `[sourceIndex, line, column]` of a position in a map's generated
+code, or undefined when it's unmapped.  The column is interpolated from the
+covering segment's start, since Hera's mapped tokens are copied verbatim from
+the source.
+*/
+remapPosition := (lines: SourceMapEntry[][], line: number, column: number): [number, number, number] | undefined ->
+  // The covering segment is the last one starting at or before `column`; an
+  // unmapped segment ends the preceding mapping.
+  let covering: SourceMapEntry | undefined
+  start .= 0
+  col .= 0
+  for segment of lines[line] ?? []
+    col += segment[0]
+    break if col > column
+    covering = segment
+    start = col
+
+  if covering?.length is 4
+    [covering[1], covering[2], covering[3] + column - start]
+
+/**
+Compose two maps' lines: `downstream` maps final code to intermediate code
+and `upstream` maps that intermediate code to the original source.  The
+result maps final code to the original source.  Final positions whose
+intermediate position has no upstream mapping are unmapped.  Unmapped
+segments are kept only where they end a mapping; the rest carry nothing and
+would only bloat the map.
+*/
+export composeLines := (upstream: SourceMapEntry[][], downstream: SourceMapEntry[][]): SourceMapEntry[][] ->
+  // Whether the last kept segment, on this line or an earlier one, is mapped.
+  // Node.js maps a position to the last segment before it on any line.
+  mapped .= false
+  downstream.map (entries) ->
+    composed: SourceMapEntry[] := []
+    colDelta .= 0 // columns since the last kept segment
+    for entry of entries
+      colDelta += entry[0]
+      position := if entry.length is 4 then remapPosition upstream, entry[2], entry[3]
+      if position
+        composed.push [colDelta, ...position]
+      else if mapped
+        composed.push [colDelta]
+      else
+        continue
+      colDelta = 0
+      mapped = !!position
+    composed
+
 export base64Encode := (src: string): string ->
   Buffer.from(src).toString "base64"
 
@@ -66,6 +183,8 @@ export class SourceMap
   lines: SourceMapEntry[][] = [[]]
   line = 0
   colOffset = 0
+  /** Whether the last segment, on this line or an earlier one, is mapped */
+  mapped = false
   srcLine = 0
   srcColumn = 0
   srcTable: number[]
@@ -102,14 +221,17 @@ export class SourceMap
   /**
   Append `outputStr` to the generated output.  When `inputPos` is given, the
   appended text maps back to that position in the source (plus `colOffset`).
-  Line `i` of the text maps to source line `i` after it, unless `anchored`,
-  for generated code: then the text maps to `inputPos` itself, with a segment
-  at every identifier.  A consumer may interpolate columns within a segment
-  (Civet does), which would carry a generated column past the end of the
-  source line.
+  Line `i` of the text maps to source line `i` after it, with a segment at
+  each word and at the line's first non-blank: the text is a copy of the
+  source, so columns stay exact even for a consumer that doesn't interpolate
+  them within a segment (c8, Node.js, esbuild).  With `anchored`, for
+  generated code, the text maps to `inputPos` itself, with a segment at every
+  word: a consumer that interpolates columns within a segment (Civet does)
+  would carry a generated column past the end of the source line.
   */
   updateSourceMap(outputStr: string, inputPos?: number, colOffset = 0, anchored = false): void
-    outLines := outputStr.split EOL
+    // Most text is one line, which needs no split
+    outLines := LINE_BREAK.test(outputStr) ? outputStr.split(EOL) : [outputStr]
     let srcLine = 0, srcCol = 0
 
     if inputPos?
@@ -127,22 +249,41 @@ export class SourceMap
         srcCol = colOffset unless anchored
         @srcColumn = srcCol
 
+      // Columns since the line's last segment (or its start)
       l := @colOffset
-      @colOffset = line.length
       @srcColumn += line.length
+      // Empty text needs no segment, which could share a column with the next
+      continue unless line
 
-      if anchored
-        @lines[@line].push [l, 0, srcLine, srcCol]
+      if inputPos?
+        segments := @lines[@line]
+        sourceLine := anchored ? srcLine : srcLine + i
+        // A segment at the text's start, then at each later word
+        segments.push [l, 0, sourceLine, srcCol]
         segmentStart .= 0
-        for { index } of line.matchAll /(?<![\w$])[\w$]/g
-          continue if index is 0
-          @lines[@line].push [index - segmentStart, 0, srcLine, srcCol]
+        unless anchored
+          // and at the first non-blank, when that isn't a word
+          blank .= 0
+          blank++ while line[blank] is " " or line[blank] is "\t"
+          if 0 < blank < line.length and not WORD_CHAR.test line[blank]
+            segments.push [blank, 0, sourceLine, srcCol + blank]
+            segmentStart = blank
+        WORD.lastIndex = 0
+        while match := WORD.exec line
+          { index } := match
+          continue unless index
+          segments.push [index - segmentStart, 0, sourceLine, anchored ? srcCol : srcCol + index]
           segmentStart = index
         @colOffset = line.length - segmentStart
-      else if inputPos?
-        @lines[@line].push [l, 0, srcLine + i, srcCol]
-      else if l is not 0
+        @mapped = true
+      else if @mapped
+        // Unmapped text after a mapping ends it.  Node.js maps a line without
+        // segments by the line before, so this holds across lines too.
         @lines[@line].push [l]
+        @colOffset = line.length
+        @mapped = false
+      else
+        @colOffset = l + line.length
 
   /**
   Append pre-compiled `outputStr` whose lines already have composed source map
@@ -170,5 +311,11 @@ export class SourceMap
             [first[0] + @colOffset] as SourceMapEntry
           @lines[@line].push shifted, ...entries.slice(1)
         @colOffset = line.length - sum
+        @mapped = entries[entries.length - 1].length is 4
+      else if @mapped and line
+        // Code without segments after a mapping ends it, as in updateSourceMap
+        @lines[@line].push [@colOffset]
+        @colOffset = line.length
+        @mapped = false
       else
         @colOffset += line.length

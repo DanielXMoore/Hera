@@ -60,6 +60,10 @@ test_example node --require ./tsc-custom/register.js ./tsc-custom/use.cjs
 
 expect_fail node --require  ./tsc-custom/register.js ./tsc-custom/use.mjs
 
+# The same, with the hooks registered as they used to have to be: the base
+# Hera ESM hook, then the tsc hook with tsc options as its data
+test_example node --import  ./tsc-custom/register-chained.js ./tsc-custom/use.mjs
+
 
 # Grammars that use Civet code; transpiled to JavaScript via the @danielx/civet npm module
 # These require the @danielx/civet module to be installed

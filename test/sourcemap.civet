@@ -1,0 +1,288 @@
+assert from assert
+{ TraceMap, decodedMappings, originalPositionFor } from @jridgewell/trace-mapping
+{ parse } from ../source/main.civet
+{ compile, type CompilerOptions } from ../source/compiler.civet
+{ composeLines, decodeMappings, SourceMap, type SourceMapEntry } from ../source/sourcemap.civet
+{ readFile } from ./helper.civet
+
+describe "sourcemap", ->
+  // A real map: multi-line handlers and code blocks, negative and multi-digit deltas
+  heraMap := ->
+    source := readFile "source/hera.hera"
+    compile(parse(source), { filename: "hera.hera", source, sourceMap: true }).sourceMap
+
+  describe "decodeMappings", ->
+    it "should invert renderMappings", ->
+      sourceMap := heraMap()
+      assert.deepEqual decodeMappings(sourceMap.renderMappings()), sourceMap.lines
+
+    it "should agree with an independent decoder", ->
+      json := heraMap().json "hera.js"
+      absolute := decodeMappings(json.mappings).map (line) ->
+        column .= 0
+        line.map ([delta, ...rest]) ->
+          column += delta
+          [column, ...rest]
+      assert.deepEqual absolute, decodedMappings new TraceMap json
+
+    it "should decode negative deltas and drop name indexes", ->
+      assert.deepEqual decodeMappings("AACCC;AADD,E"), [
+        [[0, 0, 1, 1]]
+        [[0, 0, 0, 0], [2]]
+      ]
+
+    it "should throw on malformed mappings", ->
+      // bad character, non-ASCII character, truncated VLQ, 2- and 3-field segments
+      for mappings of ["A!", "Aé", "g", "AA", "AAA"]
+        assert.throws (=> decodeMappings mappings), /Malformed source map mappings/, mappings
+
+  describe "composeLines", ->
+    // Intermediate -> original.  Line 0 holds a token at columns 2-5 copied
+    // from original 5:1, followed by unmapped code.  Line 1 has no segments.
+    upstream: SourceMapEntry[][] := [
+      [[2, 0, 5, 1], [4]]
+      []
+    ]
+
+    it "should map through the covering upstream segment, interpolating the column", ->
+      downstream: SourceMapEntry[][] := [[[0, 0, 0, 3], [4, 0, 0, 2]]]
+      assert.deepEqual composeLines(upstream, downstream), [[[0, 0, 5, 2], [4, 0, 5, 1]]]
+
+    it "should keep only the unmapped segments that end a mapping", ->
+      downstream: SourceMapEntry[][] := [
+        // before the token (dropped: nothing to end), in it, at the unmapped
+        // code after it (kept), past it (dropped), in it again
+        [[0, 0, 0, 1], [1, 0, 0, 2], [1, 0, 0, 6], [1, 0, 0, 9], [1, 0, 0, 3]]
+        // an empty upstream line (kept: it ends the previous line's mapping),
+        // and an already unmapped segment
+        [[1, 0, 1, 0], [1]]
+        // past the upstream map's last line
+        [[0, 0, 7, 0]]
+        // an already unmapped segment ending a mapping (kept), then another
+        [[0, 0, 0, 3], [2], [1]]
+      ]
+      assert.deepEqual composeLines(upstream, downstream), [
+        // dropped segments' columns carry into the next kept one
+        [[1, 0, 5, 1], [1], [2, 0, 5, 2]]
+        [[1]]
+        []
+        [[0, 0, 5, 2], [2]]
+      ]
+
+  describe "SourceMap", ->
+    // Node.js maps a line without segments by the last segment before it
+    it "should end a mapping on a later line", ->
+      sm := new SourceMap "abc\n", "a.hera"
+      sm.updateSourceMap "x", 0
+      sm.updateSourceMap "\n\ny"
+      assert.deepEqual sm.lines, [[[0, 0, 0, 0]], [], [[0]]]
+
+    it "should end a mapping before appended code without segments", ->
+      sm := new SourceMap "abc\n", "a.hera"
+      sm.updateSourceMap "x", 0
+      sm.appendMapped "y\nz\n", [[[0, 0, 0, 1]], [], []]
+      assert.deepEqual sm.lines, [[[0, 0, 0, 0], [1, 0, 0, 1]], [[0]], []]
+
+    it "should map the end of a source without a final line break to its last line", ->
+      sm := new SourceMap "ab\ncd", "a.hera"
+      sm.updateSourceMap "x", 5
+      assert.deepEqual sm.lines, [[[0, 0, 1, 2]]]
+
+  describe "grammar mappings", ->
+    grammar := """
+      Start
+        Greeting Name? ->
+          return [$1, $2]
+
+      Greeting
+        "hello" -> "hi"
+        Farewell
+        "hey"
+
+      Farewell
+        "bye" / "ciao"
+
+      Name
+        " " /[a-z]+/
+
+      Alias
+        Name
+    """
+
+    /**
+    Compile `grammar` with a source map.  Positions are [line, column], 0-based;
+    an unmapped one is undefined.
+    */
+    compileMapped := (options: CompilerOptions = {}) ->
+      { code, sourceMap } := compile parse(grammar), { ...options, source: grammar, filename: "g.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "g.js"
+      lines := code.split "\n"
+      lineOf := (text: string, from = 0) ->
+        line := lines.findIndex (l, i) -> i >= from and l.includes text
+        assert line >= 0, text
+        line
+      original := (line: number, column: number) ->
+        { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
+        l? ? [l - 1, c] : undefined
+      at := (text: string, offset = 0) ->
+        line := lineOf text
+        original line, lines[line].indexOf(text) + offset
+      /** Where function `name`'s `function` keyword and closing brace map */
+      fn := (name: string) ->
+        line := lineOf `function ${name}(`
+        close := lines[line].endsWith("}") ? line : lines.findIndex (l, i) -> i > line and l is "}"
+        [original(line, 0), original(close, lines[close].length - 1)]
+      /** The same for the handler IIFE in function `name`, and where it's called */
+      iife := (name: string) ->
+        line := lineOf "(function(", lineOf `function ${name}(`
+        close := lineOf "})(", line
+        column := lines[close].indexOf "})("
+        [original(line, lines[line].indexOf("function")), original(close, column), original(close, column + 2)]
+      { at, fn, iife }
+
+    // Each function maps from the start of its alternative's line (or the
+    // rule's name) to the end of the alternative's last line (or the rule's),
+    // and each call to the alternative it's made for
+    rules := (m: ReturnType<typeof compileMapped>) ->
+      assert.deepEqual m.fn("Start"), [[0, 0], [2, 19]]
+      assert.deepEqual m.at("Start$parser($$ctx"), [1, 2]
+      // The rest of a header is unmapped
+      assert.equal m.at("function Start(", 9), undefined
+
+      // Alternatives on lines of their own have functions of their own
+      assert.deepEqual m.fn("Greeting"), [[4, 0], [4, 8]]
+      assert.deepEqual m.at("= Greeting$0(", 2), [5, 2]
+      assert.deepEqual m.at("|| Greeting$1(", 3), [6, 2]
+      assert.deepEqual m.at("|| Greeting$2(", 3), [7, 2]
+      assert.deepEqual m.fn("Greeting$0"), [[5, 0], [5, 17]]
+      assert.deepEqual m.at("Greeting$0$parser($$ctx"), [5, 2]
+      assert.deepEqual m.fn("Greeting$1"), [[6, 0], [6, 10]]
+      assert.deepEqual m.at("return Farewell(", 7), [6, 2]
+      assert.deepEqual m.fn("Greeting$2"), [[7, 0], [7, 7]]
+      assert.deepEqual m.at("Greeting$2$parser($$ctx"), [7, 2]
+
+      // Alternatives on one line share it
+      assert.deepEqual m.fn("Farewell"), [[9, 0], [10, 16]]
+      assert.deepEqual m.at("= Farewell$0(", 2), [10, 2]
+      assert.deepEqual m.at("|| Farewell$1(", 3), [10, 2]
+      assert.deepEqual m.fn("Farewell$0"), [undefined, undefined]
+
+      assert.deepEqual m.fn("Name"), [[12, 0], [13, 14]]
+      assert.deepEqual m.at("Name$parser($$ctx"), [13, 2]
+      assert.deepEqual m.fn("Alias"), [[15, 0], [16, 6]]
+      assert.deepEqual m.at("$$final = Name(", 10), [16, 2]
+
+    it "should map rules' and handlers' generated code to the grammar", ->
+      m := compileMapped()
+      rules m
+      assert.deepEqual m.iife("Start"), [[1, 0], [2, 19], [1, 2]]
+      assert.deepEqual m.iife("Greeting$0"), [[5, 0], [5, 17], [5, 2]]
+
+    it "should map handler functions with transpileEmbedded", ->
+      m := compileMapped transpileEmbedded: (src, upstreamSourceMap) ->
+        { code: src, sourceMap: lines: upstreamSourceMap!.lines }
+      rules m
+      assert.deepEqual m.fn("__hera_h_0__"), [[1, 0], [2, 19]]
+      assert.deepEqual m.at("= __hera_h_0__(", 2), [1, 2]
+      assert.deepEqual m.fn("__hera_h_1__"), [[5, 0], [5, 17]]
+
+    // trace-mapping, like c8 and Node.js, doesn't interpolate within a segment
+    it "should map copied text exactly at each word and at a line's first non-blank", ->
+      // A block handler, then an inline one, whose later lines Hera indents more
+      source := 'Rule\n  "a" ->\n    const x = ($1\n      + "b")\n    return x\n  "c" -> [\n      $1.toUpperCase()\n  ].join()\n'
+      { code, sourceMap } := compile parse(source), { source, filename: "w.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "w.js"
+      lines := code.split "\n"
+      at := (text: string, offset = 0) ->
+        line := lines.findIndex .includes text
+        { line: l, column } := originalPositionFor map, { line: line + 1, column: lines[line].indexOf(text) + offset }
+        [l! - 1, column]
+      assert.deepEqual at("x = ($1"), [2, 10]
+      assert.deepEqual at("x = ($1", 5), [2, 15]
+      assert.deepEqual at('+ "b"'), [3, 6]
+      assert.deepEqual at("return x"), [4, 4]
+      assert.deepEqual at("$1.toUpperCase"), [6, 6]
+      assert.deepEqual at("toUpperCase"), [6, 9]
+      assert.deepEqual at("].join"), [7, 2]
+      assert.deepEqual at("join()"), [7, 4]
+
+    // TypeScript reports a result that doesn't match its `::Type` at the
+    // `return` (or `$$final`) checked against it, and an unknown name in a
+    // type at the type
+    it "should map typed returns and types to their annotations", ->
+      source := """
+        Num ::number
+          "a" -> 1
+
+        Str ::string
+          Num
+
+        Alts
+          "p" ::number -> 1
+          "q" ::number
+
+        Wide ::number
+          "w" -> 2
+          "v" -> 3
+
+        Empty
+          "e" ::
+          "f" ::
+
+        Spaced
+          "s" :: number -> 4
+      """
+      { code, sourceMap } := compile parse(source), { source, filename: "t.hera", sourceMap: true, types: true }
+      map := new TraceMap sourceMap.json "t.ts"
+      lines := code.split "\n"
+      /** Where `text` maps, on the first line with it from function `name`'s */
+      at := (name: string, text: string, offset = 0) ->
+        start := lines.findIndex .startsWith `function ${name}(`
+        line := lines.findIndex (l, i) -> i >= start and l.includes text
+        { line: l, column } := originalPositionFor map, { line: line + 1, column: lines[line].indexOf(text) + offset }
+        [l! - 1, column]
+
+      // An inline handler's `return` maps to the handler, and its type to the
+      // annotation
+      assert.deepEqual at("Num", "return 1"), [1, 9]
+      assert.deepEqual at("Num", "): number {", 3), [0, 6]
+      assert.deepEqual at("Num", "MaybeResult<number> {", 12), [0, 6]
+      // A rule's result is checked against its annotation
+      assert.deepEqual at("Str", "return $$final;"), [3, 6]
+      // ...or, in a choice, against the rule's annotation, or the rule when
+      // each alternative has its own
+      assert.deepEqual at("Wide", "$$final:"), [10, 7]
+      assert.deepEqual at("Alts", "$$final:"), [6, 0]
+      assert.deepEqual at("Alts", "MaybeResult<number> =", 12), [7, 8]
+      // A type after a space, whether copied as written or trimmed
+      assert.deepEqual at("Spaced", "):  number", 4), [19, 9]
+      assert.deepEqual at("Spaced", "MaybeResult<number> {", 12), [19, 9]
+      // Empty annotations don't type the rule
+      assert.doesNotMatch lines.find(.startsWith "function Empty(")!, /MaybeResult/
+
+      // Without positions (rules built by hand), types aren't mapped
+      assert.match compile({ Rule: ["L", "a", { t: " string" }] } as any, { types: true }), /MaybeResult<string>/
+
+    it "should map an alternative's function to the end of its last line", ->
+      source := 'Rule\n  ///\n    a\n  ///\n  "b"\n'
+      { code, sourceMap } := compile parse(source), { source, filename: "h.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "h.js"
+      lines := code.split "\n"
+      position := (line: number, column: number) ->
+        { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
+        [l! - 1, c]
+      header := lines.findIndex .startsWith "function Rule$0("
+      close := lines.findIndex (l, i) -> i > header and l is "}"
+      assert.deepEqual position(header, 0), [1, 0]
+      assert.deepEqual position(close, 0), [3, 5]
+
+    it "should map only handlers in rules without positions", ->
+      source := 'Rule\n  "a" -> "b"\n'
+      rules := parse source
+      { code, sourceMap } := compile { Rule: rules.Rule }, { source, filename: "r.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "r.js"
+      lines := code.split "\n"
+      line := lines.findIndex .startsWith "function Rule("
+      assert.equal originalPositionFor(map, { line: line + 1, column: 0 }).line, null
+      handler := lines.findIndex .includes '"b"'
+      assert.equal originalPositionFor(map, { line: handler + 1, column: lines[handler].indexOf '"b"' }).line, 2

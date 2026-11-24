@@ -1,6 +1,8 @@
 assert from assert
 { mock } from node:test
-{ compileCivetToJs, runtime } from ../../../source/register/civet/transpile.civet
+{ compileCivetEmbedded, compileCivetToJs, runtime } from ../../../source/register/civet/transpile.civet
+{ execMod } from ../../../source/main.civet
+{ assertComposedMap, compileFixture } from ../../helper.civet
 
 describe "compileCivetToJs", ->
   it "should compile Civet const declaration to JavaScript", ->
@@ -41,3 +43,11 @@ describe "compileCivetToJs", ->
     )
 
     restore.mock.restore()
+
+describe "compileCivetEmbedded", ->
+  it "should compose Civet's map with Hera's so the parser maps back to the .hera source", ->
+    js := compileFixture
+      (src, upstreamSourceMap) => compileCivetEmbedded src, "fixture.hera", {}, upstreamSourceMap
+      { language: 'civet' }
+    assertComposedMap js
+    assert.deepEqual (execMod(js) as any).parse("a"), { left: "a", right: "a" }

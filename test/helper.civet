@@ -1,5 +1,70 @@
+import assert from 'assert'
 import { readFileSync } from 'fs'
+import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping'
+import { compile } from '../source/main.civet'
+import type { CompilerOptions } from '../source/compiler.civet'
 
 export readFile := (p: string) ->
   readFileSync(p, 'utf8')
   .replace(/\r\n/g, "\n")
+
+/**
+A grammar whose handler declares a multi-line type alias.  tsc and Civet both
+drop it, so the lines after it always move between the embedded code they're
+given and the JS they emit.  `probe` is unique text on the line after the
+alias.
+*/
+export composeFixture :=
+  filename: "fixture.hera"
+  grammar: """
+    Start
+      "a" ->
+        type Pair = {
+          left: string
+          right: string
+        }
+        const pair: Pair = { left: $1, right: $1 }
+        return pair
+  """
+  probe: "{ left: $1, right: $1 }"
+
+locateProbe := (text: string) ->
+  { probe } := composeFixture
+  lines := text.split "\n"
+  line := lines.findIndex &.includes probe
+  assert line >= 0, `probe not found in:\n${text}`
+  { line: line + 1, column: lines[line].indexOf probe }
+
+/**
+Compile the fixture with an inline map, passing its embedded code to
+`transpile`.  Asserts that transpiling moved the probe to another line, so a
+map that wasn't composed with the transpiler's can't pass `assertComposedMap`.
+*/
+export compileFixture := (transpile: NonNullable<CompilerOptions["transpileEmbedded"]>, options: CompilerOptions = {}) ->
+  { filename, grammar } := composeFixture
+  compile grammar, {
+    ...options
+    filename
+    inlineMap: true
+    transpileEmbedded: (src, upstreamSourceMap) ->
+      result := transpile src, upstreamSourceMap
+      code := result <? "string" ? result : result.code
+      assert.notEqual locateProbe(src).line, locateProbe(code).line, "expected transpiling to shift the probe line"
+      result
+  }
+
+/**
+Assert that `js` carries a single inline map that points the fixture's probe
+back to its exact line and column in the grammar, named `filename`.
+*/
+export assertComposedMap := (js: string, filename = composeFixture.filename) ->
+  { grammar } := composeFixture
+
+  // The transpiler's own map comment doesn't survive into the parser
+  assert.equal js.match(/\/\/# sourceMappingURL=/g)?#, 1
+  encoded := js.match(/\/\/# sourceMappingURL=data:application\/json;base64,([A-Za-z0-9+/=]+)/)![1]
+  map := JSON.parse Buffer.from(encoded, "base64").toString("utf8")
+  assert.deepEqual map.sources, [filename]
+
+  { source, line, column } := originalPositionFor new TraceMap(map), locateProbe js
+  assert.deepEqual { source, line, column }, { source: filename, ...locateProbe grammar }

@@ -6,7 +6,7 @@ type { Module } from node:module
 
 type { CompilerOptions as HeraCompilerOptions } from ../../compiler.civet
 { compile: heraCompile } from ../../main.civet
-{ type CompilerOptions, transpileTsToJs } from ./transpile.civet
+{ type CompilerOptions, transpileTsEmbedded } from ./transpile.civet
 
 // Options to pass to Hera and tsc
 export options := {
@@ -25,7 +25,12 @@ if require.extensions
       |> heraCompile(., {
           filename,
           inlineMap: true,
+          transpileEmbedded: (src, upstreamSourceMap) =>
+            transpileTsEmbedded(src, options.tsc, upstreamSourceMap)
           ...options.hera // these options may be set by consumers of this module
+          // Hera writes the parser itself as JavaScript; only the grammar's
+          // embedded code goes through tsc
+          language: 'javascript'
+          types: false
         })
-      |> transpileTsToJs(., options.tsc)
       |> (module as any)._compile(., filename)
