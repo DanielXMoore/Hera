@@ -4,6 +4,24 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `events.cacheEnter` and `events.cacheExit`: hooks for an external cache
+  that allocate nothing. `cacheEnter(name, pos, ctx)` returns `MISS`, `FAIL`
+  for a cached failure, or a cached value after advancing `ctx.pos`;
+  `cacheExit(name, startPos, endPos, value)` sees each result, with `FAIL`
+  for a failure. `events.enter` and `exit` are adapted onto them.
+
+### Changed
+- Rules compile to cursor functions. Each rule becomes `$$r_<Rule>(ctx)`,
+  which matches in place, advances `ctx.pos`, and returns the rule's value or
+  a `FAIL` sentinel, instead of a tree of combinators that allocates a
+  `{ loc, pos, value }` result for every match. Hera's sample grammars parse
+  43-128% faster warm, and loading a parser and running its first parse
+  takes 0.78-1.02x as long. Generated parsers are 1.4-1.7x larger (1.2-1.3x
+  gzipped). Each exported rule keeps its `(ctx, state)` signature and result, and
+  `events.enter` and `exit` still run. The runtime keeps the combinators, so
+  parsers compiled by earlier versions still work.
+
 ## [0.9.10] - 2026-11-24
 
 ### Added

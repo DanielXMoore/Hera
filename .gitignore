@@ -9,3 +9,4 @@ source/machine.js
 source/hera-tokens.js
 parsers/
 tmp/
+perf/ablation-report.txt

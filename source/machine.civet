@@ -1,23 +1,61 @@
-/**
- * This is the common parser machinery.
- */
-
-/**
- * Location information within a string. A position and a length. Can be
- * converted into line numbers when reporting errors.
- */
 export interface Loc {
   pos: number
   length: number
 }
 
-/**
- * The current parse state. The input string being parsed and the position to
- * check for matches.
- */
+export interface Token {
+  type: string
+  children: unknown[]
+  token: string
+  loc: Loc
+}
+
 export interface ParseState {
   input: string
   pos: number
+}
+
+export interface ParseResult<T> {
+  loc: Loc
+  pos: number
+  value: T
+}
+
+export type MaybeResult<T> = ParseResult<T> | undefined
+
+/** Extract the inner value type from a `MaybeResult<T>` (or `ParseResult<T>`). */
+export type Unwrap<R> = R extends ParseResult<infer T> ? T : never
+
+export type Fail = (pos: number, expected: unknown) => void
+
+/**
+ * Sentinel returned from inlined rule handlers to signal "treat this rule as a
+ * failed match" (reachable via the `$skip` parameter in hera grammars).
+ */
+export const SKIP: unique symbol = Symbol.for("@danielx/hera/SKIP") as any
+export type SkipSymbol = typeof SKIP
+
+/**
+ * Sentinel returned by cursor-based rule functions to signal match failure.
+ * Using a unique symbol allows valid rules to return `undefined`, `null`, `""`,
+ * `0`, or `false` without boxing results in `{ loc, pos, value }` objects.
+ */
+export const FAIL: unique symbol = Symbol.for("@danielx/hera/FAIL") as any
+export type FailSymbol = typeof FAIL
+
+/**
+ * Sentinel returned by `cacheEnter` to signal a cache miss.
+ */
+export const MISS: unique symbol = Symbol.for("@danielx/hera/MISS") as any
+export type MissSymbol = typeof MISS
+
+/**
+ * Type-guard helper for TypeScript mode so checking `FAIL` on a value whose
+ * static type may not include `typeof FAIL` (e.g. infallible `*`/`?` rules)
+ * narrows cleanly without triggering TS2367.
+ */
+export function $isFail(v: unknown): v is typeof FAIL {
+  return v === FAIL
 }
 
 export type ParserContext = {
@@ -26,502 +64,118 @@ export type ParserContext = {
   enter?(name: string, state: ParseState): {
     /**
      * If a key named `cache` is present then its value is returned immediately
-     * and the rule is not processed further.
      */
-    cache?: unknown
+    cache?: MaybeResult<unknown>
     /**
-     * Optional data to be passed to the exit handler.
+     * Data to pass to the exit event
      */
     data?: unknown
   } | undefined
-  exit?(name: string, state: ParseState, result: any, data?: unknown): void
+  exit?(name: string, state: ParseState, result: MaybeResult<unknown>, data?: unknown): void
 }
 
-/**
- * A parsing result. We found a `T` at `loc` and the next position to parse is
- * `pos`.
- *
- * Is pos always loc.pos + loc.length?
- */
-export interface ParseResult<T> {
-  loc: Loc,
-  pos: number,
-  value: T,
+export interface CursorContext {
+  input: string
+  pos: number
+  expectation: string
+  fail: Fail
+  /**
+   * Fast zero-allocation cache enter hook:
+   * - return `MISS` on cache miss
+   * - return `FAIL` on cached failure
+   * - advance `ctx.pos` and return cached value directly on cached success
+   */
+  cacheEnter?(name: string, pos: number, ctx: CursorContext): unknown
+  /**
+   * Fast zero-allocation cache exit hook (`value === FAIL` on failure).
+   */
+  cacheExit?(name: string, startPos: number, endPos: number, value: unknown): void
 }
 
-/**
- * Either we found a parse result or we didn't.
- */
-export type MaybeResult<T> = ParseResult<T> | undefined
-
-/**
- * Utility to get the wrapped ParseResult type.
- */
-export type Unwrap<T extends MaybeResult<any>> = T extends undefined ? never : T extends ParseResult<infer P> ? P : any;
-
-export type Token = {
-  type: string
-  children: (Token | string)[]
-  token: string
-  loc: Loc
-}
-
-//@ts-ignore
-type Transform = <A, B>(parser: Parser<A>, fn: (value: A) => B) => Parser<B>
-
-/**
- * Note failure to find `expectation` at `pos`. This is later used to generate
- * detailed error messages.
- */
-interface Fail {
-  (pos: number, expectation: string): void
-}
-
-type Expectation = string | (=> string)
-
-/**
- * A Parser is a function that takes a string and position to check and returns
- * a result if it matches.
- */
 export interface Parser<T> {
   (ctx: ParserContext, state: ParseState): MaybeResult<T>
 }
 
-/**
- * $EXPECT sets the friendlier `expectation` name.
- */
-export function $EXPECT<T>(parser: Parser<T>, expectation: Expectation): Parser<T> {
-  return function (ctx, state) {
-    // NOTE: we don't need to use a stack because we're only tracking failures on
-    // string and regex leaf nodes right now.
-    const result = parser(ctx, state);
-    if (!result) ctx.fail(state.pos, typeof expectation === "function" ? expectation() : expectation)
-    return result
-  }
+export interface CursorParser<T> {
+  (ctx: CursorContext): T | typeof FAIL
 }
 
 /**
- * Match a string literal.
- *
- * Compares code units, so a literal ending in a lead surrogate could stop
- * inside a surrogate pair.  The compiler rejects those literals, so the
- * cursor always stays on a code point boundary, where Unicode regexes start.
+ * Wire `events` onto a `CursorContext`. Fast `cacheEnter`/`cacheExit` hooks are
+ * attached directly; legacy `enter`/`exit` hooks are adapted once per parse so
+ * generated rules only check a single fast hook.
  */
-export function $L<T extends string>(str: T): Parser<T> {
-  return function (_ctx, state) {
-    const { input, pos } = state,
-      { length } = str,
-      end = pos + length;
-
-    if (input.substring(pos, end) === str) {
-      return {
-        loc: {
-          pos: pos,
-          length: length
-        },
-        pos: end,
-        value: str
+export function $adaptEvents(ctx: CursorContext, events: ParserEvents): void
+  { cacheEnter, cacheExit, enter, exit } := events
+  if cacheEnter or cacheExit
+    ctx.cacheEnter = cacheEnter if cacheEnter
+    ctx.cacheExit = cacheExit if cacheExit
+    return
+  return if not enter and not exit
+  const stateStack: ParseState[] = []
+  const dataStack: unknown[] = []
+  if (enter) {
+    ctx.cacheEnter = (name: string, pos: number, c: CursorContext) => {
+      const st: ParseState = { input: c.input, pos }
+      const res = enter(name, st)
+      if (res && "cache" in res) {
+        const cached = res.cache
+        if (!cached) return FAIL
+        c.pos = cached.pos
+        return cached.value
       }
-    }
-
-    return
-  }
-}
-
-/**
- * Match a regular expression (must be sticky).
- */
-export function $R<T = RegExpMatchArray>(regExp: RegExp): Parser<T> {
-  return function (_ctx, state) {
-    const { input, pos } = state
-    regExp.lastIndex = state.pos
-
-    let l, m, v
-
-    if (m = input.match(regExp)) {
-      v = m[0]
-      l = v.length
-
-      return {
-        loc: {
-          pos: pos,
-          length: l,
-        },
-        pos: pos + l,
-        value: m as T,
+      if (exit) {
+        stateStack.push(st)
+        dataStack.push(res?.data)
       }
+      return MISS
     }
-
-    return
+  } else if (exit) {
+    ctx.cacheEnter = (_name: string, pos: number, c: CursorContext) => {
+      stateStack.push({ input: c.input, pos })
+      dataStack.push(undefined)
+      return MISS
+    }
   }
-}
+  if (exit) {
+    ctx.cacheExit = (name: string, startPos: number, endPos: number, value: unknown) => {
+      const st = stateStack.pop()!
+      const data = dataStack.pop()
+      const res: MaybeResult<unknown> = value === FAIL ? undefined : {
+        loc: { pos: startPos, length: endPos - startPos },
+        pos: endPos,
+        value,
+      }
+      exit(name, st, res, data)
+    }
+  }
 
 /**
- * Choice
- * A / B / C / ...
- * Proioritized choice
- * roughly a(...) || b(...) in JS
+ * Adapt an internal cursor-based rule function to the legacy exported
+ * `(ctx: ParserContext, state: ParseState) => MaybeResult<T>` signature.
  */
-export function $C<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T[number]> {
-  return (ctx, state): MaybeResult<T[number]> => {
-    let i = 0
-    const l = terms.length
-
-    while (i < l) {
-      const r = terms[i++](ctx, state);
-      if (r) return r
-    }
-
-    return
+export function $wrap<R>(
+  fn: (ctx: CursorContext) => R,
+  ctx: ParserContext,
+  state: ParseState
+): MaybeResult<Exclude<R, typeof FAIL>> {
+  const c: CursorContext = {
+    input: state.input,
+    pos: state.pos,
+    expectation: ctx.expectation,
+    fail: ctx.fail,
+  }
+  if (ctx.enter || ctx.exit) {
+    $adaptEvents(c, ctx)
+  }
+  const val = fn(c)
+  if (val === FAIL) return undefined
+  return {
+    loc: { pos: state.pos, length: c.pos - state.pos },
+    pos: c.pos,
+    value: val as Exclude<R, typeof FAIL>,
   }
 }
-
-/**
- * Sequence
- * A B C ...
- * A followed by by B followed by C followed by ...
- */
-export function $S<T extends any[]>(...terms: { [I in keyof T]: Parser<T[I]> }): Parser<T> {
-  return (ctx, state): MaybeResult<T> => {
-    let { input, pos } = state,
-      i = 0, value
-    const results = [] as unknown as T,
-      s = pos,
-      l = terms.length
-
-    while (i < l) {
-      const r = terms[i++](ctx, { input, pos })
-
-      if (r) {
-        ({ pos, value } = r)
-        results.push(value)
-      } else
-        return
-    }
-
-    return {
-      loc: {
-        pos: s,
-        length: pos - s,
-      },
-      pos: pos,
-      value: results,
-    }
-  }
-}
-
-// a? zero or one
-export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
-  return (ctx, state: ParseState) => {
-    const r = fn(ctx, state)
-    if (r) return r
-
-    const { pos } = state
-    return {
-      loc: {
-        pos: pos,
-        length: 0
-      },
-      pos: pos,
-      value: undefined
-    }
-  }
-}
-
-/**
- * `*`
- * NOTE: zero length repetitions (where position doesn't advance) return
- * an empty array of values. A repetition where the position doesn't advance
- * would be an infinite loop, so this avoids that problem cleanly.
- * Since this always returns a result `&x*` will always succeed and `!x*` will
- * always fail. Same goes for `&x?` and `!x?`. Relatedly `&x+ == &x` and
- * `!x+ == !x`.
- */
-export function $Q<T>(fn: Parser<T>): Parser<T[]> {
-  return (ctx, state) => {
-    let { input, pos } = state
-    let value: T
-
-    const s = pos
-    const results: T[] = []
-
-    while (true) {
-      const prevPos = pos
-      const r = fn(ctx, { input, pos })
-      if (!r) break
-
-      ({ pos, value } = r)
-      if (pos === prevPos)
-        break
-      else
-        results.push(value)
-    }
-
-    return {
-      loc: {
-        pos: s,
-        length: pos - s,
-      },
-      pos: pos,
-      value: results
-    }
-  }
-}
-
-/**
- * `+` one or more
- */
-export function $P<T>(fn: Parser<T>): Parser<T[]> {
-  return (ctx, state) => {
-    const { input, pos: s } = state
-    let value: T
-
-    const first = fn(ctx, state)
-    if (!first) return
-
-    let { pos } = first
-    const results = [first.value]
-
-    while (true) {
-      const prevPos = pos
-
-      const r = fn(ctx, { input, pos })
-      if (!r) break
-
-      ({ pos, value } = r)
-      if (pos === prevPos)
-        break
-
-      results.push(value)
-    }
-
-    return {
-      loc: {
-        pos: s,
-        length: pos - s,
-      },
-      value: results,
-      pos: pos
-    }
-  }
-}
-
-/**
- * $ prefix operator, convert result value to a string spanning the
- * matched input
- */
-export function $TEXT(fn: Parser<unknown>): Parser<string> {
-  return (ctx, state) => {
-    const newState = fn(ctx, state)
-    if (!newState) return
-
-    newState.value = state.input.substring(state.pos, newState.pos)
-    return newState as ParseResult<string>
-  }
-}
-
-// ! prefix operator
-export function $N(fn: Parser<unknown>): Parser<true> {
-  return (ctx, state) => {
-    const newState = fn(ctx, state)
-
-    if (newState)
-      return
-
-    return {
-      loc: {
-        pos: state.pos,
-        length: 0,
-      },
-      value: true,
-      pos: state.pos,
-    }
-  }
-
-}
-
-// & prefix operator
-export function $Y(fn: Parser<unknown>): Parser<true> {
-  return (ctx, state) => {
-    const newState = fn(ctx, state)
-
-    if (!newState) return
-
-    return {
-      loc: {
-        pos: state.pos,
-        length: 0,
-      },
-      value: true,
-      pos: state.pos,
-    }
-  }
-}
-
-// Transform
-// simplest value mapping transform, doesn't include location data parameter
-export function $T<A, B>(parser: Parser<A>, fn: (value: A) => B): Parser<B> {
-  return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (!result) return
-
-    const { value } = result
-    const mappedValue = fn(value)
-
-    //@ts-ignore
-    result.value = mappedValue
-    return result as unknown as ParseResult<B>
-  }
-}
-
-// Transform RegExp
-
-// Result handler for regexp match expressions
-// $0 is the whole match, followed by $1, $2, etc.
-export function $TR<A extends unknown[], T>(
-  parser: Parser<A>,
-  fn: (
-    $skip: never,
-    $loc: Loc,
-    ...args: TupleOrArrayAsArgs<A> // This properly assigns the types of the arguments.
-    // If A is a tuple, e.g. ['a'|'b', 'foo'|'bar'] then $0 will be 'a'|'b' and
-    //   $1 will be 'foo'|'bar', and $2 and above will be undefined
-    // If A is an array (e.g. RegExpMatchArray, which extends string[]), then
-    //   $0...$9 will be the type of the array's elements (e.g. string)
-  ) => T
-): Parser<T> {
-  return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (!result) return
-
-    const { loc, value } = result
-    const mappedValue = fn(SKIP as never, loc, ...(value as TupleOrArrayAsArgs<A>))
-
-    if (mappedValue as unknown === SKIP) {
-      // TODO track fail?
-      return
-    }
-
-    //@ts-ignore
-    result.value = mappedValue
-    return result as unknown as ParseResult<T>
-  }
-}
-
-type TupleOrArrayAsArgs<A extends unknown[]> =
-  A extends [unknown, ...unknown[]] // i.e. is it a tuple of at least one element?
-    ? [...A, ...undefined[]] // if so, when it gets splatted to arguments, any extra arguments will be type undefined
-    : [...A]; // otherwise, it's an array, possibly a RegExpMatchArray, so it expands as itself
-
-
-// Transform sequence
-export function $TS<A extends any[], B>(parser: Parser<A>, fn: ($skip: never, $loc: Loc, value: A, ...args: A) => B): Parser<B> {
-  return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (!result) return
-
-    const { loc, value } = result
-    const mappedValue = fn(SKIP as never, loc, value, ...value)
-
-    if (mappedValue as unknown === SKIP) {
-      // TODO track fail?
-      return
-    }
-
-    //@ts-ignore
-    result.value = mappedValue
-    return result as unknown as ParseResult<B>
-  }
-}
-
-// Transform value $0 and $1 are both singular value
-export function $TV<A, B>(parser: Parser<A>, fn: ($skip: never, $loc: Loc, $0: A, $1: A) => B): Parser<B> {
-  return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (!result) return
-
-    const { loc, value } = result
-    const mappedValue = fn(SKIP as never, loc, value, value)
-
-    if (mappedValue as unknown === SKIP) {
-      // TODO track fail?
-      return
-    }
-
-    //@ts-ignore
-    result.value = mappedValue
-    return result as unknown as ParseResult<B>
-  }
-}
-
-// Default regexp result handler RegExpMatchArray => $0
-// Accepts any array-like parser result — a strict `Parser<[S]>` would reject
-// `Parser<RegExpMatchArray>` (variable-length) at call sites, which is the
-// common case for regexes that don't pick up a tuple annotation via
-// `reTupleType`.
-export function $R$0<S>(parser: Parser<ArrayLike<S>>): Parser<S> {
-  return function (ctx, state) {
-    const result = parser(ctx, state);
-    if (!result) return
-
-    const value = result.value[0]
-    //@ts-ignore
-    result.value = value
-    return result as unknown as ParseResult<S>
-  }
-}
-
-/**
- * Handles triggering enter/exit events and early result returning from results cache for a
- * single rule.
- */
-export function $EVENT<T>(ctx: ParserContext, state: ParseState, name: string, fn: Parser<T>) {
-  let eventData, enter, exit;
-  if (enter = ctx.enter) {
-    const result = enter(name, state);
-    if (result) {
-      if ('cache' in result)
-        return result.cache as ReturnType<typeof fn>
-      eventData = result.data;
-    }
-  }
-  const result = fn(ctx, state);
-  if (exit = ctx.exit) exit(name, state, result, eventData);
-  return result;
-}
-
-type ParserReturnTypes<T extends Parser<any>[]> =
-  T[number] extends Parser<infer P> ? MaybeResult<P> : never
-
-/**
- * Handles triggering enter/exit events and early result returning from results cache for an
- * array of rules where the first match is returned (Choice).
- */
-export function $EVENT_C<T extends Parser<any>[]>(ctx: ParserContext, state: ParseState, name: string, fns: T): ParserReturnTypes<T> {
-  let eventData, enter, exit;
-  if (enter = ctx.enter) {
-    const result = enter(name, state);
-    if (result) {
-      if ('cache' in result)
-        return result.cache as ParserReturnTypes<T>
-      eventData = result.data;
-    }
-  }
-  let result, i = 0, l = fns.length;
-  while (!result && i < l) {
-    if (result = fns[i](ctx, state)) break;
-    i++;
-  }
-
-  if (exit = ctx.exit) exit(name, state, result, eventData);
-  return result as ParserReturnTypes<T>;
-}
-
-/**
- * Sentinel returned from inlined rule handlers to signal "treat this rule as a
- * failed match" (reachable via the `$skip` parameter in hera grammars).
- */
-export const SKIP: unique symbol = Symbol("SKIP")
 
 // End of machinery
 // Parser specific things below
@@ -567,7 +221,7 @@ export function Validator() {
     return [line, pos - lineStart + 1]
   }
 
-  function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }) {
+  function validate<T>(input: string, result: MaybeResult<T>, { filename }: { filename: string }): T {
     if (result && result.pos === input.length)
       return result.value
 
@@ -636,11 +290,14 @@ export class ParseError extends Error {
 export type ParserEvents = {
   enter?: ParserContext["enter"],
   exit?: ParserContext["exit"],
+  cacheEnter?: CursorContext["cacheEnter"],
+  cacheExit?: CursorContext["cacheExit"],
 }
 
 export type HeraGrammar = { [key: string]: Parser<any> }
+export type CursorGrammar = { [key: string]: CursorParser<any> }
 
-export interface ParserOptions<T extends HeraGrammar> {
+export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T
@@ -649,4 +306,162 @@ export interface ParserOptions<T extends HeraGrammar> {
    * them with the `trace` and `memo` compile options (#120).
    */
   events?: ParserEvents
+}
+
+// Minimal legacy combinators kept solely for backwards compatibility with
+// parsers compiled by earlier Hera versions (including @danielx/hera-previous
+// during Hera's own bootstrap). Newly compiled parsers do not import these.
+type Expectation = string | (() => string)
+export function $EXPECT<T>(parser: Parser<T>, expectation: Expectation): Parser<T> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) ctx.fail(state.pos, typeof expectation === "function" ? expectation() : expectation)
+    return r
+  }
+}
+export function $L<const S extends string>(str: S): Parser<S> {
+  const l = str.length
+  return (_ctx, { input, pos }) => {
+    if (input.startsWith(str, pos)) return { loc: { pos, length: l }, pos: pos + l, value: str }
+    return
+  }
+}
+export function $R<T extends unknown[] = RegExpMatchArray>(re: RegExp): Parser<T> {
+  return (_ctx, { input, pos }) => {
+    re.lastIndex = pos
+    const m = re.exec(input)
+    if (m) return { loc: { pos, length: m[0].length }, pos: pos + m[0].length, value: m as unknown as T }
+    return
+  }
+}
+export function $R$0<S>(parser: Parser<ArrayLike<S>>): Parser<S> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) return
+    ;(r as any).value = r.value[0]
+    return r as unknown as ParseResult<S>
+  }
+}
+export function $C(...terms: Parser<any>[]): Parser<any> {
+  return function (ctx, state) {
+    for (let i = 0; i < terms.length; i++) {
+      const r = terms[i](ctx, state)
+      if (r) return r
+    }
+    return
+  }
+}
+export function $S(...terms: Parser<any>[]): Parser<any> {
+  return function (ctx, state) {
+    const results: any[] = []
+    let { pos } = state
+    const { input } = state
+    for (let i = 0; i < terms.length; i++) {
+      const r = terms[i](ctx, { input, pos })
+      if (!r) return
+      results.push(r.value)
+      pos = r.pos
+    }
+    return { loc: { pos: state.pos, length: pos - state.pos }, pos, value: results }
+  }
+}
+export function $E<T>(fn: Parser<T>): Parser<T | undefined> {
+  return (ctx, state) => fn(ctx, state) ?? { loc: { pos: state.pos, length: 0 }, pos: state.pos, value: undefined }
+}
+export function $Q<T>(fn: Parser<T>): Parser<T[]> {
+  return (ctx, state) => {
+    const results: T[] = []
+    let { pos } = state
+    const { input } = state
+    while (true) {
+      const r = fn(ctx, { input, pos })
+      if (!r || r.pos === pos) break
+      pos = r.pos
+      results.push(r.value)
+    }
+    return { loc: { pos: state.pos, length: pos - state.pos }, pos, value: results }
+  }
+}
+export function $P<T>(fn: Parser<T>): Parser<T[]> {
+  return (ctx, state) => {
+    const first = fn(ctx, state)
+    if (!first) return
+    const results: T[] = [first.value]
+    let pos = first.pos
+    const { input } = state
+    while (true) {
+      const r = fn(ctx, { input, pos })
+      if (!r || r.pos === pos) break
+      pos = r.pos
+      results.push(r.value)
+    }
+    return { loc: { pos: state.pos, length: pos - state.pos }, pos, value: results }
+  }
+}
+export function $TEXT(fn: Parser<unknown>): Parser<string> {
+  return (ctx, state) => {
+    const r = fn(ctx, state)
+    if (!r) return
+    ;(r as any).value = state.input.substring(state.pos, r.pos)
+    return r as ParseResult<string>
+  }
+}
+export function $N(fn: Parser<unknown>): Parser<true> {
+  return (ctx, state) => fn(ctx, state) ? undefined : { loc: { pos: state.pos, length: 0 }, pos: state.pos, value: true }
+}
+export function $Y(fn: Parser<unknown>): Parser<true> {
+  return (ctx, state) => fn(ctx, state) ? { loc: { pos: state.pos, length: 0 }, pos: state.pos, value: true } : undefined
+}
+export function $T<A, B>(parser: Parser<A>, fn: (v: A) => B): Parser<B> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) return
+    ;(r as any).value = fn(r.value)
+    return r as unknown as ParseResult<B>
+  }
+}
+export function $TR(parser: Parser<any>, fn: (...args: any[]) => any): Parser<any> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) return
+    const v = fn(SKIP, r.loc, ...r.value)
+    if (v === SKIP) return
+    ;(r as any).value = v
+    return r
+  }
+}
+export function $TS(parser: Parser<any>, fn: (...args: any[]) => any): Parser<any> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) return
+    const v = fn(SKIP, r.loc, r.value, ...r.value)
+    if (v === SKIP) return
+    ;(r as any).value = v
+    return r
+  }
+}
+export function $TV(parser: Parser<any>, fn: (...args: any[]) => any): Parser<any> {
+  return (ctx, state) => {
+    const r = parser(ctx, state)
+    if (!r) return
+    const v = fn(SKIP, r.loc, r.value, r.value)
+    if (v === SKIP) return
+    ;(r as any).value = v
+    return r
+  }
+}
+export function $EVENT<T>(ctx: ParserContext, state: ParseState, name: string, fn: Parser<T>) {
+  const res = ctx.enter?.(name, state)
+  if (res && "cache" in res) return res.cache as MaybeResult<T>
+  const r = fn(ctx, state)
+  ctx.exit?.(name, state, r, res?.data)
+  return r
+}
+export function $EVENT_C(ctx: ParserContext, state: ParseState, name: string, fns: Parser<any>[]) {
+  const res = ctx.enter?.(name, state)
+  if (res && "cache" in res) return res.cache
+  let r: MaybeResult<any>
+  for (let i = 0; i < fns.length && !r; i++) r = fns[i](ctx, state)
+  ctx.exit?.(name, state, r, res?.data)
+  return r
 }

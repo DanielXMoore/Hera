@@ -1,4 +1,4 @@
-// Compile a rules json to typescript
+// Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
 
@@ -59,9 +59,10 @@ type CompiledChunk = {
   sourceMapLines?: SourceMapEntry[][] | undefined
 }
 
-strDefs: string[] := []
 reDefs: string[] := []
 dynamicReDefs: RegExpPart[][] := []
+/** Counter for the names of helper functions (`$$h_<n>`) */
+let subFnCounter = 0
 /** Name prefix for transpileEmbedded functions; undefined without transpileEmbedded. */
 let embeddedPrefix: string | undefined
 let embeddedHandlers: EmbeddedHandler[] = []
@@ -156,11 +157,6 @@ decodeLiteral := (lit: string): string ->
     throw new Error `String literal "${lit}" ends in a lead surrogate, so it could match half of a surrogate pair. Use a regex instead, which only matches an unpaired surrogate.`
   decoded
 
-/** Define a literal string terminal */
-defineTerminal := (lit: string) ->
-  decodeLiteral lit
-  intern strDefs, "$L", lit
-
 /** Define a RegExp terminal */
 defineRe := (re: string) -> intern reDefs, "$R", re
 
@@ -203,72 +199,25 @@ Pretty print a string or RegExp literal
 prettyPrint := (name: string, terminal: string, re?: boolean) ->
   `${name} ${re ? `/${terminal}/` : JSON.stringify(terminal)}`
 
+isTypeOnlyHandler := (rule: HeraAST): boolean ->
+  Array.isArray(rule) and rule.length is 3 and rule[2] <? "object" and "t" in rule[2] and "f" not in rule[2]
+
 /**
-* Compile an operator to a JS or TS string.
+Emit an inline literal match condition (returns JS boolean expression testing
+whether `lit` matches at `$$ctx.pos`, plus the decoded length).
 */
-compileOp := (tuple: HeraAST, name: string, defaultHandler: boolean): string ->
-  // TODO: should nested levels have default handler set to true? (only comes into play on regexps)
-  if Array.isArray(tuple)
-    switch tuple[0]
-      when "L"
-        {
-          args := tuple[1]
-          `$EXPECT(${defineTerminal(args)}, ${JSON.stringify(prettyPrint(name, args))})`
-        }
-      when "R"
-        {
-          args := tuple[1]
-          let f = `$EXPECT(${defineRe(args)}, ${JSON.stringify(prettyPrint(name, args, true))})`
-          if defaultHandler
-            f =`$R$0(${f})`
-
-          f
-        }
-      when "RD"
-        {
-          args := tuple[1]
-          id := defineDynamicRe(args)
-          let f = `$EXPECT(${id}, () => \`${name} /\${${id}.source}/\`)`
-          if defaultHandler
-            f =`$R$0(${f})`
-
-          f
-        }
-      when "/"
-        {
-          src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler)
-          .join(", ")
-
-          `$C(${src})`
-        }
-      when "S"
-        {
-          src := tuple[1].map (arg) ->
-            compileOp(arg, name, defaultHandler)
-          .join(", ")
-          `$S(${src})`
-        }
-      when "*"
-        `$Q(${compileOp(tuple[1], name, defaultHandler)})`
-      when "+"
-        `$P(${compileOp(tuple[1], name, defaultHandler)})`
-      when "?"
-        `$E(${compileOp(tuple[1], name, defaultHandler)})`
-      when "$"
-        // Inside text can ignore all handlers since they are disregarded anyway
-        `$TEXT(${compileOp(tuple[1], name, false)})`
-      when "&"
-        `$Y(${compileOp(tuple[1], name, defaultHandler)})`
-      when "!"
-        `$N(${compileOp(tuple[1], name, defaultHandler)})`
-      default
-        if tuple[0].name
-          compileOp(tuple[1], name, defaultHandler)
-        else
-          throw new Error `Unknown op: ${tuple[0]} ${JSON.stringify(tuple[1])}`
-  else // rule reference
-    tuple
+literalMatchTest := (lit: string): { len: number, test: string } ->
+  decoded := decodeLiteral lit
+  len := decoded.length
+  if len is 0
+    return { len: 0, test: "true" }
+  test := if len is 1
+    `$$ctx.input.charCodeAt($$ctx.pos) === ${decoded.charCodeAt 0}`
+  else if len is 2
+    `$$ctx.input.charCodeAt($$ctx.pos) === ${decoded.charCodeAt 0} && $$ctx.input.charCodeAt($$ctx.pos + 1) === ${decoded.charCodeAt 1}`
+  else
+    `$$ctx.input.charCodeAt($$ctx.pos) === ${decoded.charCodeAt 0} && $$ctx.input.startsWith("${lit}", $$ctx.pos)`
+  { len, test }
 
 // Only rules have handlers, either one per choice line,
 // or one for the whole deal
@@ -302,6 +251,10 @@ rule.  TypeScript checks the rule's result against the type there.
 */
 type RuleType = { type: ASTNode, pos: number | undefined }
 
+/** `member` of a union, parenthesized when it's a function or conditional type */
+wrapUnionMember := (t: string, member: ASTNode): ASTNode ->
+  if /=>|\bextends\b/.test(t) then ["(", member, ")"] else member
+
 // Compute the declared return type of a rule, if any.
 // For top-level choice: union of sub-rule types (only if all are annotated).
 // For single-body: the handler's h.t.
@@ -325,7 +278,8 @@ ruleReturnType := (rule: HeraAST): RuleType | undefined ->
     continue if seen.has t
     type.push " | " if seen.size
     seen.add t
-    type.push typeText h!.t!, h!.tPos
+    member := typeText h!.t!, h!.tPos
+    type.push if isTopChoice then wrapUnionMember t, member else member
   return undefined if isTopChoice and seen.size is 1 and seen.has ""
   first := handlers[0]!.tPos
   { type, pos: if handlers.every((h) -> h!.tPos is first) then first }
@@ -337,54 +291,63 @@ reports a rule's result not matching its type there.
 typedReturn := (options: CompilerOptions, retType: RuleType | undefined): ASTNode ->
   mapped "return", if options.types then retType?.pos
 
-// Emit the inline $EVENT enter hook. Establishes `$$eventData` and may early-return on cache hit.
-//
-// Flattened form (avoid three levels of nested `if`): a single guard on
-// `ctx.enter` with `&&` short-circuits matches the shape civet's parser
-// accepts cleanly across many rules in the same module; the deeply-nested
-// form confused civet's state after ~7k lines of similar rule functions in
-// Civet's own parser.hera output.
+// Emit the inline event/cache enter hook.
 emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | undefined): ASTNode ->
   { types } := options
-  // Cast the cache return so the rule function's inferred return type matches
-  // `Parser<T>` (i.e. `MaybeResult<T>`), not `unknown` from `ParserContext.enter`.
-  // When no explicit ::Type is present, cast to `never` instead so this branch
-  // contributes nothing to the function's inferred return type — preserving
-  // the precise type inferred from the success path.
   retAnno := if types
-    if retType then [" as MaybeResult<", retType.type, ">"] else " as never"
+    if retType then [" as (", retType.type, ") | typeof FAIL"] else " as never"
   else ""
+  nameLit := JSON.stringify name
   [
-    `  const $$entered = $$ctx.enter?.(${JSON.stringify(name)}, $$state);\n  if ($$entered && "cache" in $$entered) return $$entered.cache`
+    `  if ($$ctx.cacheEnter) {\n    const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);\n    if ($$c !== $MISS) return $$c`
     retAnno
-    ";\n  const $$eventData = $$entered?.data;\n"
+    ";\n  }\n"
   ]
 
-// Emit the inline $EVENT exit hook. Assumes `$$final` holds the result.
-// In tokenize-compiled output, also rewrites `$$final.value` into a
-// `{ type, children, token, loc }` object before the exit hook runs.
-//
-// The `\ ` on the first content line of the template is a "dedent
-// anchor" — it renders as one literal space but counts as non-whitespace
-// for civet's auto-dedent, which prevents the dedent from swallowing the
-// explicit 2- and 4-space indentation we want in the output.
-emitEventExit := (options: CompilerOptions, name: string): string ->
+// Emit the inline event/cache exit hook call.
+emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos"): string ->
+  nameLit := JSON.stringify name
+  `if ($$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+
+/** Record that `exp` was expected at the cursor. */
+emitFailCall := (exp: string): string ->
+  `$$ctx.fail($$ctx.pos, ${exp});`
+
+/**
+Emit a failure check expression for `expr`. In TS mode, uses `$isFail(expr)`
+so infallible rules (whose static type excludes `typeof FAIL`) never trip TS2367
+while still narrowing `Exclude<T, typeof FAIL>` on the success path.
+*/
+failTest := (types: boolean?, expr: ASTNode): ASTNode ->
+  if types then ["$isFail(", expr, ")"] else [expr, " === $FAIL"]
+
+notFailTest := (types: boolean?, expr: ASTNode): ASTNode ->
+  if types then ["!$isFail(", expr, ")"] else [expr, " !== $FAIL"]
+
+/**
+Wrap failure statements in a multi-line braced block so indent-sensitive
+downstream parsers (Civet) never mistake `{ if (...) ... }` for an object literal.
+*/
+failBlock := (stmts: string): string ->
+  `{\n    ${stmts}\n  }`
+
+// Emit token-wrapping (in tokenize mode) + exit hook for `$$final`.
+emitEventExit := (options: CompilerOptions, name: string, valExpr = "$$final"): string ->
   { types, tokenize } := options
-  nameLit := JSON.stringify(name)
-  finalCast := types ? " as any" : ""
+  nameLit := JSON.stringify name
   tokenWrap := if tokenize
     ```
-\  if ($$final) {
-    ($$final${finalCast}).value = {
+\  if (${types ? `!$isFail(${valExpr})` : `${valExpr} !== $FAIL`}) {
+    ${valExpr} = {
       type: ${nameLit},
-      children: [$$final.value].flat(),
-      token: $$state.input.substring($$state.pos, $$final.pos),
-      loc: $$final.loc
-    };
+      children: [${valExpr}].flat(),
+      token: $$ctx.input.substring($$p0, $$ctx.pos),
+      loc: { pos: $$p0, length: $$ctx.pos - $$p0 }
+    }${types ? " as any" : ""};
   }
   ```
   else ""
-  tokenWrap + `  $$ctx.exit?.(${nameLit}, $$state, $$final, $$eventData);\n`
+  `${tokenWrap}  ${emitExitCall name, valExpr}\n`
 
 // `<declaration>(params)<ret> {\n<void line><body>`, shared by handler IIFEs
 // and the named functions in the transpileEmbedded virtual module.
@@ -484,26 +447,449 @@ emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: 
   id := embeddedHandlers.push({ handler, parameters, paramTypes, alternative }) - 1
   [mapped(`${embeddedPrefix}h_${id}__`, alternative?.start), `(${callArgs.join(", ")})`]
 
-// Emit the inline body for one rule (or one choice sub-rule).
-//   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
-//   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
-// `fnName` is the emitted JS function's name (may differ from `name` when this
-// is a choice sub-rule like `Foo$0`).  The rule's combinator expression is
-// hoisted into a top-level `const ${fnName}$parser = ...` so that `$S`/`$C`/
-// `$E`/etc. closures are allocated once at module load instead of on every
-// call (the source of a ~10% parse regression vs the old combinator output).
-// Returns { helpers, body }: top-level helper declarations to emit before
-// the rule function, and the rule function body statements.  The calls it
-// makes map to `alternative`, when known.
-compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean, alternative: AlternativeSpan | undefined) ->
+/**
+What the emitters for one generated function share: the rule's name, for
+expectations; the compile options; the helper functions to emit before the
+rule; fresh local names; the alternative being compiled, whose start the
+calls it makes map to, so a stack trace through the parser shows the
+alternative being parsed; and, with types, each bound variable's value type,
+which transpileEmbedded handlers' parameters are declared with.
+*/
+type Emit =
+  ruleName: string
+  options: CompilerOptions
+  helpers: ASTNode[]
+  idGen: (prefix: string) => string
+  alternative: AlternativeSpan | undefined
+  varTypes: Map<string, string>
+
+newIdGen := ->
+  localId .= 0
+  (prefix: string) -> `$$${prefix}${localId++}`
+
+/** `cx` for a new function, with its own local names and variable types */
+inFunction := (cx: Emit): Emit ->
+  { ...cx, idGen: newIdGen(), varTypes: new Map }
+
+/** A call of `fn` with the cursor, mapped to the alternative being parsed */
+callFn := (cx: Emit, fn: string): ASTNode ->
+  [mapped(fn, cx.alternative?.start), "($$ctx)"]
+
+/** The text of `node`, to check what the code uses */
+textOf := (node: ASTNode): string -> generate node, {}
+
+/** `lines`, one per line */
+joinLines := (lines: ASTNode[]): ASTNode ->
+  lines.flatMap (line, i) -> i ? ["\n", line] : [line]
+
+/** The value type of a successful call of `fn` */
+resultType := (fn: string): string ->
+  `Exclude<ReturnType<typeof ${fn}>, typeof FAIL>`
+
+/**
+Compile a sub-expression into a flat top-level helper function returning
+`T | typeof FAIL` (leaving `$$ctx.pos` unchanged on `FAIL`).
+Rule references return `$$r_${ast}` directly without creating a helper.
+*/
+compileSubFn := (ast: HeraAST, defaultHandler: boolean, cx: Emit): string ->
+  if typeof ast is "string"
+    return `$$r_${ast}`
+
+  { types } := cx.options
+  ctxType := types ? ": CursorContext" : ""
+
+  // Unwrap named parameter wrappers
+  if Array.isArray(ast) and typeof ast[0] is "object" and "name" in ast[0]
+    return compileSubFn(ast[1], defaultHandler, cx)
+
+  fnName := `$$h_${subFnCounter++}`
+  fx := inFunction cx
+
+  // Choice: try each alternative sequentially, returning the first non-FAIL value.
+  if Array.isArray(ast) and ast[0] is "/"
+    lines: ASTNode[] := []
+    for arg of ast[1]
+      lines.push ...emitChoiceAlt(arg, defaultHandler, fx)
+    lines.push "  return $FAIL;"
+    cx.helpers.push [`function ${fnName}($$ctx${ctxType}) {\n`, joinLines(lines), "\n}"]
+    return fnName
+
+  // Sequence: save cursor, match each item with early-return on FAIL, return tuple.
+  if Array.isArray(ast) and ast[0] is "S"
+    items := ast[1]
+    lines: ASTNode[] := []
+    vars: string[] := []
+    for item, i of items
+      v := `$$v${i}`
+      vars.push v
+      onFail := if i is 0 then "return $FAIL;" else "$$ctx.pos = $$p0;\n    return $FAIL;"
+      lines.push ...emitMatch(item, v, onFail, defaultHandler, fx)
+    if lines.some((l) -> textOf(l).includes "$$p0")
+      lines.unshift "  const $$p0 = $$ctx.pos;"
+    if types and not lines.some((l) -> textOf(l).includes "$$ctx")
+      lines.unshift "  void $$ctx;"
+    tupleExpr := if types
+      `[${vars.join ", "}] as [${vars.map((v) -> `typeof ${v}`).join ", "}]`
+    else
+      `[${vars.join ", "}]`
+    lines.push `  return ${tupleExpr};`
+    cx.helpers.push [`function ${fnName}($$ctx${ctxType}) {\n`, joinLines(lines), "\n}"]
+    return fnName
+
+  // Single operator (`L`, `R`, `RD`, `*`, `+`, `?`, `$`, `&`, `!`)
+  lines := emitMatch(ast, "$$v", "return $FAIL;", defaultHandler, fx)
+  if types and not lines.some((l) -> textOf(l).includes "$$ctx")
+    lines.unshift "  void $$ctx;"
+  lines.push "  return $$v;"
+  cx.helpers.push [`function ${fnName}($$ctx${ctxType}) {\n`, joinLines(lines), "\n}"]
+  fnName
+
+/**
+Compile a sub-expression whose value is discarded (`$`, lookaheads, and
+unnamed repetitions or groups).  Its regexes produce plain strings, as under a
+default handler.
+*/
+compileDiscardedFn := (ast: HeraAST, cx: Emit): string ->
+  compileSubFn ast, true, cx
+
+/**
+Emit statements inside a Choice function for one alternative `arg`.
+Returns immediately on match; falls through (with `$$ctx.pos` unchanged) on fail.
+*/
+emitChoiceAlt := (arg: HeraAST, defaultHandler: boolean, cx: Emit): ASTNode[] ->
+  { types } := cx.options
+  if typeof arg is "string"
+    v := cx.idGen "c"
+    return [
+      [`  const ${v} = `, callFn(cx, `$$r_${arg}`), ";"]
+      ["  if (", notFailTest(types, v), `) return ${v};`]
+    ]
+  if Array.isArray(arg)
+    switch arg[0]
+      when "L"
+        lit := arg[1]
+        { len, test } := literalMatchTest lit
+        exp := JSON.stringify prettyPrint(cx.ruleName, lit)
+        litVal := if types then `"${lit}" as const` else `"${lit}"`
+        if len is 0
+          return [`  return ${litVal};`]
+        return [
+          `  if (${test}) { $$ctx.pos += ${len}; return ${litVal}; }`
+          `  ${emitFailCall exp}`
+        ]
+      when "R"
+        r := arg[1]
+        exp := JSON.stringify prettyPrint(cx.ruleName, r, true)
+        reId := defineRe r
+        mVar := cx.idGen "m"
+        tupleUnion := reTupleUnion types, r
+        retVal := if defaultHandler
+          `${mVar}[0]${tupleUnion ? ` as ${tupleUnion}` : ""}`
+        else
+          `${mVar}${tupleUnion ? ` as unknown as [${tupleUnion}]` : ""}`
+        return [
+          `  ${reId}.lastIndex = $$ctx.pos;`
+          `  const ${mVar} = ${reId}.exec($$ctx.input);`
+          `  if (${mVar}) { $$ctx.pos += ${mVar}[0].length; return ${retVal}; }`
+          `  ${emitFailCall exp}`
+        ]
+  fn := compileSubFn arg, defaultHandler, cx
+  v := cx.idGen "c"
+  [
+    [`  const ${v} = `, callFn(cx, fn), ";"]
+    ["  if (", notFailTest(types, v), `) return ${v};`]
+  ]
+
+/**
+Emit inline statements that match `ast` at `$$ctx.pos`, binding the matched value
+to `const ${varName}` (when `varName` is provided) or executing `onFail` on failure.
+Invariant: `$$ctx.pos` is left unchanged on failure before `onFail` runs.
+With types, records the value type of `varName` in `cx.varTypes`.
+*/
+emitMatch := (
+  ast: HeraAST
+  varName: string | undefined
+  onFail: string
+  defaultHandler: boolean
+  cx: Emit
+): ASTNode[] ->
+  { types } := cx.options
+  ruleName := cx.ruleName
+  idGen := cx.idGen
+  bind := (type: string) ->
+    cx.varTypes.set varName, type if varName and types
+
+  // Rule reference
+  if typeof ast is "string"
+    fn := `$$r_${ast}`
+    bind resultType fn
+    if varName
+      return [
+        [`  const ${varName} = `, callFn(cx, fn), ";"]
+        ["  if (", failTest(types, varName), `) ${failBlock onFail}`]
+      ]
+    return [
+      ["  if (", failTest(types, callFn(cx, fn)), `) ${failBlock onFail}`]
+    ]
+
+  // Operator tuple
+  switch ast[0]
+    when "L"
+      lit := ast[1]
+      { len, test } := literalMatchTest lit
+      exp := JSON.stringify prettyPrint(ruleName, lit)
+      litVal := if types then `"${lit}" as const` else `"${lit}"`
+      bind `"${lit}"`
+      if len is 0
+        return if varName then [`  const ${varName} = ${litVal};`] else []
+      lines: ASTNode[] := [
+        `  if (!(${test})) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
+        `  $$ctx.pos += ${len};`
+      ]
+      lines.push `  const ${varName} = ${litVal};` if varName
+      return lines
+
+    when "R"
+      r := ast[1]
+      exp := JSON.stringify prettyPrint(ruleName, r, true)
+      reId := defineRe r
+      mVar := idGen "m"
+      tupleUnion := reTupleUnion types, r
+      valExpr := if defaultHandler
+        `${mVar}[0]${tupleUnion ? ` as ${tupleUnion}` : ""}`
+      else
+        `${mVar}${tupleUnion ? ` as unknown as [${tupleUnion}]` : ""}`
+      bind if defaultHandler
+        tupleUnion ?? "string"
+      else
+        tupleUnion ? `[${tupleUnion}]` : "RegExpExecArray"
+      lines: ASTNode[] := [
+        `  ${reId}.lastIndex = $$ctx.pos;`
+        `  const ${mVar} = ${reId}.exec($$ctx.input);`
+        `  if (!${mVar}) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
+        `  $$ctx.pos += ${mVar}[0].length;`
+      ]
+      lines.push `  const ${varName} = ${valExpr};` if varName
+      return lines
+
+    when "RD"
+      rdId := defineDynamicRe ast[1]
+      reVar := idGen "re"
+      mVar := idGen "m"
+      bind defaultHandler ? "string" : "RegExpExecArray"
+      lines: ASTNode[] := [
+        [`  const ${reVar} = `, mapped(rdId, cx.alternative?.start), "();"]
+        `  ${reVar}.lastIndex = $$ctx.pos;`
+        `  const ${mVar} = ${reVar}.exec($$ctx.input);`
+        `  if (!${mVar}) ${failBlock `$$ctx.fail($$ctx.pos, \`${ruleName} /\${${reVar}.source}/\`);\n    ${onFail}`}`
+        `  $$ctx.pos += ${mVar}[0].length;`
+      ]
+      lines.push `  const ${varName} = ${defaultHandler ? `${mVar}[0]` : mVar};` if varName
+      return lines
+
+    when "?"
+      child := ast[1]
+      // Fast inline path for optional literal (e.g. ","?)
+      if Array.isArray(child) and child[0] is "L"
+        lit := child[1]
+        { len, test } := literalMatchTest lit
+        exp := JSON.stringify prettyPrint(ruleName, lit)
+        if len is 0
+          bind '""'
+          return if varName then [`  const ${varName} = ${types ? '"" as const' : '""'};`] else []
+        if varName
+          bind `"${lit}" | undefined`
+          typeAnno := if types then `: "${lit}" | undefined` else ""
+          return [
+            `  let ${varName}${typeAnno} = undefined;`
+            `  if (${test}) {\n    $$ctx.pos += ${len};\n    ${varName} = "${lit}";\n  } else {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
+          ]
+        return [
+          `  if (${test}) {\n    $$ctx.pos += ${len};\n  } else {\n    $$ctx.fail($$ctx.pos, ${exp});\n  }`
+        ]
+      if varName
+        fn := compileSubFn child, defaultHandler, cx
+        bind `${resultType fn} | undefined`
+        tVar := idGen "o"
+        typeAnno := if types then `: Exclude<typeof ${tVar}, typeof FAIL> | undefined` else ""
+        return [
+          [`  const ${tVar} = `, callFn(cx, fn), ";"]
+          `  let ${varName}${typeAnno};`
+          ["  if (", failTest(types, tVar), `) { ${varName} = undefined; } else { ${varName} = ${tVar}; }`]
+        ]
+      fn := compileDiscardedFn child, cx
+      return [["  ", callFn(cx, fn), ";"]]
+
+    when "*"
+      child := ast[1]
+      p0Var := idGen "q"
+      fVar := idGen "qf"
+      pVar := idGen "q"
+      itVar := idGen "qi"
+      if varName
+        fn := compileSubFn child, defaultHandler, cx
+        bind `${resultType fn}[]`
+        arrType := if types then `: Exclude<typeof ${fVar}, typeof FAIL>[]` else ""
+        return [
+          `  const ${p0Var} = $$ctx.pos;`
+          [`  const ${fVar} = `, callFn(cx, fn), ";"]
+          `  let ${varName}${arrType};`
+          ["  if (", failTest(types, fVar), ` || $$ctx.pos === ${p0Var}) {`]
+          `    $$ctx.pos = ${p0Var};`
+          `    ${varName} = [];`
+          `  } else {`
+          `    ${varName} = [${fVar}];`
+          `    while (true) {`
+          `      const ${pVar} = $$ctx.pos;`
+          [`      const ${itVar} = `, callFn(cx, fn), ";"]
+          ["      if (", failTest(types, itVar), ` || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`]
+          `      ${varName}.push(${itVar});`
+          `    }`
+          `  }`
+        ]
+      fn := compileDiscardedFn child, cx
+      return [
+        `  while (true) {`
+        `    const ${pVar} = $$ctx.pos;`
+        [`    const ${itVar} = `, callFn(cx, fn), ";"]
+        ["    if (", failTest(types, itVar), ` || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`]
+        `  }`
+      ]
+
+    when "+"
+      child := ast[1]
+      firstVar := idGen "pf"
+      pVar := idGen "p"
+      itVar := idGen "pi"
+      if varName
+        fn := compileSubFn child, defaultHandler, cx
+        bind `${resultType fn}[]`
+        return [
+          [`  const ${firstVar} = `, callFn(cx, fn), ";"]
+          ["  if (", failTest(types, firstVar), `) ${failBlock onFail}`]
+          `  const ${varName} = [${firstVar}];`
+          `  while (true) {`
+          `    const ${pVar} = $$ctx.pos;`
+          [`    const ${itVar} = `, callFn(cx, fn), ";"]
+          ["    if (", failTest(types, itVar), ` || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`]
+          `    ${varName}.push(${itVar});`
+          `  }`
+        ]
+      fn := compileDiscardedFn child, cx
+      return [
+        ["  if (", failTest(types, callFn(cx, fn)), `) ${failBlock onFail}`]
+        `  while (true) {`
+        `    const ${pVar} = $$ctx.pos;`
+        [`    const ${itVar} = `, callFn(cx, fn), ";"]
+        ["    if (", failTest(types, itVar), ` || $$ctx.pos === ${pVar}) { $$ctx.pos = ${pVar}; break; }`]
+        `  }`
+      ]
+
+    when "$"
+      pVar := idGen "tp"
+      fn := compileDiscardedFn ast[1], cx
+      bind "string"
+      lines: ASTNode[] := [
+        `  const ${pVar} = $$ctx.pos;`
+        ["  if (", failTest(types, callFn(cx, fn)), `) ${failBlock onFail}`]
+      ]
+      lines.push `  const ${varName} = $$ctx.input.substring(${pVar}, $$ctx.pos);` if varName
+      return lines
+
+    when "&"
+      child := ast[1]
+      bind "true"
+      if Array.isArray(child) and child[0] is "L"
+        lit := child[1]
+        { len, test } := literalMatchTest lit
+        exp := JSON.stringify prettyPrint(ruleName, lit)
+        lines: ASTNode[] := if len is 0 then ([] as ASTNode[]) else [`  if (!(${test})) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`]
+        lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+        return lines
+      pVar := idGen "lp"
+      tVar := idGen "lv"
+      fn := compileDiscardedFn child, cx
+      lines: ASTNode[] := [
+        `  const ${pVar} = $$ctx.pos;`
+        [`  const ${tVar} = `, callFn(cx, fn), ";"]
+        `  $$ctx.pos = ${pVar};`
+        ["  if (", failTest(types, tVar), `) ${failBlock onFail}`]
+      ]
+      lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+      return lines
+
+    when "!"
+      child := ast[1]
+      bind "true"
+      if Array.isArray(child) and child[0] is "L"
+        lit := child[1]
+        { len, test } := literalMatchTest lit
+        exp := JSON.stringify prettyPrint(ruleName, lit)
+        if len is 0
+          return [`  ${failBlock onFail}`]
+        lines: ASTNode[] := [
+          `  if (${test}) ${failBlock onFail}`
+          `  ${emitFailCall exp}`
+        ]
+        lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+        return lines
+      pVar := idGen "lp"
+      tVar := idGen "lv"
+      fn := compileDiscardedFn child, cx
+      lines: ASTNode[] := [
+        `  const ${pVar} = $$ctx.pos;`
+        [`  const ${tVar} = `, callFn(cx, fn), ";"]
+        `  $$ctx.pos = ${pVar};`
+        ["  if (", notFailTest(types, tVar), `) ${failBlock onFail}`]
+      ]
+      lines.push `  const ${varName} = ${types ? "true as const" : "true"};` if varName
+      return lines
+
+    when "S", "/"
+      if varName
+        fn := compileSubFn ast, defaultHandler, cx
+        bind resultType fn
+        return [
+          [`  const ${varName} = `, callFn(cx, fn), ";"]
+          ["  if (", failTest(types, varName), `) ${failBlock onFail}`]
+        ]
+      fn := compileDiscardedFn ast, cx
+      return [["  if (", failTest(types, callFn(cx, fn)), `) ${failBlock onFail}`]]
+
+    default
+      if typeof ast[0] is "object" and "name" in ast[0]
+        return emitMatch(ast[1], varName, onFail, defaultHandler, cx)
+      throw new Error `Unknown op: ${ast[0]} ${JSON.stringify(ast[1])}`
+
+/**
+Emit the inline body for one cursor rule (or one choice sub-rule).
+  wrapEvent=true  — emit enter/exit cache hooks (top-level rule)
+  wrapEvent=false — plain body (a choice sub-rule called from top-level choice)
+The calls it makes map to `alternative`, when known.
+*/
+compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST, wrapEvent: boolean, alternative: AlternativeSpan | undefined) ->
   { types, tokenize } := options
-  retType := ruleReturnType(rule)
+  retType := ruleReturnType rule
+  cx: Emit := {
+    ruleName: name
+    options
+    helpers: []
+    idGen: newIdGen()
+    alternative
+    varTypes: new Map
+  }
+  helpers := cx.helpers
 
-  helpers: any[] := []
+  makeFail := (restorePos: boolean): string ->
+    restore := if restorePos then "$$ctx.pos = $$p0;\n    " else ""
+    if wrapEvent
+      `${restore}${emitExitCall name, "$FAIL", "$$p0"}\n    return $FAIL;`
+    else if restorePos
+      `${restore}return $FAIL;`
+    else
+      "return $FAIL;"
 
-  // Reference to another rule. This branch only fires for top-level rules
-  // (wrapEvent=true); choice-alternative string references are short-circuited
-  // in compileRule directly, before we get here.
+  // Reference to another rule (only fires when wrapEvent=true).
   if typeof rule is "string"
     /* c8 ignore next 2 */
     unless wrapEvent
@@ -511,199 +897,217 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
     return {
       helpers
       body: [
+        "  const $$p0 = $$ctx.pos;\n"
         emitEventEnter(options, name, retType)
-        "  const $$final = "
-        mapped(rule, alternative?.start)
-        "($$ctx, $$state);\n"
+        "  let $$final = "
+        callFn(cx, `$$r_${rule}`)
+        ";\n"
         emitEventExit(options, name)
-        "\n  "
+        "  "
         typedReturn options, retType
         " $$final;"
       ]
     }
 
-  // No handler emission: return the parser's result verbatim (top-level
-  // rules still flow through the event hooks, which also wrap as a Token in
-  // tokenize mode).  Three shapes land here:
-  //   (a) `rule.length === 2` — no handler slot at all
-  //   (b) `Name ::Type` (rule[2] has `t` but no `f`) — type-annotation-only
-  //   (c) any rule when compiling for tokenize, since the handler is dead
-  // For (b), `ruleReturnType` already surfaces the declared type onto the
-  // rule function signature.
-  typeOnlyHandler := rule.length is 3 and rule[2] <? "object" and "t" in rule[2] and "f" not in rule[2]
+  typeOnlyHandler := isTypeOnlyHandler rule
   noHandler := rule.length !== 3 or typeOnlyHandler
   if noHandler or tokenize
-    // `Choice` wraps a rule reference with a type-only handler in a sequence
-    // ("S"), which will wrap the result in an array.  Avoid this array wrapper
-    // if the length is 1, like the no-handler case.
     if typeOnlyHandler and rule[0] is "S" and rule[1]# is 1
       rule = rule[1][0]
-    parserExpr := compileOp(rule, name, true)
-    helpers.push `const ${fnName}$parser = ${parserExpr};`
-    call := [mapped(`${fnName}$parser`, alternative?.start), "($$ctx, $$state);"]
-    body := if wrapEvent
-      [
-        emitEventEnter(options, name, retType)
-        "  const $$final = "
-        call
-        "\n"
-        emitEventExit(options, name)
-        "\n  "
-        typedReturn options, retType
-        " $$final;"
-      ]
+    body: ASTNode[] := []
+    if wrapEvent
+      body.push "  const $$p0 = $$ctx.pos;\n"
+      body.push emitEventEnter(options, name, retType)
+
+    // Unwrap named wrapper for direct sequence/match emission
+    inner .= rule
+    while Array.isArray(inner) and typeof inner[0] is "object" and "name" in inner[0]
+      inner = inner[1]
+
+    if Array.isArray(inner) and inner[0] is "S"
+      items := inner[1]
+      seqLines: ASTNode[] := []
+      vars: string[] := []
+      for item, i of items
+        v := `$$v${i}`
+        vars.push v
+        lines := emitMatch(item, v, makeFail(i > 0), true, cx)
+        seqLines.push [joinLines(lines), "\n"] if lines.length
+      if not wrapEvent and seqLines.some((s) -> textOf(s).includes "$$p0")
+        body.push "  const $$p0 = $$ctx.pos;\n"
+      body.push ...seqLines
+      if types and not wrapEvent and not body.some((s) -> textOf(s).includes "$$ctx")
+        body.unshift "  void $$ctx;\n"
+      tupleExpr := if types
+        `[${vars.join ", "}] as [${vars.map((v) -> `typeof ${v}`).join ", "}]`
+      else
+        `[${vars.join ", "}]`
+      if wrapEvent
+        body.push `  let $$final = ${tupleExpr};\n`
+        body.push emitEventExit(options, name)
+        body.push ["  ", typedReturn(options, retType), " $$final;"]
+      else
+        body.push `  return ${tupleExpr};`
+      return { helpers, body }
+
+    // Non-sequence handlerless rule
+    lines := emitMatch(inner, "$$r", makeFail(false), true, cx)
+    body.push [joinLines(lines), "\n"]
+    if wrapEvent
+      if tokenize
+        body.push "  let $$final = $$r;\n"
+        body.push emitEventExit(options, name)
+        body.push ["  ", typedReturn(options, retType), " $$final;"]
+      else
+        body.push emitEventExit(options, name, "$$r")
+        body.push ["  ", typedReturn(options, retType), " $$r;"]
     else
-      ["  return ", call]
+      if types and not body.some((s) -> textOf(s).includes "$$ctx")
+        body.unshift "  void $$ctx;\n"
+      body.push "  return $$r;"
     return { helpers, body }
 
-  // Rule has a handler — inline it as an IIFE with parameter types that
-  // reference `typeof $$r.value`.  TS contextually types the IIFE body per
-  // call site (unlike a top-level generic helper, which type-checks its
-  // body once with the generic unresolved), so `.reduce`/`.filter`
-  // callbacks inside handler bodies get proper positional typing.
+  // Rule has a handler
   h := rule[2]
   unless h is like { f } and h.f <? "string"
     throw new Error "unknown handler format"
 
-  parserExpr := compileOp(rule, name, false)
-  helpers.push `const ${fnName}$parser = ${parserExpr};`
+  handlerUsesSkip := usesIdentifier h.f, "$skip"
+  handlerUsesLoc := usesIdentifier h.f, "$loc"
 
-  // Per-shape: params, their types, and call args.  If multiple retained args
-  // need parser value access, cache `$$r.value` into `$$value` before building
-  // the handler call, so V8 sees direct variable reads instead of repeated
-  // `$$r.value[i]` property lookups.
   let parameters: string[], paramTypes: string[], callArgs: string[]
-
-  addNamedParameter := (name: string | undefined, paramType: string, callArg: string) ->
-    return unless name
-    if parameters.includes(name)
+  addNamedParameter := (paramName: string | undefined, paramType: string, callArg: string) ->
+    return unless paramName
+    if parameters.includes paramName
       /* c8 ignore next 2 */
-      if name.startsWith "$"
-        throw new Error `named parameter "${name}" conflicts with reserved positional parameter`
-      throw new Error `duplicate named parameter: ${name}`
-    parameters.push name
+      if paramName.startsWith "$"
+        throw new Error `named parameter "${paramName}" conflicts with reserved positional parameter`
+      throw new Error `duplicate named parameter: ${paramName}`
+    parameters.push paramName
     paramTypes.push paramType
     callArgs.push callArg
 
+  body: ASTNode[] := []
+  needP0 := wrapEvent or handlerUsesLoc or handlerUsesSkip or (rule[0] is "S" and rule[1].length > 1)
+  if needP0
+    body.push "  const $$p0 = $$ctx.pos;\n"
+  if wrapEvent
+    body.push emitEventEnter(options, name, retType)
+
   if rule[0] is "S"
-    n := rule[1].length
+    items := rule[1]
+    n := items.length
+    handlerUses0 := usesIdentifier h.f, "$0"
     parameters = ["$loc", "$0"]
-    paramTypes = ["Loc", "typeof $$value"]
-    callArgs = ["$$r.loc", "$$value"]
+    paramTypes = ["Loc", "typeof $$s0"]
+    callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }", "$$s0"]
+    usedVars: boolean[] := []
     for i of [0...n]
-      parameters.push `$${i+1}`
-      paramTypes.push `typeof $$value[${i}]`
-      callArgs.push `$$value[${i}]`
-      addNamedParameter getNamedVariable(rule[1][i][0]), `typeof $$value[${i}]`, `$$value[${i}]`
+      named := getNamedVariable items[i][0]
+      posName := `$${i + 1}`
+      used := handlerUses0 or usesIdentifier(h.f, posName) or (named? and usesIdentifier(h.f, named))
+      usedVars.push used
+      parameters.push posName
+      paramTypes.push `typeof $$v${i}`
+      callArgs.push `$$v${i}`
+      addNamedParameter named, `typeof $$v${i}`, `$$v${i}`
+
+    for item, i of items
+      v := if usedVars[i] then `$$v${i}` else undefined
+      lines := emitMatch(item, v, makeFail(i > 0), false, cx)
+      body.push [joinLines(lines), "\n"] if lines.length
+
+    if handlerUses0
+      vars := [0...n].map (i) -> `$$v${i}`
+      tupleExpr := if types
+        `[${vars.join ", "}] as [${vars.map((v) -> `typeof ${v}`).join ", "}]`
+      else
+        `[${vars.join ", "}]`
+      body.push `  const $$s0 = ${tupleExpr};\n`
+      cx.varTypes.set "$$s0", `[${vars.map((v) -> cx.varTypes.get(v)).join ", "}]` if types
+
   else if rule[0] <? "string" and rule[0].startsWith "R"
-    parameters = regExpHandlerParams.slice()
-    // RegExpMatchArray positional typing (and reTupleType short tuples) don't
-    // pass cleanly through .reduce/.filter; keep positional args as `any`.
-    paramTypes = ["Loc"].concat Array(10).fill("any")
-    // In TS mode the positional extraction casts through `any[]` so short
-    // tuples (`["a"|"b"]`) don't trip TS2493 at indices beyond the tuple
-    // length.  In JS mode the cast is elided — `as any[]` isn't valid JS.
-    /* c8 ignore next */
-    valueExpr := if types then "($$value as any[])" else "$$value"
-    callArgs = ["$$r.loc"]
-    for (let i = 0; i < 10; i++)
-      callArgs.push `${valueExpr}[${i}]`
+    usesCaptures := regExpHandlerParams.slice(2).some (p) -> usesIdentifier h.f, p
+    usesRegexVal := usesCaptures or usesIdentifier h.f, "$0"
+    if not usesCaptures
+      // Handler uses at most $0 (no capture groups $1..$9) — pass defaultHandler=true
+      // so the value is the matched string.
+      parameters = ["$loc", "$0"]
+      paramTypes = ["Loc", "any"]
+      callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }", "$$v"]
+      lines := emitMatch(rule, usesRegexVal ? "$$v" : undefined, makeFail(false), true, cx)
+      body.push [joinLines(lines), "\n"] if lines.length
+    else
+      parameters = regExpHandlerParams.slice()
+      paramTypes = ["Loc"].concat Array(10).fill("any")
+      /* c8 ignore next */
+      valueExpr := if types then "($$v as any[])" else "$$v"
+      callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }"]
+      for (let i = 0; i < 10; i++)
+        callArgs.push `${valueExpr}[${i}]`
+      lines := emitMatch(rule, "$$v", makeFail(false), false, cx)
+      body.push [joinLines(lines), "\n"] if lines.length
   else
     parameters = regularHandlerParams.slice()
-    // Single-value shape: `$0` and `$1` both bind to the whole parser value.
-    paramTypes = ["Loc", "typeof $$value", "typeof $$value"]
-    callArgs = ["$$r.loc", "$$value", "$$value"]
-    addNamedParameter getNamedVariable(rule[0]), "typeof $$value", "$$value"
+    paramTypes = ["Loc", "typeof $$v", "typeof $$v"]
+    callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }", "$$v", "$$v"]
+    addNamedParameter getNamedVariable(rule[0]), "typeof $$v", "$$v"
+    usesSingleVal := parameters.slice(1).some (p) -> usesIdentifier h.f, p
+    lines := emitMatch(rule, usesSingleVal ? "$$v" : undefined, makeFail(false), false, cx)
+    body.push [joinLines(lines), "\n"] if lines.length
 
-  // Only pass the handler parameters that the handler text appears to use.
-  // We use a lexical regex rather than parsing to keep things fast/simple.
-  // Comments and strings will count as usage, but this is mostly harmless
-  // (just reduces optimization).
-  handlerUsesSkip := usesIdentifier(h.f, "$skip")
+  // Prune to parameters referenced in handler text
   usedParameterIndexes := parameters.flatMap (p, i) ->
-    if usesIdentifier(h.f, p)
-      [i]
-    else
-      []
+    if usesIdentifier(h.f, p) then [i] else []
   parameters = usedParameterIndexes.map (i) -> parameters[i]
   paramTypes = usedParameterIndexes.map (i) -> paramTypes[i]
   callArgs = usedParameterIndexes.map (i) -> callArgs[i]
 
-  // A transpileEmbedded handler is a top-level function, which can't name
-  // this rule function's `$$value`.  The rule's top-level `$parser` has the
-  // same value type, so its parameter types name that instead: the parser
-  // serves as the type witness.
-  witnessType := `Unwrap<ReturnType<typeof ${fnName}$parser>>`
-  embeddedParamTypes := paramTypes.map .replace /typeof \$\$value/g, => witnessType
-
-  valueUseCount := (callArgs.filter usesIdentifier ., "$$value")#
-  valueDecl := if valueUseCount > 1
-    "  const $$value = $$r.value;\n"
-  else
-    paramTypes = paramTypes.map .replace /\$\$value/g, => "$$r.value"
-    callArgs = callArgs.map .replace /\$\$value/g, => "$$r.value"
-    ""
-
-  // Emit the IIFE at the rule function's top-level indent (2-space) so the
-  // handler body (which comes in at 4-space from the grammar source) is
-  // strictly deeper than the IIFE's declaration line — civet's parser
-  // needs that for block vs object-literal disambiguation.
+  // Handlers always run as an IIFE.  Splicing handler bodies directly into
+  // the rule function was measured to give no benefit (TurboFan inlines the
+  // IIFE) and to be slightly slower on Civet's grammar, while requiring
+  // fragile text analysis of handler code.  With transpileEmbedded, the
+  // handler is a named function in the embedded module instead, which can't
+  // name this function's variables: its parameters are declared with the
+  // variables' value types.
   iife := if embeddedPrefix?
+    embeddedParamTypes := paramTypes.map (t) ->
+      t.replace /^typeof (\$\$\w+)$/, (whole, v) => cx.varTypes.get(v) ?? whole
     emitEmbeddedHandlerCall h, parameters, embeddedParamTypes, callArgs, alternative
   else
     emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ", alternative)
-
-  // Compose the rule body with early returns for the null / skip paths;
-  // all exits route through a single exit-hook helper.  The hook only fires
-  // for the top-level dispatcher (`wrapEvent=true`); choice sub-rules leave
-  // event plumbing to their parent.
-  nameLit := JSON.stringify(name)
-  exitHook := (retExpr: string): string ->
-    if wrapEvent
-      `$$ctx.exit?.(${nameLit}, $$state, ${retExpr}, $$eventData);`
-    else
-      ""
-
-  body := []
-  if wrapEvent
-    body.push emitEventEnter(options, name, retType)
-  body.push "  const $$r = ", mapped(`${fnName}$parser`, alternative?.start), `($$ctx, $$state);
-  if (!$$r) {
-    ${exitHook("undefined")}
-    return undefined;
-  }
-${valueDecl}  const $$m = `
+  body.push "  const $$m = "
   body.push iife
-  // Mutate $$r.value in place instead of allocating a fresh ParseResult,
-  // saving a heap allocation per successful rule match.  When no explicit
-  // ::Type is present, annotate $$final from `typeof $$m` so the
-  // IIFE's inferred return type flows out as the rule function's return
-  // type.  $$final's annotation does the typing work — the `as any` on the
-  // assignment from $$r is just to bypass the structural mismatch (TS still
-  // believes $$r.value has its old shape pre-mutation).
-  finalType := if types then ["MaybeResult<", retType?.type ?? "typeof $$m", ">"]
-  rValueCast := types ? " as any" : ""
   body.push ";\n"
+
   if handlerUsesSkip
     skipCast := types ? " as any" : ""
-    body.push [
-      "  const $$final"
-      if finalType then [": ", finalType] else ""
-      ` = ($$m${skipCast}) !== SKIP ? (($$r${rValueCast}).value = $$m, $$r${rValueCast}) : undefined;\n  ${exitHook("$$final")}\n  `
-      typedReturn options, retType
-      " $$final;"
-    ]
-  else
-    body.push [
-      `  ($$r${rValueCast}).value = $$m;\n  ${exitHook("$$r")}\n  return $$r`
-      if finalType then [" as unknown as ", finalType] else ""
-      ";"
-    ]
-  return { helpers, body }
+    body.push `  if (($$m${skipCast}) === $SKIP) {\n`
+    body.push "    $$ctx.pos = $$p0;\n"
+    if wrapEvent
+      body.push `    ${emitExitCall name, "$FAIL", "$$p0"}\n`
+    body.push "    return $FAIL;\n"
+    body.push "  }\n"
+
+  if wrapEvent
+    body.push `  ${emitExitCall name, "$$m"}\n`
+  retCast := if types and retType then [" as unknown as ", retType.type] else ""
+  body.push ["  return $$m", retCast, ";"]
+  // What the body uses, apart from the handler
+  bodyUses := (text: string, from = 0) ->
+    body.slice(from).some (s) -> s is not iife and textOf(s).includes text
+  // Drop unused $$p0 declaration (e.g. sequence of empty/infallible items) and silence unused $$ctx in TS mode
+  if needP0 and not wrapEvent and not handlerUsesLoc and not handlerUsesSkip and not bodyUses "$$p0", 1
+    body.shift()
+  if types and not bodyUses "$$ctx"
+    body.unshift "  void $$ctx;\n"
+  { helpers, body }
 
 /**
-A rule's function maps from its name to the end of its last line, or, when
-its alternatives have functions of their own, to the end of its name's line.
+A rule's cursor function maps from its name to the end of its last line, or,
+when its alternatives have functions of their own, to the end of its name's
+line (and of its first alternative, when that is only a rule reference).  Its
+exported function only adapts the calling convention, so it isn't mapped.
 */
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode ->
   positions := if mapSource? then rulePositions?.get name
@@ -711,33 +1115,38 @@ compileRule := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode 
 
 compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, positions: RulePositions | undefined): ASTNode[] ->
   { types } := options
+  ctxType := types ? ": CursorContext" : ""
+  legacyCtxType := types ? ": ParserContext" : ""
   stateType := types ? ": ParseState" : ""
-  ctxType := types ? ": ParserContext" : ""
 
   isTopChoice := not (typeof rule is "string") and rule[0] is "/" and !rule[2]
+  retType := ruleReturnType rule
+  cursorRetAnno := if types and retType then [": (", retType.type, ") | typeof FAIL"] else ""
+  legacyRetAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
+
+  exportWrapper := [
+    `function ${name}($$ctx${legacyCtxType}, $$state${stateType})`
+    legacyRetAnno
+    ` {\n  return $wrap($$r_${name}, $$ctx, $$state);\n}`
+  ]
 
   if not isTopChoice
-    retType := ruleReturnType(rule)
-    // Annotate the rule function's return type only when an explicit ::Type is
-    // present.  Without it, leave the function unannotated so TS infers the
-    // precise return type from the body — consumers can then read the AST
-    // shape via `ReturnType<typeof Rule>`.  An explicit ::Type still anchors
-    // the inference so recursive rules don't fall back to `unknown`.
-    retAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
     alternative := if positions then alternativeSpan positions, 0, rule
-    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true, alternative)
+    { helpers, body } := compileRuleBodyInline(options, name, rule, true, alternative)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
       mapped("function", positions?.name)
-      ` ${name}($$ctx${ctxType}, $$state${stateType})`
-      retAnno
+      ` $$r_${name}($$ctx${ctxType})`
+      cursorRetAnno
       " {\n"
       body
       "\n"
       mapped("}", alternative?.end)
+      "\n\n"
+      exportWrapper
     ]
 
-  // Top-level choice: emit helpers + per-alternative dispatcher function + top-level rule.
+  // Top-level choice: emit helpers + per-alternative sub-functions + top-level cursor rule.
   args := rule[1]
   // Alternatives on lines of their own (not `A / B` on one line) map their
   // functions to those lines.  The rule's function then maps to its name's
@@ -747,92 +1156,95 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
     args.map (arg, i) -> alternativeSpan positions!, i, arg
   ruleLine := if positions then alternativeSpan positions, 0, rule
   allHelpers: ASTNode[] := []
+  altNames: string[] := []
   subFunctions := args.flatMap (arg, i) ->
-    helperName := `${name}$${i}`
     alternative := alternatives?[i]
-    header := [mapped("function", alternative?.line), ` ${helperName}($$ctx${ctxType}, $$state${stateType}) {`]
+    // A rule reference is called directly, with no function of its own
     if typeof arg is "string"
-      return anchorTo options, alternative?.line, [
-        header
-        " return "
-        mapped(arg, alternative?.start)
-        "($$ctx, $$state); "
-        mapped("}", alternative?.end)
-        "\n\n"
-      ]
-    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false, alternative)
+      altNames.push `$$r_${arg}`
+      return []
+    subName := `$$r_${name}$${i}`
+    altNames.push subName
+    { helpers, body } := compileRuleBodyInline(options, name, arg, false, alternative)
     allHelpers.push anchorTo options, alternative?.line, helpers.flatMap((h) -> [h, "\n\n"])
-    anchorTo options, alternative?.line, [
-      header
-      "\n"
+    [anchorTo options, alternative?.line, [
+      mapped("function", alternative?.line)
+      ` ${subName}($$ctx${ctxType}) {\n`
       body
       "\n"
       mapped("}", alternative?.end)
       "\n\n"
-    ]
+    ]]
 
-  retType := ruleReturnType(rule)
-  // Same as the non-choice branch: only emit a return annotation when an
-  // explicit ::Type is known (or every alternative is annotated, per
-  // ruleReturnType).  Otherwise let TS infer the union from the body.
-  retAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
-
-  // Declare $$final at a union type so the `||` chain normalizes to
-  // `MaybeResult<X | Y>` instead of `ParseResult<X> | MaybeResult<Y>`.
-  // With an explicit ::Type, use it directly.  Without one, build
-  // `MaybeResult<Unwrap<ReturnType<typeof X$0>> | ...>` from each
-  // alternative — Unwrap strips the ParseResult wrapper so the union is on
-  // the inner value types, which lets TS keep `Parser<T>` inference clean
-  // when the rule is used inside `$S(...)` etc.
+  // `(typeof FAIL)` is parenthesized: before 0.11.15, Civet dropped the
+  // initializer after a type that ends in `typeof X`
   finalWideDecl := if types
     if retType
-      retAnno
+      [": (", retType.type, ") | (typeof FAIL)"]
     else
-      altUnion := args.map((_, i) -> `Unwrap<ReturnType<typeof ${name}$${i}>>`).join(" | ")
-      `: MaybeResult<${altUnion}>`
+      altUnion := altNames.map((fn) -> `Exclude<ReturnType<typeof ${fn}>, typeof FAIL>`).join(" | ")
+      `: ${altUnion} | (typeof FAIL)`
   else ""
-  tryBlock := [
-    "  const "
-    // TypeScript reports the alternatives' results not matching the rule's
-    // type here: at its annotation, or at the rule when each alternative has
-    // its own
-    mapped "$$final", if types and retType then retType.pos ?? positions?.name
-    finalWideDecl
-    " = "
-    args.map (_, i) -> [
-      i ? "\n    || " : ""
-      mapped(`${name}$${i}`, (alternatives?[i] ?? ruleLine)?.start)
-      "($$ctx, $$state)"
+
+  // TypeScript reports the alternatives' results not matching the rule's
+  // type at `$$final`: at its annotation, or at the rule when each
+  // alternative has its own.  Without types, a rule reference alternative
+  // after the first maps the statement that calls it to its lines, so a
+  // coverage report marks them when it never runs.
+  finalPos := if types and retType then retType.pos ?? positions?.name
+  tryLines: ASTNode[] := altNames.map (fn, i) ->
+    alternative := alternatives?[i] ?? ruleLine
+    call := [mapped(fn, alternative?.start), "($$ctx)"]
+    if i is 0
+      return ["  let ", mapped("$$final", finalPos), finalWideDecl, " = ", call, ";\n"]
+    coverage := not types and typeof args[i] is "string" and alternatives?
+    [
+      "  if (", failTest(types, "$$final"), ") "
+      mapped("$$final", coverage ? alternatives![i].line : finalPos)
+      " = ", call
+      mapped(";", if coverage then alternatives![i].end)
+      "\n"
     ]
-    `;\n`
-  ]
+
+  // The rule's function also covers its first alternative when that has no
+  // function of its own
+  ruleEnd := if perAlternative
+    if typeof args[0] is "string" then alternatives![0].end else lineEnd positions!.name
+  else
+    ruleLine?.end
 
   [
     ...allHelpers
     ...subFunctions
     mapped("function", positions?.name)
-    ` ${name}($$ctx${ctxType}, $$state${stateType})`
-    retAnno
+    ` $$r_${name}($$ctx${ctxType})`
+    cursorRetAnno
     " {\n"
+    "  const $$p0 = $$ctx.pos;\n"
     emitEventEnter(options, name, retType)
-    ...tryBlock
+    ...tryLines
     emitEventExit(options, name)
-    `\n  return $$final;`
-    "\n"
-    mapped("}", if perAlternative then lineEnd positions!.name else ruleLine?.end)
+    "  return $$final;\n"
+    mapped("}", ruleEnd)
+    "\n\n"
+    exportWrapper
   ]
 
 /**
-Braced block with one rule name per line, indented, comma separated.
-`closeOnOwnLine` puts the closing brace on its own line.
+Braced block with one rule name per line, indented, comma separated, and the
+closing brace on its own line.
 */
-ruleNameBlock := (ruleNames: string[], closeOnOwnLine = false) ->
+ruleNameBlock := (ruleNames: string[]) ->
   names := ruleNames.map((name) -> `  ${name}`).join(",\n")
-  `{\n${names}${closeOnOwnLine ? "\n" : ""}}`
+  `{\n${names}\n}`
+
+grammarMapBlock := (ruleNames: string[]) ->
+  entries := ruleNames.map((name) -> `  ${name}: $$r_${name}`).join(",\n")
+  `{\n${entries}\n}`
 
 compileExports := (ruleNames: string[], module: boolean) ->
   if module
-    `export ${ruleNameBlock ruleNames, true}`
+    `export ${ruleNameBlock ruleNames}`
   else
     ruleNames.map((name) -> `exports.${name} = ${name};`).join("\n")
 
@@ -926,9 +1338,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): string | { code: string, sourceMap: SourceMap }
   options := { ...defaultOptions, ...maybeOptions }
 
-  strDefs.length = 0
   reDefs.length = 0
   dynamicReDefs.length = 0
+  subFnCounter = 0
 
   { language, module } := options
   // transpileEmbedded output skips the downstream Civet pass over Hera's
@@ -937,7 +1349,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   types := Boolean(options.types) or language is 'typescript' or (language is 'civet' and not options.transpileEmbedded)
   options.types = types
   /* c8 ignore next */
-  libPath := options.libPath or defaultOptions.libPath
+  libPath := options.libPath or defaultOptions.libPath!
   ruleNames := Object.keys(rules)
 
   // User code blocks (the ``` blocks in a .hera file) are appended verbatim
@@ -973,52 +1385,46 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   else
     dynamicReDefs
 
-  strDefSource := strDefs.map (str, i) ->
-    `const $L${i} = $L("${str}");\n`
-
   reDefSource := reDefs.map (r, i) ->
-    `const $R${i} = $R${reTupleType(types, r)}(/${r or "(?:)"}/suy);\n`
+    `const $R${i} = /${r or "(?:)"}/suy;\n`
 
   dynamicReDefSource := dynamicDefs.map (r, i) =>
-    ctxType := types ? ": ParserContext" : ""
-    stateType := types ? ": ParseState" : ""
-    nonNullAssert := types ? "!" : ""
-    // Every part const: the regex is built on the first match and kept.  The
-    // rules hold this function, so it stays the same function and keeps the
-    // built parser.
     if r.every((part) => part <? "string" or part.constant)
-      constCacheType := types ? " as Parser<RegExpMatchArray> & { source?: string, parser?: Parser<RegExpMatchArray> }" : ""
+      reDecl := types ? ": RegExp | undefined" : ""
+      retAnno := types ? ": RegExp" : ""
       return [
-        `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
-        `  if (!$RD${i}.parser) {\n`
+        `let $RD${i}_re${reDecl};\n`
+        `function $RD${i}()${retAnno} {\n`
+        `  if (!$RD${i}_re) {\n`
         `    const $$source = ${heregexToExpression(r)};\n`
-        `    $RD${i}.source = $$source;\n`
-        `    $RD${i}.parser = $R(new RegExp($$source, 'suy'));\n`
-        "  }\n"
-        `  return $RD${i}.parser${nonNullAssert}($$ctx, $$state);\n`
-        `})${constCacheType};\n`
+        `    $RD${i}_re = new RegExp($$source, 'suy');\n`
+        `  }\n`
+        `  return $RD${i}_re;\n`
+        `}\n`
       ].join("")
 
     constantParts := r.flatMap((part): RegExpExpression[] =>
       if part <? "string" or not part.constant or readsBinding(part) then [] else [part]
     )
-    cacheProps := types ? [
-      "source?: string"
-      "parser?: Parser<RegExpMatchArray>"
-      ...constantParts.map((_, index) => `const${index}?: string`)
-    ].join(", ") : ""
-    cacheType := types ? ` as Parser<RegExpMatchArray> & { ${cacheProps} }` : ""
-    constInits := constantParts.map((part, index) => `  $RD${i}.const${index} ??= String(${part.expression});\n`).join("")
+    strDecl := types ? ": string | undefined" : ""
+    reDecl := types ? ": RegExp | undefined" : ""
+    retAnno := types ? ": RegExp" : ""
+    nonNullAssert := types ? "!" : ""
+    constDecls := constantParts.map((_, index) => `let $RD${i}_c${index}${strDecl};\n`).join("")
+    constInits := constantParts.map((part, index) => `  if ($RD${i}_c${index} === undefined) $RD${i}_c${index} = String(${part.expression});\n`).join("")
     [
-      `const $RD${i} = (($$ctx${ctxType}, $$state${stateType}) => {\n`
+      `let $RD${i}_src${strDecl};\n`
+      `let $RD${i}_re${reDecl};\n`
+      constDecls
+      `function $RD${i}()${retAnno} {\n`
       constInits
-      `  const $$source = ${heregexToExpression(r, `$RD${i}.const`)};\n`
-      `  if ($$source !== $RD${i}.source) {\n`
-      `    $RD${i}.source = $$source;\n`
-      `    $RD${i}.parser = $R(new RegExp($$source, 'suy'));\n`
-      "  }\n"
-      `  return $RD${i}.parser${nonNullAssert}($$ctx, $$state);\n`
-      `})${cacheType};\n`
+      `  const $$source = ${heregexToExpression(r, `$RD${i}_c`)};\n`
+      `  if ($$source !== $RD${i}_src) {\n`
+      `    $RD${i}_src = $$source;\n`
+      `    $RD${i}_re = new RegExp($$source, 'suy');\n`
+      `  }\n`
+      `  return $RD${i}_re${nonNullAssert};\n`
+      `}\n`
     ].join("")
 
   // The code blocks and the handler and regex functions, transpiled as one
@@ -1041,24 +1447,19 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
     genOpts.appendMapped = sm.appendMapped.bind(sm)
 
-  head := if types
-    if language is 'civet' and !module
-      cjsHead
-    else
-      tsHead
-  else
-    if module then mjsHead else cjsHead
-  .replace("\"./machine.js\"", JSON.stringify(libPath))
+  head := buildHead types, language, !!module, libPath
   tail := parserTail types
   exp := (module ? mjsExport : cjsExport)
 
   code := generate [
     head
-    `\n\nconst grammar = ${ruleNameBlock ruleNames};\n\n`
+    `\n\nconst grammar = ${grammarMapBlock ruleNames};\n\n`
     `\n\nconst grammarDefaultRule = ${JSON.stringify(ruleNames[0])};\n\n`
-    `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n\n`
-    strDefSource
-    "\n\n"
+    `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
+    `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
+    `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
+    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+    "\n"
     reDefSource
     "\n\n"
     dynamicReDefSource
@@ -1087,11 +1488,11 @@ isSimple := /^[^.*+?{}()\[\]^\\]*$/
 isSimpleCharacterClass := /^\[[^-^\\]*\]$/
 
 /**
-Generate a more specific TypeScript type for Regular expressions that consist of
-limited productions. Returns an empty string if `types` is `false`.
+Generate a union of string literal types for simple RegExps (e.g. `"a" | "b"`).
+Returns undefined if `types` is false or the regex is not a simple finite set.
 */
-reTupleType := (types: boolean?, reSource: string) ->
-  return "" unless types
+reTupleUnion := (types: boolean?, reSource: string): string | undefined ->
+  return undefined unless types
 
   constTypes :=
     if reSource.match(isSimple)
@@ -1099,12 +1500,11 @@ reTupleType := (types: boolean?, reSource: string) ->
     else if reSource.match(isSimpleCharacterClass)
       reSource.substring(1, reSource# - 1).split("")
     else
-      return ""
+      return undefined
 
   constTypes
     .map JSON.stringify(.)
     .join("|")
-    |> `<[${&}]>`
 
 type ASTNode =
   | string
@@ -1156,40 +1556,57 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
   /* c8 ignore next */
   throw new Error "unknown node type"
 
-cjsHead := """
-  const {
-    $C,
-    $E,
-    $EXPECT,
-    $L,
-    $N,
-    $P,
-    $Q,
-    $R,
-    $R$0,
-    $S,
-    $TEXT,
-    $Y,
-    ParseError,
-    Parser,
-    SKIP,
-    Validator
-  } = require("./machine.js")
+runtimeImports := [
+  "$adaptEvents"
+  "$isFail"
+  "$wrap"
+  "FAIL"
+  "MISS"
+  "ParseError"
+  "SKIP"
+  "Validator"
+]
 
-"""
+typeImports := [
+  "CursorContext"
+  "CursorParser"
+  "FailSymbol"
+  "Loc"
+  "MaybeResult"
+  "MissSymbol"
+  "ParseResult"
+  "Parser"
+  "ParserContext"
+  "ParserOptions"
+  "ParseState"
+  "SkipSymbol"
+  "Unwrap"
+]
 
+buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string): string ->
+  pathLit := JSON.stringify libPath
+  valueList := runtimeImports.map((s) -> `  ${s}`).join(",\n")
+  if types and not (language is "civet" and not module)
+    typeList := typeImports.map((s) -> `  type ${s}`).join(",\n")
+    // Reference all imported types at value-position so TS doesn't flag them as unused.
+    typeUnion := [
+      "CursorContext", "CursorParser<any>", "Loc", "MaybeResult<any>"
+      "ParseResult<any>", "Parser<any>", "ParserContext", "ParserOptions<any>"
+      "ParseState", "Unwrap<MaybeResult<any>>", "undefined"
+    ].join(" | ")
+    return `import {\n${valueList},\n${typeList},\n} from ${pathLit}\n\nvoid {\n${valueList},\n}\nconst _types: ${typeUnion} = undefined; void _types;\n\n`
+  if not types and module
+    return `import {\n${valueList},\n} from ${pathLit}\n\n`
+  `const {\n${valueList}\n} = require(${pathLit})\n\n`
 
-// The generated `parser` object.  A fresh Validator and context are created
-// on every parse call so `events` from one call never leak into the next.
-// Type annotations are added when `types` is set; the value structure is
-// otherwise identical.
 parserTail := (types: boolean): string ->
   t := (annotation: string) -> types ? annotation : ""
-  cast := t " as Parser<ParserResult<Grammar[K]>>"
+  cast := t " as CursorParser<ParserResult<Grammar[K]>>"
+  failCond := (v: string) -> types ? `$isFail(${v})` : `${v} === $FAIL`
   typeDefs: string[] := types ? [
     "type Grammar = typeof grammar;"
     "type GrammarDefaultRule = typeof grammarDefaultRule;"
-    "type ParserResult<P> = P extends Parser<infer T> ? T : never;"
+    "type ParserResult<P> = P extends (ctx: CursorContext) => infer R ? Exclude<R, typeof FAIL> : never;"
     ""
   ] : []
   [
@@ -1197,7 +1614,7 @@ parserTail := (types: boolean): string ->
     "const parser = {"
     `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
-    `    let ctx${t ": ParserContext"} = { expectation: "", fail }`
+    `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail }`
     ""
     '    if (typeof input !== "string") throw new Error("Input must be a string")'
     ""
@@ -1212,12 +1629,14 @@ parserTail := (types: boolean): string ->
     '    const filename = options.filename || "<anonymous>";'
     ""
     "    reset()"
-    "    Object.assign(ctx, { ...options.events });"
+    "    if (options.events) $adaptEvents(ctx, options.events);"
     ""
-    "    return validate(input, parser(ctx, {"
-    "      input,"
-    "      pos: 0,"
-    "    }), {"
+    "    const val = parser(ctx)"
+    "    const endPos = ctx.pos"
+    `    if (${failCond "val"}) {`
+    `      return validate(input, undefined, { filename: filename })${t " as never"}`
+    "    }"
+    "    return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
     "      filename: filename"
     "    })"
     "  }"
@@ -1229,81 +1648,6 @@ cjsExport := """
   const parse = exports.parse = parser.parse
   void parse /* make TS ok if we don't use this variable */
 """
-
-mjsHead := """
-  import {
-    $C,
-    $E,
-    $EXPECT,
-    $L,
-    $N,
-    $P,
-    $Q,
-    $R,
-    $R$0,
-    $S,
-    $TEXT,
-    $Y,
-    ParseError,
-    SKIP,
-    Validator,
-  } from "./machine.js"
-
-"""
-
-// Same as mjsHead plus the runtime types.  The `void {...}` block and the
-// `_types` reference keep TS from flagging any of the imports as unused in
-// generated parsers that don't happen to use them.
-tsHead := """
-  import {
-    $C,
-    $E,
-    $EXPECT,
-    $L,
-    $N,
-    $P,
-    $Q,
-    $R,
-    $R$0,
-    $S,
-    $TEXT,
-    $Y,
-    ParseError,
-    SKIP,
-    Validator,
-    type Loc,
-    type MaybeResult,
-    type ParseResult,
-    type Parser,
-    type ParserContext,
-    type ParserOptions,
-    type ParseState,
-    type Unwrap,
-  } from "./machine.js"
-
-  void {
-    $C,
-    $E,
-    $EXPECT,
-    $L,
-    $N,
-    $P,
-    $Q,
-    $R,
-    $R$0,
-    $S,
-    $TEXT,
-    $Y,
-    ParseError,
-    SKIP,
-    Validator,
-  }
-  // Reference all imported types at value-position so TS doesn't flag them as unused.
-  const _types: Loc | MaybeResult<any> | ParseResult<any> | Parser<any> | ParserContext | ParserOptions<any> | ParseState | Unwrap<MaybeResult<any>> | undefined = undefined; void _types;
-
-"""
-
-
 
 mjsExport := """
   export default parser

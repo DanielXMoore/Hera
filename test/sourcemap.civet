@@ -140,43 +140,45 @@ describe "sourcemap", ->
         [original(line, lines[line].indexOf("function")), original(close, column), original(close, column + 2)]
       { at, fn, iife }
 
-    // Each function maps from the start of its alternative's line (or the
-    // rule's name) to the end of the alternative's last line (or the rule's),
-    // and each call to the alternative it's made for
+    // Each cursor function maps from the start of its alternative's line (or
+    // the rule's name) to the end of the alternative's last line (or the
+    // rule's), and each call to the alternative it's made for
     rules := (m: ReturnType<typeof compileMapped>) ->
-      assert.deepEqual m.fn("Start"), [[0, 0], [2, 19]]
-      assert.deepEqual m.at("Start$parser($$ctx"), [1, 2]
-      // The rest of a header is unmapped
-      assert.equal m.at("function Start(", 9), undefined
+      assert.deepEqual m.fn("$$r_Start"), [[0, 0], [2, 19]]
+      assert.deepEqual m.at("$$r_Greeting($$ctx"), [1, 2]
+      assert.deepEqual m.at("$$r_Name($$ctx"), [1, 2]
+      // The rest of a header is unmapped, and so is a rule's exported
+      // function, which only adapts the calling convention
+      assert.equal m.at("function $$r_Start(", 9), undefined
+      assert.deepEqual m.fn("Start"), [undefined, undefined]
 
-      // Alternatives on lines of their own have functions of their own
-      assert.deepEqual m.fn("Greeting"), [[4, 0], [4, 8]]
-      assert.deepEqual m.at("= Greeting$0(", 2), [5, 2]
-      assert.deepEqual m.at("|| Greeting$1(", 3), [6, 2]
-      assert.deepEqual m.at("|| Greeting$2(", 3), [7, 2]
-      assert.deepEqual m.fn("Greeting$0"), [[5, 0], [5, 17]]
-      assert.deepEqual m.at("Greeting$0$parser($$ctx"), [5, 2]
-      assert.deepEqual m.fn("Greeting$1"), [[6, 0], [6, 10]]
-      assert.deepEqual m.at("return Farewell(", 7), [6, 2]
-      assert.deepEqual m.fn("Greeting$2"), [[7, 0], [7, 7]]
-      assert.deepEqual m.at("Greeting$2$parser($$ctx"), [7, 2]
+      // Alternatives on lines of their own have functions of their own...
+      assert.deepEqual m.fn("$$r_Greeting"), [[4, 0], [4, 8]]
+      assert.deepEqual m.at("= $$r_Greeting$0(", 2), [5, 2]
+      assert.deepEqual m.at("= $$r_Greeting$2(", 2), [7, 2]
+      assert.deepEqual m.fn("$$r_Greeting$0"), [[5, 0], [5, 17]]
+      assert.deepEqual m.fn("$$r_Greeting$2"), [[7, 0], [7, 7]]
+      // ...except a rule reference, which is called directly: the statement
+      // that calls it maps to its line
+      assert.deepEqual m.at("$$final = $$r_Farewell("), [6, 0]
+      assert.deepEqual m.at("= $$r_Farewell(", 2), [6, 2]
+      assert.deepEqual m.at("$$r_Farewell($$ctx);", 19), [6, 10]
 
       // Alternatives on one line share it
-      assert.deepEqual m.fn("Farewell"), [[9, 0], [10, 16]]
-      assert.deepEqual m.at("= Farewell$0(", 2), [10, 2]
-      assert.deepEqual m.at("|| Farewell$1(", 3), [10, 2]
-      assert.deepEqual m.fn("Farewell$0"), [undefined, undefined]
+      assert.deepEqual m.fn("$$r_Farewell"), [[9, 0], [10, 16]]
+      assert.deepEqual m.at("= $$r_Farewell$0(", 2), [10, 2]
+      assert.deepEqual m.at("= $$r_Farewell$1(", 2), [10, 2]
+      assert.deepEqual m.fn("$$r_Farewell$0"), [undefined, undefined]
 
-      assert.deepEqual m.fn("Name"), [[12, 0], [13, 14]]
-      assert.deepEqual m.at("Name$parser($$ctx"), [13, 2]
-      assert.deepEqual m.fn("Alias"), [[15, 0], [16, 6]]
-      assert.deepEqual m.at("$$final = Name(", 10), [16, 2]
+      assert.deepEqual m.fn("$$r_Name"), [[12, 0], [13, 14]]
+      assert.deepEqual m.fn("$$r_Alias"), [[15, 0], [16, 6]]
+      assert.deepEqual m.at("$$final = $$r_Name(", 10), [16, 2]
 
     it "should map rules' and handlers' generated code to the grammar", ->
       m := compileMapped()
       rules m
-      assert.deepEqual m.iife("Start"), [[1, 0], [2, 19], [1, 2]]
-      assert.deepEqual m.iife("Greeting$0"), [[5, 0], [5, 17], [5, 2]]
+      assert.deepEqual m.iife("$$r_Start"), [[1, 0], [2, 19], [1, 2]]
+      assert.deepEqual m.iife("$$r_Greeting$0"), [[5, 0], [5, 17], [5, 2]]
 
     it "should map handler functions with transpileEmbedded", ->
       m := compileMapped transpileEmbedded: (src, upstreamSourceMap) ->
@@ -242,20 +244,21 @@ describe "sourcemap", ->
         { line: l, column } := originalPositionFor map, { line: line + 1, column: lines[line].indexOf(text) + offset }
         [l! - 1, column]
 
-      // An inline handler's `return` maps to the handler, and its type to the
-      // annotation
-      assert.deepEqual at("Num", "return 1"), [1, 9]
-      assert.deepEqual at("Num", "): number {", 3), [0, 6]
+      // An inline handler's `return` maps to the handler, and its type, in
+      // each copy, to the annotation
+      assert.deepEqual at("$$r_Num", "return 1"), [1, 9]
+      assert.deepEqual at("$$r_Num", "): number {", 3), [0, 6]
+      assert.deepEqual at("$$r_Num", "(number) | typeof FAIL {", 1), [0, 6]
       assert.deepEqual at("Num", "MaybeResult<number> {", 12), [0, 6]
       // A rule's result is checked against its annotation
-      assert.deepEqual at("Str", "return $$final;"), [3, 6]
+      assert.deepEqual at("$$r_Str", "return $$r;"), [3, 6]
       // ...or, in a choice, against the rule's annotation, or the rule when
       // each alternative has its own
-      assert.deepEqual at("Wide", "$$final:"), [10, 7]
-      assert.deepEqual at("Alts", "$$final:"), [6, 0]
-      assert.deepEqual at("Alts", "MaybeResult<number> =", 12), [7, 8]
+      assert.deepEqual at("$$r_Wide", "$$final:"), [10, 7]
+      assert.deepEqual at("$$r_Alts", "$$final:"), [6, 0]
+      assert.deepEqual at("$$r_Alts", "(number) | (typeof FAIL) =", 1), [7, 8]
       // A type after a space, whether copied as written or trimmed
-      assert.deepEqual at("Spaced", "):  number", 4), [19, 9]
+      assert.deepEqual at("$$r_Spaced", "):  number", 4), [19, 9]
       assert.deepEqual at("Spaced", "MaybeResult<number> {", 12), [19, 9]
       // Empty annotations don't type the rule
       assert.doesNotMatch lines.find(.startsWith "function Empty(")!, /MaybeResult/
@@ -271,10 +274,19 @@ describe "sourcemap", ->
       position := (line: number, column: number) ->
         { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
         [l! - 1, c]
-      header := lines.findIndex .startsWith "function Rule$0("
+      header := lines.findIndex .startsWith "function $$r_Rule$0("
       close := lines.findIndex (l, i) -> i > header and l is "}"
       assert.deepEqual position(header, 0), [1, 0]
       assert.deepEqual position(close, 0), [3, 5]
+
+    it "should map a heregex's call to its alternative", ->
+      source := 'Rule\n  "a"\n  /// ${"b"} ///\n'
+      { code, sourceMap } := compile parse(source), { source, filename: "d.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "d.js"
+      line := code.split("\n").findIndex .includes "= $RD0()"
+      column := code.split("\n")[line].indexOf "$RD0()"
+      { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
+      assert.deepEqual [l! - 1, c], [2, 2]
 
     it "should map only handlers in rules without positions", ->
       source := 'Rule\n  "a" -> "b"\n'
@@ -282,7 +294,7 @@ describe "sourcemap", ->
       { code, sourceMap } := compile { Rule: rules.Rule }, { source, filename: "r.hera", sourceMap: true }
       map := new TraceMap sourceMap.json "r.js"
       lines := code.split "\n"
-      line := lines.findIndex .startsWith "function Rule("
+      line := lines.findIndex .startsWith "function $$r_Rule("
       assert.equal originalPositionFor(map, { line: line + 1, column: 0 }).line, null
       handler := lines.findIndex .includes '"b"'
       assert.equal originalPositionFor(map, { line: handler + 1, column: lines[handler].indexOf '"b"' }).line, 2
