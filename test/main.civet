@@ -1638,13 +1638,16 @@ describe "Hera", ->
       result := compile(parse(grammar), language: 'civet')
       assert.match result, /: ParseState/
 
-    it "should use Civet if expression for skip handlers", ->
+    it "should write a ternary for skip handlers, which Civet compiles too", ->
       grammar := """
         Rule
           "a" -> $skip
+          "a" -> "second"
       """
       result := compile(parse(grammar), language: 'civet')
-      assert.match result, / = if \(\$\$m as any\) !== SKIP then /m
+      assert.match result, / = \(\$\$m as any\) !== SKIP \? /m
+      js := civet.compile(result, { sync: true, js: true }) as string
+      assert.equal (execMod(js) as any).parse("a"), "second"
 
     it "should indent inline civet handlers by two spaces", ->
       grammar := """

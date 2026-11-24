@@ -375,13 +375,6 @@ emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: 
   id := embeddedHandlers.push({ handler, parameters, paramTypes }) - 1
   `${embeddedPrefix}h_${id}__(${callArgs.join(", ")})`
 
-// Civet output is compiled by Civet again, except with transpileEmbedded.
-conditionalExpression := (options: CompilerOptions, condition: string, consequent: string, alternate: string) =>
-  if options.language is 'civet' and not options.transpileEmbedded
-    `if ${condition} then ${consequent} else ${alternate}`
-  else
-    `${condition} ? ${consequent} : ${alternate}`
-
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
 //   wrapEvent=false — plain body (a choice sub-rule is called from the top-level wrapper)
@@ -579,11 +572,7 @@ ${valueDecl}  const $$m = `
   if handlerUsesSkip
     skipCast := types ? " as any" : ""
     body.push ```
-    \  const $$final${finalType && `: ${finalType}`} = ${conditionalExpression options,
-        `($$m${skipCast}) !== SKIP`
-        `(($$r${rValueCast}).value = $$m, $$r${rValueCast})`
-        "undefined"
-      };
+    \  const $$final${finalType && `: ${finalType}`} = ($$m${skipCast}) !== SKIP ? (($$r${rValueCast}).value = $$m, $$r${rValueCast}) : undefined;
       ${exitHook("$$final")}
       return $$final;
     ```
