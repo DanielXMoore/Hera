@@ -66,11 +66,13 @@ parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
 interface GenerateOptions
   transpile: (src: string) => string
   tokenize: boolean
+  memo: boolean
   trace: boolean
 
 defaultGenerateOptions: GenerateOptions :=
   transpile: (src) => src
   tokenize: false
+  memo: false
   trace: false
 
 // Tokenize-mode `generate` returns a parser that yields a Token tree, while
@@ -82,11 +84,11 @@ type GeneratedTokenParser<T extends HeraGrammar> = { parse: (input: string, opti
 function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> & { tokenize: true }): GeneratedTokenParser<T>
 function generate<T extends HeraGrammar>(heraSrc: string, options?: Partial<GenerateOptions>): GeneratedParser<T>
 function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {})
-  { transpile, tokenize, trace } := { ...defaultGenerateOptions, ...options }
+  { transpile, tokenize, memo, trace } := { ...defaultGenerateOptions, ...options }
 
   heraSrc
     |> parse
-    |> compile ., { tokenize, trace }
+    |> compile ., { tokenize, memo, trace }
     |> transpile
     |> execMod(.) as GeneratedParser<T>
 

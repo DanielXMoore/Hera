@@ -1,7 +1,22 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
-import { isCharClassRe } from ./machine.civet
+import { isCharClassRe, MEMO_SLOTS } from ./machine.civet
+
+export type MemoTiers = {
+  /** Rules that do not depend on `memo.sk` (use stateless `$memoGet0`/`$memoSet0`). */
+  stateless?: Iterable<string>
+  /** Rules that depend only on `memo.sk & mask` (per-rule bitmask). */
+  masks?: Record<string, number>
+  /**
+   * Whether memoized rules not in `stateless` or `masks` depend on the full
+   * `memo.sk`.  Defaults to true, which is always correct.  Set false only
+   * when every unlisted rule is known not to depend on parser state (a
+   * stateless rule ignores `memo.sk`, so state-dependent results would be
+   * served from cache).
+   */
+  defaultStateful?: boolean
+}
 
 export type CompilerOptions = {
   filename?: string
@@ -34,6 +49,27 @@ export type CompilerOptions = {
     source: string
     upstreamSourceMap?: SourceMap
   ) => EmbeddedTranspileResult
+  /**
+   * Compile in a packrat memo cache: each rule's result at each position is
+   * stored in a `MemoCache` and reused when the rule is tried there again.
+   * Pays off for grammars that backtrack heavily; otherwise the bookkeeping
+   * costs more than it saves.  Without it the generated parser contains no
+   * memo code.
+   */
+  memo?: boolean
+  /**
+   * Rule names to leave out of the memo (with `memo`), e.g. cheap leaf rules
+   * whose cache bookkeeping costs more than re-running them, and rules whose
+   * handlers change parser state.
+   */
+  noMemo?: Iterable<string>
+  /**
+   * Optional per-rule state-sensitivity tiers for the memo (with `memo`).
+   * Stateless rules skip `memo.sk` hashing/comparison; masked rules hash
+   * `memo.sk & mask`; stateful rules hash full `memo.sk`.  Without
+   * `memoTiers`, every memoized rule is stateful.
+   */
+  memoTiers?: MemoTiers
   /**
    * Compile in calls to the `trace` parse option's hooks around every rule,
    * for debugging and profiling (see `Tracer`).  Without it the generated
@@ -81,6 +117,30 @@ ccDefs: string[] := []
 let disabled = new Set<Optimization>
 /** Whether rules call the trace hooks (the `trace` option) */
 let traceOn = false
+
+// The memo (the `memo` option): each memoized rule's first slot in the
+// MemoCache, and how its cache key depends on `memo.sk`
+memoBase := new Map<string, number>
+let memoStateless: Set<string> | undefined
+let memoMasks: Record<string, number> | undefined
+let memoDefaultStateful = true
+
+type MemoSpec =
+  | { base: number, mode: "stateless" }
+  | { base: number, mode: "full" }
+  | { base: number, mode: "masked", mask: number }
+
+/** How rule `name` is memoized, or undefined if it isn't */
+getMemoSpec := (name: string): MemoSpec | undefined ->
+  base := memoBase.get name
+  return unless base?
+  if memoStateless?.has name
+    return { base, mode: "stateless" }
+  if memoMasks and Object.prototype.hasOwnProperty.call(memoMasks, name)
+    return { base, mode: "masked", mask: memoMasks[name] }
+  if memoDefaultStateful
+    return { base, mode: "full" }
+  { base, mode: "stateless" }
 dynamicReDefs: RegExpPart[][] := []
 /** Counter for the names of helper functions (`$$h_<n>`) */
 let subFnCounter = 0
@@ -319,15 +379,60 @@ typedReturn := (options: CompilerOptions, retType: RuleType | undefined): ASTNod
   mapped "return", if options.types then retType?.pos
 
 // Emit the start of a rule function's instrumentation: the trace enter hook
-// (with `trace`).  Empty without it.
-emitEventEnter := (_options: CompilerOptions, name: string, _retType: RuleType | undefined): ASTNode ->
-  return "" unless traceOn
-  `  const $$t = $$ctx.trace;\n  if ($$t) $$t.enter(${JSON.stringify name}, $$p0);\n`
+// (with `trace`) and the memo lookup (for memoized rules).  Empty without
+// either.
+emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | undefined): ASTNode ->
+  nameLit := JSON.stringify name
+  traceEnter := if traceOn
+    `  const $$t = $$ctx.trace;\n  if ($$t) $$t.enter(${nameLit}, $$p0);\n`
+  else ""
+  spec := getMemoSpec name
+  return traceEnter unless spec
+  retAnno := if options.types
+    if retType then [" as (", retType.type, ") | typeof FAIL"] else " as never"
+  else ""
+  isStateless := spec.mode is "stateless"
+  // `$$sk` is the cache key's state; `$$sk0` (or `$$sk` when the key is the
+  // full state) is `memo.sk` on entry, compared on exit by `emitExitCall`.
+  skDecl := if isStateless
+    "  let $$sk0 = 0;\n"
+  else if spec.mode is "masked"
+    "  let $$sk = 0, $$sk0 = 0;\n"
+  else
+    "  let $$sk = 0;\n"
+  skSet := if isStateless
+    "    $$sk0 = $$mc.sk;\n"
+  else if spec.mode is "masked"
+    `    $$sk0 = $$mc.sk;\n    $$sk = ($$sk0 & ${spec.mask});\n`
+  else
+    "    $$sk = $$mc.sk;\n"
+  getCall := if isStateless
+    `$mGet0($$mc, ${spec.base}, $$p0, $$ctx)`
+  else
+    `$mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx)`
+  traceHit := if traceOn
+    `      if ($$t) $$t.exit(${nameLit}, $$p0, $$ctx.pos, $$c, true);\n`
+  else ""
+  [
+    `${traceEnter}  const $$mc = $$ctx.memo;\n${skDecl}  let $$s = 0;\n  if ($$mc) {\n${skSet}    const $$c = ${getCall};\n    if ($$c !== $MISS) {\n${traceHit}      return $$c`
+    retAnno
+    ";\n    }\n    $$s = $$mc.s;\n  }\n"
+  ]
 
 // Emit the end of a rule function's instrumentation for a result `valExpr`
-// ending at `endPosExpr`: the trace exit hook.  Empty without it.
+// ending at `endPosExpr`: the memo store and the trace exit hook.  Empty
+// without either.
 emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
   calls: string[] := []
+  if spec := getMemoSpec name
+    setCall := if spec.mode is "stateless"
+      `$mSet0($$mc, $$s, $$p0, ${endPosExpr}, ${valExpr})`
+    else
+      `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
+    // A cache hit restores the position and value but not `memo.sk`, so a run
+    // that changed the state is not cached.
+    entrySk := if spec.mode is "full" then "$$sk" else "$$sk0"
+    calls.push `if ($$mc && $$mc.sk === ${entrySk}) ${setCall};`
   if traceOn
     calls.push `if ($$t) $$t.exit(${JSON.stringify name}, $$p0, ${endPosExpr}, ${valExpr}, false);`
   calls.join `\n${indent}`
@@ -1410,6 +1515,17 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   subFnCounter = 0
   disabled = new Set options.disableOptimizations ?? []
   traceOn = !!options.trace
+  memoBase.clear()
+  memoCount .= 0
+  if options.memo
+    noMemo := new Set options.noMemo ?? []
+    for name of Object.keys rules
+      unless noMemo.has name
+        memoBase.set name, memoCount * MEMO_SLOTS
+        memoCount++
+  memoStateless = if options.memoTiers?.stateless then new Set options.memoTiers.stateless
+  memoMasks = options.memoTiers?.masks
+  memoDefaultStateful = options.memoTiers?.defaultStateful ?? true
 
   { language, module } := options
   // transpileEmbedded output skips the downstream Civet pass over Hera's
@@ -1518,8 +1634,9 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
     genOpts.appendMapped = sm.appendMapped.bind(sm)
 
-  head := buildHead types, language, !!module, libPath
-  tail := parserTail types, traceOn
+  memo := memoBase.size > 0
+  head := buildHead types, language, !!module, libPath, memo
+  tail := parserTail types, traceOn, memo
   exp := (module ? mjsExport : cjsExport)
 
   code := generate [
@@ -1529,6 +1646,17 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
     `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
     `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
+    if memo
+      [
+        `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+        "const $mGet = $memoGet; void $mGet;\n"
+        "const $mGet0 = $memoGet0; void $mGet0;\n"
+        "const $mSet = $memoSet; void $mSet;\n"
+        "const $mSet0 = $memoSet0; void $mSet0;\n"
+        `const $memoRuleCount = ${memoBase.size};\n`
+        `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n`
+      ].join("")
+    else ""
     "\n"
     reDefSource
     "\n\n"
@@ -1637,6 +1765,14 @@ runtimeImports := [
   "SKIP"
   "Validator"
 ]
+memoRuntimeImports := [
+  "$memoGet"
+  "$memoGet0"
+  "$memoSet"
+  "$memoSet0"
+  "createMemoCache"
+  "MISS"
+]
 
 typeImports := [
   "CursorContext"
@@ -1652,15 +1788,19 @@ typeImports := [
   "SkipSymbol"
   "Unwrap"
 ]
+memoTypeImports := [
+  "MemoCache"
+  "MissSymbol"
+]
 
-buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string): string ->
+buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string, memo: boolean): string ->
   pathLit := JSON.stringify libPath
-  valueList := runtimeImports.map((s) -> `  ${s}`).join(",\n")
+  valueList := [...runtimeImports, ...(if memo then memoRuntimeImports else [])].map((s) -> `  ${s}`).join(",\n")
   if types and not (language is "civet" and not module)
-    typeList := typeImports.map((s) -> `  type ${s}`).join(",\n")
+    typeList := [...typeImports, ...(if memo then memoTypeImports else [])].map((s) -> `  type ${s}`).join(",\n")
     // Reference all imported types at value-position so TS doesn't flag them as unused.
     typeUnion := [
-      "CursorContext", "CursorParser<any>", "Loc", "MaybeResult<any>"
+      "CursorContext", "CursorParser<any>", "Loc", "MaybeResult<any>", ...(if memo then ["MemoCache"] else [])
       "ParseResult<any>", "Parser<any>", "ParserContext", "ParserOptions<any>"
       "ParseState", "Unwrap<MaybeResult<any>>", "undefined"
     ].join(" | ")
@@ -1669,7 +1809,7 @@ buildHead := (types: boolean, language: CompilerOptions["language"], module: boo
     return `import {\n${valueList},\n} from ${pathLit}\n\n`
   `const {\n${valueList}\n} = require(${pathLit})\n\n`
 
-parserTail := (types: boolean, trace: boolean): string ->
+parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
   t := (annotation: string) -> types ? annotation : ""
   cast := t " as CursorParser<ParserResult<Grammar[K]>>"
   failCond := (v: string) -> types ? `$isFail(${v})` : `${v} === $FAIL`
@@ -1679,9 +1819,17 @@ parserTail := (types: boolean, trace: boolean): string ->
     "type ParserResult<P> = P extends (ctx: CursorContext) => infer R ? Exclude<R, typeof FAIL> : never;"
     ""
   ] : []
+  // Without the matching compile option the parser has no code to use these.
+  reject := (option: string) -> [
+    `    if (options.${option}) throw new Error("The ${option} parse option needs a parser compiled with ${option}: true")`
+  ]
   [
     ...typeDefs
     "const parser = {"
+    ...(if memo then [
+      "  memoRuleCount: $memoRuleCount,"
+      "  createMemoCache: () => createMemoCache($memoRuleCount),"
+    ] else [])
     `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
     "    const $$lazy = !!options.lazyErrors"
@@ -1691,8 +1839,8 @@ parserTail := (types: boolean, trace: boolean): string ->
     ""
     '    if (typeof input !== "string") throw new Error("Input must be a string")'
     `    if ((options${t " as any"}).events) throw new Error("The events parse option was replaced by the trace and memo compile options")`
-    // Without the trace compile option the parser has no hook calls to use it
-    ...(if trace then [] else ['    if (options.trace) throw new Error("The trace parse option needs a parser compiled with trace: true")'])
+    ...(if trace then [] else reject "trace")
+    ...(if memo then [] else reject "memo")
     ""
     "    let parser"
     "    if (options.startRule !== null && options.startRule !== undefined)"
@@ -1706,25 +1854,59 @@ parserTail := (types: boolean, trace: boolean): string ->
     ""
     "    reset()"
     ...(if trace then ["    if (options.trace) ctx.trace = options.trace"] else [])
+    ...(if memo then [
+      // Memoize by default; `memo: false` turns it off, a MemoCache supplies
+      // the cache (to set its state key `sk`).
+      `    let $$ownedMemo${t ": MemoCache | undefined"}`
+      "    if (options.memo === true || options.memo === undefined) {"
+      "      $$ownedMemo = $memoPool.pop() || createMemoCache($memoRuleCount)"
+      "      $$ownedMemo.sk = 0"
+      "      $$ownedMemo.reset()"
+      "      ctx.memo = $$ownedMemo"
+      "    } else if (options.memo) {"
+      "      ctx.memo = options.memo"
+      "    }"
+      // No `?:` here: the scaffolding must also parse as Civet with coffeeCompat
+      "    let $$sk0 = 0"
+      "    if (ctx.memo) $$sk0 = ctx.memo.sk"
+    ] else [])
     ""
-    "    const val = parser(ctx)"
-    "    const endPos = ctx.pos"
-    // Lazy errors: the first pass skips recording failure expectations; only
-    // a failed or incomplete parse re-runs from the start with full error
-    // tracking.  The tracer sees only the first pass.
-    `    if ($$lazy && (${failCond "val"} || endPos !== input.length)) {`
-    "      reset()"
-    "      ctx.pos = 0"
-    "      ctx.fail = fail"
-    ...(if trace then ["      ctx.trace = undefined"] else [])
-    "      parser(ctx)"
-    "    }"
-    `    if (${failCond "val"}) {`
-    `      return validate(input, undefined, { filename: filename })${t " as never"}`
-    "    }"
-    "    return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
-    "      filename: filename"
-    "    })"
+    // The memo goes back to the pool however the parse ends
+    ...(if memo then ["    try {"] else [])
+    ...[
+      "      const val = parser(ctx)"
+      "      const endPos = ctx.pos"
+      // Lazy errors: the first pass skips recording failure expectations; only
+      // a failed or incomplete parse re-runs from the same starting state with
+      // full error tracking.  The tracer sees only the first pass.
+      `      if ($$lazy && (${failCond "val"} || endPos !== input.length)) {`
+      "        reset()"
+      "        ctx.pos = 0"
+      "        ctx.fail = fail"
+      ...(if trace then ["        ctx.trace = undefined"] else [])
+      ...(if memo then [
+        "        if (ctx.memo) {"
+        "          ctx.memo.sk = $$sk0"
+        "          ctx.memo.reset()"
+        "        }"
+      ] else [])
+      "        parser(ctx)"
+      "      }"
+      `      if (${failCond "val"}) {`
+      `        return validate(input, undefined, { filename: filename })${t " as never"}`
+      "      }"
+      "      return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
+      "        filename: filename"
+      "      })"
+    ].map((line) -> if memo then line else line.slice(2))
+    ...(if memo then [
+      "    } finally {"
+      "      if ($$ownedMemo) {"
+      "        $$ownedMemo.clearVals()"
+      "        $memoPool.push($$ownedMemo)"
+      "      }"
+      "    }"
+    ] else [])
     "  }"
     "}"
   ].join "\n"

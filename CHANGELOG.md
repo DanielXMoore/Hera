@@ -9,16 +9,27 @@ All notable changes to `@danielx/hera` will be documented in this file.
   the `trace` parse option. A parser compiled with `trace: true` calls
   `trace.enter(rule, pos)` and `trace.exit(rule, pos, end, value, cached)`
   around every rule; `value` is `FAIL` when the rule didn't match. Hooks can
-  no longer change the parse or supply cached results. A parser compiled
-  without `trace` contains no hook calls, and passing `events` to any parser
-  throws.
+  no longer change the parse or supply cached results; use the `memo`
+  compile option for caching. A parser compiled without `trace` contains no
+  hook calls, and passing `events` to any parser throws.
 
 ### Added
+- The `memo` compile option compiles in a packrat memo cache: each rule's
+  result at each position is kept in a `MemoCache` and reused when the rule
+  is tried there again. Such a parser memoizes by default; `parse(input,
+  { memo: false })` turns it off, and `parse(input, { memo: cache })` uses
+  a `MemoCache` from `parser.createMemoCache()`. Its `sk` is a state key for
+  grammars whose handlers keep state: rules are cached per `sk` value, and a
+  run that changes `sk` isn't cached. The `noMemo` option leaves rules out
+  of the memo, and `memoTiers` marks rules that don't depend on `sk`
+  (`stateless`) or only on some of its bits (`masks`). A parser compiled
+  without `memo` contains no memo code.
 - The `lazyErrors` parse option: the parse first runs without recording
   what it expected at each failure, and only a failed or incomplete parse
   runs again to build the error message. Hera's sample grammars parse 21-116%
   faster warm with it, but a failing parse runs its handlers twice, so this
-  is opt-in. A tracer sees only the first pass.
+  is opt-in. A tracer sees only the first pass, and the retry restores the
+  starting `memo.sk` and clears the memo.
 
 ### Changed
 - Rules compile to cursor functions. Each rule becomes `$$r_<Rule>(ctx)`,

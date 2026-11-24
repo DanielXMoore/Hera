@@ -1,8 +1,8 @@
 // Differential test for `disableOptimizations`: every codegen optimization
 // must be semantics-preserving, so a parser compiled with any subset of them
 // turned off has to produce identical results (values and error messages)
-// to the fully optimized parser, including with the trace hooks compiled in
-// and under lazyErrors.
+// to the fully optimized parser, including with the memo and trace hooks
+// compiled in and under lazyErrors.
 
 assert from assert
 fs from fs
@@ -47,7 +47,7 @@ describe "disableOptimizations", ->
         ...allOptimizations.map (o): [string, Optimization[]] => [`${o} off`, [o]]
       ]
       reference := execMod compile(grammar)
-      traced := execMod compile(grammar, { trace: true })
+      traced := execMod compile(grammar, { memo: true, trace: true })
       tracer := { enter: (->), exit: -> }
       for input of inputs
         expected := outcome reference, input
@@ -55,8 +55,8 @@ describe "disableOptimizations", ->
           parser := execMod compile(grammar, { disableOptimizations: disabled })
           assert.equal outcome(parser, input), expected, `${name} (${label}) on ${JSON.stringify input.slice(0, 40)}`
         assert.equal outcome(reference, input, { lazyErrors: true }), expected, `${name} with lazyErrors on ${JSON.stringify input.slice(0, 40)}`
-        for opts of [{}, { trace: tracer }, { trace: tracer, lazyErrors: true }]
-          assert.equal outcome(traced, input, opts), expected, `${name} traced ${JSON.stringify opts} on ${JSON.stringify input.slice(0, 40)}`
+        for opts of [{}, { lazyErrors: true }, { memo: false }, { trace: tracer }, { trace: tracer, lazyErrors: true }]
+          assert.equal outcome(traced, input, opts), expected, `${name} memo+trace ${JSON.stringify opts} on ${JSON.stringify input.slice(0, 40)}`
 
   it "should actually remove each optimization from the generated code", ->
     grammar := """

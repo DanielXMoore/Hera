@@ -80,8 +80,8 @@ points with identical code.  `ablation.mjs` instead:
 
 Variants can set compiler options or parse options; `cc off` turns off the
 `$cc` matchers with the internal `disableOptimizations` compiler option,
-`lazyErrors` sets that parse option, and `trace (unused)` compiles in the
-trace hooks without passing a tracer.
+`lazyErrors` sets that parse option, `memo` compiles in the memo, and
+`trace (unused)` compiles in the trace hooks without passing a tracer.
 Writes `perf/ablation-report.txt` (gitignored).
 
 ## Extending

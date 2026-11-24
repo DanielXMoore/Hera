@@ -1574,7 +1574,7 @@ describe "Hera", ->
         parse "a"
         assert.equal calls, 1
 
-    it "should call enter and exit around every rule", ->
+    it "should call enter and exit around every rule, noMemo or not", ->
       grammar := """
         Root
           LA A B Alias Empty Num Word Alias Empty B -> [$2, $3, $4, $5, $6, $7]
@@ -1606,32 +1606,34 @@ describe "Hera", ->
         UseSelf
           SelfAlias -> 1
       """
-      typedCode := compile grammar, { types: true, trace: true }
-      untypedCode := compile grammar, { trace: true }
-      parsers := [
-        execMod untypedCode
-        execMod transpileTsToJs typedCode, module: typescript.ModuleKind.CommonJS
-      ]
-      for { parse } of parsers
-        seen: string[] := []
-        res := parse "abb42xbb", trace:
-          enter: (rule, pos) -> seen.push `enter:${rule}:${pos}`
-          exit: (rule, pos, end) -> seen.push `exit:${rule}:${pos}-${end}`
-        assert.deepEqual res, ["a", "b", "b", "", "42", "x"]
-        assert.deepEqual seen, [
-          "enter:Root:0"
-          "enter:LA:0", "exit:LA:0-0"
-          "enter:A:0", "exit:A:0-1"
-          "enter:B:1", "exit:B:1-2"
-          "enter:Alias:2", "enter:B:2", "exit:B:2-3", "exit:Alias:2-3"
-          "enter:Empty:3", "exit:Empty:3-3"
-          "enter:Num:3", "exit:Num:3-5"
-          "enter:Word:5", "exit:Word:5-6"
-          "enter:Alias:6", "enter:B:6", "exit:B:6-7", "exit:Alias:6-7"
-          "enter:Empty:7", "exit:Empty:7-7"
-          "enter:B:7", "exit:B:7-8"
-          "exit:Root:0-8"
+      noMemo := ["LA", "A", "B", "Alias", "Empty", "Num", "Word", "SelfAlias"]
+      for opts of [{ trace: true }, { trace: true, memo: true, noMemo }]
+        typedCode := compile grammar, { types: true, ...opts }
+        untypedCode := compile grammar, opts
+        parsers := [
+          execMod untypedCode
+          execMod transpileTsToJs typedCode, module: typescript.ModuleKind.CommonJS
         ]
+        for { parse } of parsers
+          seen: string[] := []
+          res := parse "abb42xbb", trace:
+            enter: (rule, pos) -> seen.push `enter:${rule}:${pos}`
+            exit: (rule, pos, end) -> seen.push `exit:${rule}:${pos}-${end}`
+          assert.deepEqual res, ["a", "b", "b", "", "42", "x"]
+          assert.deepEqual seen, [
+            "enter:Root:0"
+            "enter:LA:0", "exit:LA:0-0"
+            "enter:A:0", "exit:A:0-1"
+            "enter:B:1", "exit:B:1-2"
+            "enter:Alias:2", "enter:B:2", "exit:B:2-3", "exit:Alias:2-3"
+            "enter:Empty:3", "exit:Empty:3-3"
+            "enter:Num:3", "exit:Num:3-5"
+            "enter:Word:5", "exit:Word:5-6"
+            "enter:Alias:6", "enter:B:6", "exit:B:6-7", "exit:Alias:6-7"
+            "enter:Empty:7", "exit:Empty:7-7"
+            "enter:B:7", "exit:B:7-8"
+            "exit:Root:0-8"
+          ], JSON.stringify opts
 
     it "should pass each rule's value, or FAIL, to exit", ->
       { FAIL } := await import("../source/machine.civet")
@@ -1651,12 +1653,30 @@ describe "Hera", ->
       assert.throws (-> parse("b", trace: tracer)), /Expected/
       assert.deepEqual exits, [["A", "FAIL", false], ["A", "FAIL", false], ["Root", "FAIL", false]]
 
-    it "should reject the trace parse option without trace: true, and the old events option", ->
+      // With the memo, the second A is a cache hit
+      memoized := generate """
+        Root
+          A "!"
+          A "?"
+
+        A
+          "a" -> "A"
+      """, trace: true, memo: true
+      exits.length = 0
+      assert.deepEqual memoized.parse("a?", trace: tracer), ["A", "?"]
+      assert.deepEqual exits, [["A", "A", false], ["A", "A", true], ["Root", ["A", "?"], false]]
+      exits.length = 0
+      assert.throws (-> memoized.parse("b", trace: tracer)), /Expected/
+      assert.deepEqual exits, [["A", "FAIL", false], ["A", "FAIL", true], ["Root", "FAIL", false]]
+
+    it "should reject trace and memo parse options a parser wasn't compiled for, and the old events option", ->
       { parse } := generate """
         Rule
           "a"
       """
       assert.throws (-> parse "a", trace: { enter: (->), exit: -> }), /compiled with trace: true/
+      assert.throws (-> parse "a", memo: true), /compiled with memo: true/
+      assert.equal parse("a", memo: false), "a"
       assert.throws (-> parse "a", { events: { enter: -> undefined } } as any), /events parse option was replaced/
 
     it "should compile pure lookaheads, inline operators, and edge shapes in JS and TS", ->
@@ -1732,8 +1752,8 @@ describe "Hera", ->
         assert.equal parse("ab", startRule: "SimpleReHandler"), "ab"
         assert.equal parse("a", startRule: "ComplexLookahead"), "a"
 
-      // The same shapes with the trace hooks compiled in, typed and untyped
-      for code of [compile(grammar, { trace: true }), transpileTsToJs(compile(grammar, { trace: true, types: true }), module: typescript.ModuleKind.CommonJS)]
+      // The same shapes with every hook compiled in, typed and untyped
+      for code of [compile(grammar, { memo: true, trace: true }), transpileTsToJs(compile(grammar, { memo: true, trace: true, types: true }), module: typescript.ModuleKind.CommonJS)]
         depth .= 0
         tracer := { enter: (-> depth++), exit: -> depth-- }
         assert.deepEqual execMod(code).parse("a,01233", trace: tracer), [[["", ""], "a"], "", "0", ["3", "3"]]
@@ -2423,6 +2443,279 @@ describe "Hera", ->
       }
       assert.equal (execMod(minifiedJs) as any).parse("a"), "ok:a"
 
+  describe "built-in MemoCache", ->
+    it "should memoize exponential backtracking grammars compiled with memo: true", ->
+      grammar := """
+        Root
+          Expr "!"
+          Expr "?"
+
+        Expr
+          "(" Expr ")"
+          "x"
+      """
+      parser := generate(grammar, memo: true)
+      // Deeply nested parens that fail the first Root branch at the very end;
+      // without memoization this re-parses the entire nested expression.
+      input := "(".repeat(25) + "x" + ")".repeat(25) + "?"
+      res := parser.parse(input)
+      assert.equal res[1], "?"
+      // Pooled reuse on a second parse returns fresh results
+      res2 := parser.parse("(x)!", memo: true)
+      assert.equal res2[1], "!"
+
+    it "should memoize by default, and not with memo: false", ->
+      grammar := """
+        Root
+          Probe "b"
+          Probe "a"
+
+        Probe
+          "x" ->
+            probeRuns++
+            return $1
+
+        ```
+        let probeRuns = 0
+        exports.takeProbeRuns = () => { const n = probeRuns; probeRuns = 0; return n }
+        ```
+      """
+      mod := execMod(compile(parse(grammar), { memo: true })) as any
+      assert.deepEqual mod.parse("xa"), ["x", "a"]
+      assert.equal mod.takeProbeRuns(), 1
+      assert.deepEqual mod.parse("xa", { memo: false }), ["x", "a"]
+      assert.equal mod.takeProbeRuns(), 2
+      // Exported rules called directly run without a memo
+      assert.deepEqual mod.Root({ expectation: "", fail: -> }, { input: "xa", pos: 0 }).value, ["x", "a"]
+      assert.equal mod.takeProbeRuns(), 2
+
+    it "should support custom MemoCache with memoTiers (stateless, masked, stateful)", ->
+      grammar := """
+        Root
+          FlipMask FailBranch
+          FlipFull MatchBranch
+          StatelessPart "!"
+
+        FlipMask
+          "" ->
+            activeMemo.sk = 1
+            return "m"
+
+        FlipFull
+          "" ->
+            activeMemo.sk = 5
+            return "f"
+
+        FailBranch
+          MaskedRule "nope"
+
+        MatchBranch
+          MaskedRule FullRule
+
+        MaskedRule
+          "a" ->
+            maskedRuns++
+            return "masked:" + (activeMemo.sk & 1)
+
+        FullRule
+          "b" ->
+            fullRuns++
+            return "full:" + activeMemo.sk
+
+        StatelessPart
+          "a" "b"
+
+        ```
+        let activeMemo = null
+        let maskedRuns = 0
+        let fullRuns = 0
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        exports.getCounts = () => ({ maskedRuns, fullRuns })
+        exports.resetCounts = () => { maskedRuns = 0; fullRuns = 0 }
+        ```
+      """
+      js := compile(parse(grammar), {
+        memo: true
+        noMemo: ["FlipMask", "FlipFull"]
+        memoTiers: {
+          stateless: ["StatelessPart"]
+          masks: { MaskedRule: 1 }
+          defaultStateful: true
+        }
+      })
+      mod := execMod(js) as any
+      mc := mod.default.createMemoCache()
+      assert.equal mod.default.memoRuleCount, 6
+      mod.setActiveMemo(mc)
+      // MaskedRule runs with sk=1 (masked=1) in FailBranch, then sk=5 (masked=1) in MatchBranch -> cache HIT!
+      res := mod.parse("ab", { memo: mc })
+      assert.deepEqual res, ["f", ["masked:1", "full:5"]]
+      assert.equal mod.getCounts().maskedRuns, 1
+      assert.equal mod.getCounts().fullRuns, 1
+
+      // Calling reset() invalidates entries; changing sk to 0 misses MaskedRule
+      mc.reset()
+      mc.clearVals()
+      mod.resetCounts()
+      res2 := mod.parse("ab", { memo: mc })
+      assert.deepEqual res2, ["f", ["masked:1", "full:5"]]
+      assert.equal mod.getCounts().maskedRuns, 1
+
+    it "should treat memoized rules as stateful when memoTiers is omitted", ->
+      // Probe runs at the same position under two different memo.sk values;
+      // a stateless cache would replay the first result ("sk1") for the second.
+      grammar := """
+        Root
+          SetA Probe "!"
+          SetB Probe
+
+        SetA
+          "" ->
+            activeMemo.sk = 1
+            return "a"
+
+        SetB
+          "" ->
+            activeMemo.sk = 2
+            return "b"
+
+        Probe
+          "p" ->
+            return "sk" + activeMemo.sk
+
+        ```
+        let activeMemo = null
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        ```
+      """
+      for opts of [{ memo: true, noMemo: ["SetA", "SetB"] }, { memo: true, noMemo: ["SetA", "SetB"], memoTiers: { stateless: ["Root"] } }]
+        mod := execMod(compile(parse(grammar), opts)) as any
+        mc := mod.default.createMemoCache()
+        mod.setActiveMemo(mc)
+        assert.deepEqual mod.parse("p", { memo: mc }), ["b", "sk2"]
+      // Opting unlisted rules out of state tracking replays the stale entry
+      staleMod := execMod(compile(parse(grammar), { memo: true, noMemo: ["SetA", "SetB"], memoTiers: { defaultStateful: false } })) as any
+      staleMc := staleMod.default.createMemoCache()
+      staleMod.setActiveMemo(staleMc)
+      assert.deepEqual staleMod.parse("p", { memo: staleMc }), ["b", "sk1"]
+
+    it "should not cache a rule run that changed memo.sk", ->
+      // A sets sk = 1 and matches, then the first alternative fails.  The
+      // second calls A again after resetting sk = 0; a cache hit would skip
+      // the setter and leave Check seeing 0.
+      grammar := """
+        Root
+          A "!"
+          Reset A Check
+
+        A
+          SetOne "a"
+
+        SetOne
+          "" -> activeMemo.sk = 1
+
+        Reset
+          "" -> activeMemo.sk = 0
+
+        Check
+          "" -> activeMemo.sk
+
+        ```
+        let activeMemo = null
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        ```
+      """
+      noMemo := ["SetOne", "Reset", "Check"]
+      for memoTiers of [undefined, { stateless: ["A"] }, { masks: { A: 1 } }]
+        mod := execMod(compile(parse(grammar), { memo: true, noMemo, memoTiers })) as any
+        mc := mod.default.createMemoCache()
+        mod.setActiveMemo(mc)
+        assert.deepEqual mod.parse("a", { memo: mc }), [0, [1, "a"], 1], JSON.stringify memoTiers
+
+    it "should not cache under a memo.sk that isn't a 32-bit integer", ->
+      // Stored as an int32, 2 ** 32 would become 0 and serve Zero's A call
+      grammar := """
+        Root
+          Big A "!"
+          Zero A
+
+        A
+          "a" -> activeMemo.sk
+
+        Big
+          "" -> activeMemo.sk = 2 ** 32
+
+        Zero
+          "" -> activeMemo.sk = 0
+
+        ```
+        let activeMemo = null
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        ```
+      """
+      mod := execMod(compile(parse(grammar), { memo: true, noMemo: ["Big", "Zero"] })) as any
+      mc := mod.default.createMemoCache()
+      mod.setActiveMemo(mc)
+      assert.deepEqual mod.parse("a", { memo: mc }), [0, 0]
+
+    it "should handle 2-way collisions and cached failures in MemoCache", ->
+      grammar := """
+        Root
+          Probe "b"
+          Probe "a"
+
+        Probe
+          "x"+ ->
+            probeRuns++
+            return $1.length
+
+        ```
+        let probeRuns = 0
+        exports.getProbeRuns = () => probeRuns
+        ```
+      """
+      js := compile(parse(grammar), {
+        memo: true
+        memoTiers: {
+          defaultStateful: true
+        }
+      })
+      mod := execMod(js) as any
+      mc := mod.default.createMemoCache()
+      // Exercise way-0 and way-1 hits in both stateless and stateful modes
+      res := mod.parse("xxxxa", { memo: mc })
+      assert.deepEqual res, [4, "a"]
+      assert.equal mod.getProbeRuns(), 1
+      // Also test direct MemoCache way-1 hits (two colliding positions in same set: 0 and 64)
+      res2 := mod.parse("x".repeat(64) + "a", { memo: true })
+      assert.deepEqual res2, [64, "a"]
+
+    it "should emit valid TypeScript for memoTiers", ->
+      grammar := """
+        Root :: string
+          Stateless Masked Full ->
+            return $1 + $2 + $3
+        Stateless :: string
+          "a"
+        Masked :: string
+          "b"
+        Full :: string
+          "c"
+      """
+      tsCode := compile(parse(grammar), {
+        types: true
+        memo: true
+        memoTiers: {
+          stateless: ["Stateless"]
+          masks: { Masked: 3 }
+          defaultStateful: true
+        }
+      })
+      assert.match tsCode, /\$mGet0\(/
+      assert.match tsCode, /\$mGet\(\$\$mc, \d+, \$\$p0, \$\$sk, \$\$ctx\)/
+      assert.match tsCode, /\$\$sk = \(\$\$sk0 & 3\)/
+      assert.match tsCode, /createMemoCache/
+
   describe "discarded sub-expressions and $cc char-class matchers", ->
     it "should match $(...), &(...), !(...), and discarded repetitions", ->
       grammar := """
@@ -2769,6 +3062,31 @@ describe "Hera", ->
       assert.deepEqual mod.takeSeen(), [0]
       assert.throws (-> mod.parse("y", { lazyErrors: true })), /Expected:\s+Root "x"/
       assert.deepEqual mod.takeSeen(), [0, 1]
+
+    it "should restore a caller-managed MemoCache's sk for the lazyErrors retry", ->
+      grammar := """
+        Root
+          Start "x"
+
+        Start
+          "" ->
+            seen.push(activeMemo.sk)
+            activeMemo.sk = 9
+            return 1
+
+        ```
+        let activeMemo = null
+        const seen = []
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        exports.takeSeen = () => seen.splice(0)
+        ```
+      """
+      mod := execMod(compile(parse(grammar), { memo: true, noMemo: ["Start"] })) as any
+      mc := mod.default.createMemoCache()
+      mod.setActiveMemo(mc)
+      mc.sk = 3
+      assert.throws (-> mod.parse("y", { memo: mc, lazyErrors: true })), /Expected:\s+Root "x"/
+      assert.deepEqual mod.takeSeen(), [3, 3]
 
     it "should support lazyErrors two-pass error tracking, tracing only the first pass", ->
       grammar := """
