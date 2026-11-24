@@ -376,12 +376,21 @@ handlerFunctionParts := (declaration: ASTNode, types: boolean | undefined, handl
   // sensitive consumers (Civet parsing Hera's output) read them as new
   // statements instead of the object body.  Prepend `bodyIndent` after each
   // newline so the grammar's relative nesting is preserved inside the IIFE.
-  handlerText := if handler.inline then handler.f.replace(/\n/g, `\n${bodyIndent}`) else handler.f
-  handlerToken := { $loc: handler.$loc, token: handlerText }
+  // Each line is a token of its own, so the indent isn't mapped.
   handlerBody: ASTNode := if handler.inline
-    [`${bodyIndent}return `, handlerToken]
+    pos .= handler.$loc.pos
+    [
+      `${bodyIndent}return `
+      ...if handler.f.includes "\n"
+        handler.f.split(/(?<=\n)/).map (line, i) ->
+          token := { $loc: { pos }, token: line }
+          pos += line.length
+          i ? [bodyIndent, token] : token
+      else
+        [{ $loc: handler.$loc, token: handler.f }]
+    ]
   else
-    handlerToken
+    { $loc: handler.$loc, token: handler.f }
 
   // `void $loc, $0, ...` references generated positional parameters so
   // `noUnusedParameters` is silenced without wrapping the entire IIFE in a

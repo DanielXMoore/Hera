@@ -19,7 +19,9 @@ All notable changes to `@danielx/hera` will be documented in this file.
   marks the lines of an alternative that never ran as uncovered and lists a
   function for each rule, alternative and handler. Each call a rule makes
   maps to the alternative it's parsing, so a stack trace through the parser
-  reads as the path through the grammar.
+  reads as the path through the grammar. Handler and code block text has a
+  segment at each word, so columns stay exact for tools that don't
+  interpolate within a segment (c8, Node.js, esbuild). Maps are 2-3x larger.
 - `parse` records where each rule and each of its alternatives start, under
   `Symbol.for("positions")` (a Map from rule name) in the rules it returns,
   for these maps.

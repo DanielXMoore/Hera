@@ -186,6 +186,26 @@ describe "sourcemap", ->
       assert.deepEqual m.at("= __hera_h_0__(", 2), [1, 2]
       assert.deepEqual m.fn("__hera_h_1__"), [[5, 0], [5, 17]]
 
+    // trace-mapping, like c8 and Node.js, doesn't interpolate within a segment
+    it "should map copied text exactly at each word and at a line's first non-blank", ->
+      // A block handler, then an inline one, whose later lines Hera indents more
+      source := 'Rule\n  "a" ->\n    const x = ($1\n      + "b")\n    return x\n  "c" -> [\n      $1.toUpperCase()\n  ].join()\n'
+      { code, sourceMap } := compile parse(source), { source, filename: "w.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "w.js"
+      lines := code.split "\n"
+      at := (text: string, offset = 0) ->
+        line := lines.findIndex .includes text
+        { line: l, column } := originalPositionFor map, { line: line + 1, column: lines[line].indexOf(text) + offset }
+        [l! - 1, column]
+      assert.deepEqual at("x = ($1"), [2, 10]
+      assert.deepEqual at("x = ($1", 5), [2, 15]
+      assert.deepEqual at('+ "b"'), [3, 6]
+      assert.deepEqual at("return x"), [4, 4]
+      assert.deepEqual at("$1.toUpperCase"), [6, 6]
+      assert.deepEqual at("toUpperCase"), [6, 9]
+      assert.deepEqual at("].join"), [7, 2]
+      assert.deepEqual at("join()"), [7, 4]
+
     it "should map only handlers in rules without positions", ->
       source := 'Rule\n  "a" -> "b"\n'
       rules := parse source
