@@ -981,9 +981,10 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
     return node
 
   if Array.isArray(node)
-    return node.map (child) ->
-      generate child, options
-    .join('')
+    code .= ""
+    for child of node
+      code += generate child, options
+    return code
 
   if typeof node is "object"
     if "$loc" in node
