@@ -617,7 +617,7 @@ Found: ${hint}
 }
 
 export class ParseError extends Error {
-  name = "ParseError" as const
+  override name = "ParseError" as const
   constructor(
     public header: string,
     public body: string | undefined,
@@ -644,5 +644,9 @@ export interface ParserOptions<T extends HeraGrammar> {
   /** The name of the file being parsed */
   filename?: string
   startRule?: keyof T
+  /**
+   * @deprecated Hooks called around every rule. The next release replaces
+   * them with the `trace` and `memo` compile options (#120).
+   */
   events?: ParserEvents
 }

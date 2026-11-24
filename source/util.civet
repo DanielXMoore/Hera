@@ -66,8 +66,8 @@ hToS := (h: Handler | undefined): string ->
   unless h is like { f } and h.f <? "string"
     throw new Error "Unknown handler format"
 
-  // Function handler type annotation
-  t := "t" in h ? ` :: ${h.t.trim()}` : ""
+  // Function handler type annotation, which may be present but undefined
+  t := h.t ? ` :: ${h.t.trim()}` : ""
   if h.inline
     `${t} -> ${h.f}`
   else
