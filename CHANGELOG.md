@@ -4,6 +4,8 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-11-24
+
 ### Added
 - `transpileEmbedded` compile option: only the grammar's embedded code
   (code blocks, handlers, and heregex interpolations) goes to a downstream
@@ -12,7 +14,7 @@ All notable changes to `@danielx/hera` will be documented in this file.
   generated scaffolding: Civet's own grammar builds in 4.4 s and 0.63 GB
   instead of 19.9 s and 2.06 GB. With `types`, handler parameters keep their
   types, and type errors in a rule's generated code map to the rule (or to
-  the alternative whose code it is).
+  the alternative whose code it is) (#112).
 - Source maps map the parser's functions and calls to the grammar they come
   from. A rule's function maps to the rule, and each alternative's function
   and handler to the alternative's lines, so a coverage report such as c8's
@@ -22,27 +24,26 @@ All notable changes to `@danielx/hera` will be documented in this file.
   reads as the path through the grammar. Handler and code block text has a
   segment at each word, so columns stay exact for tools that don't
   interpolate within a segment (c8, Node.js, esbuild). Maps are about 3x
-  larger.
+  larger (#113).
 - In typed output's source maps, type errors point at the `::Type` they come
   from: a rule's or alternative's result that doesn't match its type, and an
   unknown name in a type, map to the annotation, and an inline handler's
   value that doesn't match maps to the handler. Before, these errors mapped
-  nowhere, or only to the rule with `transpileEmbedded`.
-- `parse` records where each rule and each of its alternatives start, and
-  where each alternative's expression ends, under `Symbol.for("positions")`
-  (a Map from rule name) in the rules it returns, and where each `::Type`
-  starts (`tPos` on its handler), for these maps.
+  nowhere, or only to the rule with `transpileEmbedded` (#113).
+- For these maps, the rules `parse` returns carry where each rule,
+  alternative and `::Type` starts (under `Symbol.for("positions")`, and
+  `tPos` on handlers). These are internal and may change (#113).
 
 ### Changed
 - The esbuild plugin with `language: "civet"`, and the
   `@danielx/hera/register/civet` hooks, use `transpileEmbedded`. A Civet
   grammar compiled with `transpileEmbedded` defaults to untyped output; pass
-  `types: true` for TypeScript.
+  `types: true` for TypeScript (#112).
 - The `@danielx/hera/register/civet/esm` hook compiles `.hera` files itself,
   so it no longer needs the base `register/esm` hook registered before it.
   Its `data` takes `{ hera, civet }` compiler options. The old setup, with
   the base hook registered first (with the Hera options) and Civet options as
-  `data`, still works.
+  `data`, still works (#112).
 - The `@danielx/hera/register/tsc` hooks use `transpileEmbedded` too: Hera
   writes the parser as JavaScript and only the grammar's embedded TypeScript
   goes through `ts.transpileModule`, so a `.hera` file loads 2-12x faster
@@ -50,28 +51,41 @@ All notable changes to `@danielx/hera` will be documented in this file.
   Hera options no longer apply to these hooks. Like the Civet hook, the
   `register/tsc/esm` hook compiles `.hera` files itself and takes
   `{ hera, tsc }` compiler options as `data`; the old setup, with the base
-  hook registered first and tsc options as `data`, still works.
+  hook registered first and tsc options as `data`, still works (#113).
 - A string literal that ends in a lead surrogate (such as `"\uD83D"`) is now
   a compile error. It could match half of a surrogate pair, after which a
   regex advanced the cursor past the end of its match and `validate` could
   throw a `TypeError`. Use a regex like `/\uD83D/`, which matches only an
   unpaired surrogate (#110).
 
+### Deprecated
+- The `events` parse option. The next release replaces it with the `trace`
+  and `memo` compile options (#120).
+
+### Performance
+- Recording a parse failure no longer reallocates the list of expectations
+  each time the furthest failure position advances. Hera's sample parsers
+  are 6-14% faster warm (#114).
+
 ### Fixed
 - Source maps from the `@danielx/hera/register/tsc` and `register/civet`
   hooks point back at the right lines and columns of the `.hera` file. The tsc
   hooks left Hera's map on the shifted JavaScript tsc emitted, so stack traces
   and coverage pointed at the wrong lines, and the Civet hooks emitted no map
-  at all (supersedes #100).
+  at all (#113, supersedes #100).
 - In a source map, code that follows a mapping on a later line no longer
   maps to it: Node.js maps a line without segments by the last segment
   before it, so stack frames in Hera's own parser code could point into the
-  grammar.
+  grammar (#113).
 - In a source map, the end of a grammar without a final newline maps to its
-  last line, not to a line past the end of the file.
+  last line, not to a line past the end of the file (#113).
 - A triple-slash regex whose interpolations are all `${const ...}` is built
   once, as documented. The rules kept the function that builds it, so it was
-  rebuilt from the interpolations' current values on every match.
+  rebuilt from the interpolations' current values on every match (#115).
+- `decompile` no longer throws on a handler whose type is present but
+  `undefined` (#49).
+- `ParseError.name` is marked `override`, so Hera's source compiles with
+  TypeScript's `noImplicitOverride` (#48).
 
 ## [0.9.9] - 2026-10-13
 
