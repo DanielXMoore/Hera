@@ -212,6 +212,12 @@ Close
   /// ${closingPattern} ///
 ```
 
+An interpolation runs to the `}` that closes it: braces inside must balance,
+and quotes must close, so `"}"` and `'{'` are fine.  A quote or an unbalanced
+brace in a regex literal, a template literal or a comment isn't, and the
+`${...}` is then matched as literal regex text.  Write such a character as a
+string instead, as in `${"'"}`.
+
 Use `${const expr}` for an interpolation whose value should be captured once.
 If every interpolated part is `const`, the generated parser computes the
 regular expression once and then uses the same parser as a normal regular
