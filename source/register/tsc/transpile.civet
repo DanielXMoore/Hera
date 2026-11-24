@@ -1,5 +1,8 @@
 typescript from typescript
 
+type { EmbeddedTranspileResult } from ../../compiler.civet
+{ composeLines, decodeMappings, type SourceMap } from ../../sourcemap.civet
+
 export CompilerOptions ::= typescript.TranspileOptions['compilerOptions']
 LogFn ::= (...args: any[]) => any
 
@@ -10,20 +13,16 @@ defaultCompilerOptions: CompilerOptions := {
   ignoreDeprecations: "6.0"
 }
 
-export function transpileTsToJs(
-  tsSource: string,
-  compilerOptions: CompilerOptions = {}
-  log: LogFn = console.error
-)
-  compilerOptions = {
-    ...defaultCompilerOptions
-    ...compilerOptions
-  }
-
-  { outputText, diagnostics } := typescript.transpileModule(tsSource, {
+/**
+Transpile with `typescript.transpileModule`, logging any diagnostics and
+throwing if any of them is an error.
+*/
+transpile := (tsSource: string, compilerOptions: CompilerOptions, log: LogFn) ->
+  result := typescript.transpileModule tsSource, {
     reportDiagnostics: true
-    compilerOptions
-  })
+    compilerOptions: { ...defaultCompilerOptions, ...compilerOptions }
+  }
+  { diagnostics } := result
 
   // It's possible that when using transpileModule that it will never give
   // warnings, only errors, but I'm not sure, so we'll log all diagnostics and
@@ -43,4 +42,31 @@ export function transpileTsToJs(
     if diagnostics.find(&.category === typescript.DiagnosticCategory.Error)
       throw new Error "TypeScript compilation failed"
 
-  outputText
+  result
+
+export function transpileTsToJs(
+  tsSource: string,
+  compilerOptions: CompilerOptions = {}
+  log: LogFn = console.error
+)
+  transpile(tsSource, compilerOptions, log).outputText
+
+/**
+Transpile a grammar's embedded TypeScript to JavaScript, for
+`CompilerOptions.transpileEmbedded`.  Given the embedded module's source map
+(`upstreamSourceMap`), tsc's map is composed with it, so the result's map
+points back at the grammar.
+*/
+export function transpileTsEmbedded(
+  tsSource: string
+  compilerOptions: CompilerOptions = {}
+  upstreamSourceMap?: SourceMap
+  log: LogFn = console.error
+): EmbeddedTranspileResult
+  return transpileTsToJs tsSource, compilerOptions, log unless upstreamSourceMap
+
+  { outputText, sourceMapText } := transpile tsSource, { ...compilerOptions, sourceMap: true, inlineSourceMap: false }, log
+  {
+    code: outputText
+    sourceMap: lines: composeLines upstreamSourceMap.lines, decodeMappings JSON.parse(sourceMapText!).mappings
+  }

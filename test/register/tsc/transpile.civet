@@ -1,6 +1,8 @@
 assert from assert
-{ transpileTsToJs } from ../../../source/register/tsc/transpile.civet
+{ transpileTsEmbedded, transpileTsToJs } from ../../../source/register/tsc/transpile.civet
 typescript from typescript
+{ execMod } from ../../../source/main.civet
+{ assertComposedMap, compileFixture } from ../../helper.civet
 
 describe "transpileTsToJs", ->
   function removeSourceMap(sourceCode: string)
@@ -36,3 +38,19 @@ describe "transpileTsToJs", ->
     // Multiple erros should be logged
     assert.match logged, /Expression expected/
     assert.match logged, /Unexpected keyword or identifier/
+
+describe "transpileTsEmbedded", ->
+  it "should return just the code when no source map is wanted", ->
+    assert.equal (transpileTsEmbedded("const a: number = 1") as string).trim(), "const a = 1;"
+
+  it "should compose tsc's map with Hera's so the parser maps back to the .hera source", ->
+    js := compileFixture (src, upstreamSourceMap) => transpileTsEmbedded src, {}, upstreamSourceMap
+    assertComposedMap js
+    assert.deepEqual (execMod(js) as any).parse("a"), { left: "a", right: "a" }
+
+  it "should accept compiler options", ->
+    js := compileFixture (src, upstreamSourceMap) =>
+      transpileTsEmbedded src, { target: typescript.ScriptTarget.ES5 }, upstreamSourceMap
+    // ES5 has no `const`
+    assert.match js, /var pair = \{ left: \$1, right: \$1 \}/
+    assertComposedMap js

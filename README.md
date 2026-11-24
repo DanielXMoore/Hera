@@ -409,9 +409,10 @@ use the appropriate loader for your handler language:
 Loads .hera files that compile to JavaScript.
 
 ### `--import/--require @danielx/hera/register/tsc`
-Loads .hera files that compile to TypeScript.
+Loads .hera files whose handlers and code blocks are written in TypeScript.
 
-Attempts to load the `typescript` npm module to transpile the resulting TypeScript to JavaScript.
+Attempts to load the `typescript` npm module to transpile the grammar's
+embedded TypeScript to JavaScript (see `transpileEmbedded` below).
 
 ### `--import/--require @danielx/hera/register/civet`
 Loads .hera files whose handlers and code blocks are written in Civet.
@@ -461,11 +462,8 @@ or [`loader-examples/civet-custom`](./loader-examples/civet-custom)
 for examples of passing in options to the TypeScript or Civet compiler.
 
 #### ESM
-Instead of using `--import @danielx/hera/register/tsc`, register the `register/esm` and `register/tsc/esm` modules yourself and pass the options you want.
-(Note that you still need to register the base `register/esm` module, because the TypeScript hook transpiles its output.)
-
-Instead of using `--import @danielx/hera/register/civet`, register just the `register/civet/esm` module, which compiles `.hera` files itself.
-Its `data` takes `hera` (Hera compiler options) and `civet` (Civet compiler options).
+Instead of using `--import @danielx/hera/register/tsc` or `--import @danielx/hera/register/civet`, register just the `register/tsc/esm` or `register/civet/esm` module, which compiles `.hera` files itself.
+Its `data` takes `hera` (Hera compiler options) and `tsc` or `civet` (TypeScript or Civet compiler options).
 
 E.g.
 ```js
@@ -473,11 +471,8 @@ E.g.
 const { register } = require("node:module")
 const { pathToFileURL } = require("node:url")
 
-register("@danielx/hera/register/esm", pathToFileURL(__filename), {
-  data: heraOptions
-})
 register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
-  data: tscCompilerOptions,
+  data: { hera: heraOptions, tsc: tscCompilerOptions },
 })
 
 // OR, for Civet

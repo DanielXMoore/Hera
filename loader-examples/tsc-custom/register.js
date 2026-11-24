@@ -9,11 +9,9 @@ const tscCompilerOptions = {
 // ESM
 const { register } = require("node:module");
 const { pathToFileURL } = require("node:url");
-// First, register basic Hera ESM loader
-register("@danielx/hera/register/esm", pathToFileURL(__filename));
-// Then, register another loader that transpiles the output of the Hera loader, using custom typscript compiler options
+// The tsc hook compiles .hera files itself; `hera` would hold Hera options
 register("@danielx/hera/register/tsc/esm", pathToFileURL(__filename), {
-  data: tscCompilerOptions,
+  data: { tsc: tscCompilerOptions },
 });
 
 

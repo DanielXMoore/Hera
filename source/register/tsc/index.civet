@@ -1,9 +1,8 @@
 // ESM
 { register } from node:module
 { pathToFileURL } from node:url
-// register basic Hera ESM loader
-register "../../esm.js", pathToFileURL(__filename)
-// register another loader that transpiles the output of the Hera loader
+// The tsc hook compiles .hera files itself, passing only the grammar's
+// embedded code to tsc
 register "./esm.js", pathToFileURL(__filename)
 
 // CJS
