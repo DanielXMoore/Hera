@@ -1343,6 +1343,21 @@ describe "Hera", ->
     for lit of ["\\uD83D", "a\\uD83D", "\\u{D83D}", "\uDBFF"]
       assert.throws (-> generate `Root\n  "${lit}"`), /ends in a lead surrogate/
 
+  it "should decode escapes before checking for a trailing lead surrogate", ->
+    // A line continuation after the lead half leaves it last
+    assert.throws (-> generate `Root\n  "\\uD83D\\\n"`), /ends in a lead surrogate/
+    for lit of ["\\uD83D\\n", "\\uD83D\\x41", "\\uD83D\\0", "\\uD83D\\101", "\\uD83D\\u{41}", "\\uD83D\\q"]
+      generate `Root\n  "${lit}"`
+
+  it "should compile string literals without evaluating code", ->
+    // As under CSP or --disallow-code-generation-from-strings
+    {Function: OriginalFunction} := globalThis
+    globalThis.Function = (-> throw new EvalError "code generation disallowed") as any
+    try
+      compile 'Root\n  "a\\n"\n'
+    finally
+      globalThis.Function = OriginalFunction
+
   it "should allow literals containing whole surrogate pairs", ->
     {parse} := generate """
       Root
