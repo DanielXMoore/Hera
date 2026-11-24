@@ -1,6 +1,7 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
+import { isCharClassRe } from ./machine.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -33,7 +34,16 @@ export type CompilerOptions = {
     source: string
     upstreamSourceMap?: SourceMap
   ) => EmbeddedTranspileResult
+  /**
+   * @internal Turn off individual codegen optimizations, for benchmarking
+   * and differential testing (output must parse identically either way).
+   * Not part of the stable API.
+   * - `cc`: ASCII-table `$cc` matchers for character-class regexes
+   */
+  disableOptimizations?: Iterable<Optimization>
 }
+
+export type Optimization = "cc"
 
 export type EmbeddedTranspileResult =
   | string
@@ -60,6 +70,9 @@ type CompiledChunk = {
 }
 
 reDefs: string[] := []
+ccDefs: string[] := []
+/** The optimizations turned off with `disableOptimizations` */
+let disabled = new Set<Optimization>
 dynamicReDefs: RegExpPart[][] := []
 /** Counter for the names of helper functions (`$$h_<n>`) */
 let subFnCounter = 0
@@ -159,6 +172,12 @@ decodeLiteral := (lit: string): string ->
 
 /** Define a RegExp terminal */
 defineRe := (re: string) -> intern reDefs, "$R", re
+
+// Codegen decisions for the optional fast matchers (see `disableOptimizations`).
+useCc := (re: string) -> not disabled.has("cc") and isCharClassRe re
+
+/** Define a character-class RegExp terminal (compiled via `$cc(...)`) */
+defineCc := (re: string) -> intern ccDefs, "$RC", re
 
 /** Define an interpolated (dynamic) RegExp terminal */
 defineDynamicRe := (parts: RegExpPart[]) -> intern dynamicReDefs, "$RD", parts, JSON.stringify
@@ -547,7 +566,7 @@ compileSubFn := (ast: HeraAST, defaultHandler: boolean, cx: Emit): string ->
 /**
 Compile a sub-expression whose value is discarded (`$`, lookaheads, and
 unnamed repetitions or groups).  Its regexes produce plain strings, as under a
-default handler.
+default handler, which lets character classes use `$cc`.
 */
 compileDiscardedFn := (ast: HeraAST, cx: Emit): string ->
   compileSubFn ast, true, cx
@@ -580,6 +599,15 @@ emitChoiceAlt := (arg: HeraAST, defaultHandler: boolean, cx: Emit): ASTNode[] ->
       when "R"
         r := arg[1]
         exp := JSON.stringify prettyPrint(cx.ruleName, r, true)
+        if defaultHandler and useCc r
+          eVar := cx.idGen "e"
+          vVar := cx.idGen "v"
+          tupleUnion := reTupleUnion types, r
+          return [
+            `  const ${eVar} = ${defineCc r}($$ctx.input, $$ctx.pos);`
+            `  if (${eVar} >= 0) { const ${vVar} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""}; $$ctx.pos = ${eVar}; return ${vVar}; }`
+            `  ${emitFailCall exp}`
+          ]
         reId := defineRe r
         mVar := cx.idGen "m"
         tupleUnion := reTupleUnion types, r
@@ -652,6 +680,18 @@ emitMatch := (
     when "R"
       r := ast[1]
       exp := JSON.stringify prettyPrint(ruleName, r, true)
+      if (defaultHandler or not varName) and useCc r
+        eVar := idGen "e"
+        lines := [
+          `  const ${eVar} = ${defineCc r}($$ctx.input, $$ctx.pos);`
+          `  if (${eVar} < 0) ${failBlock `${emitFailCall exp}\n    ${onFail}`}`
+        ]
+        if varName
+          tupleUnion := reTupleUnion types, r
+          bind tupleUnion ?? "string"
+          lines.push `  const ${varName} = $$ctx.input.slice($$ctx.pos, ${eVar})${tupleUnion ? ` as ${tupleUnion}` : ""};`
+        lines.push `  $$ctx.pos = ${eVar};`
+        return lines
       reId := defineRe r
       mVar := idGen "m"
       tupleUnion := reTupleUnion types, r
@@ -1031,7 +1071,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     usesRegexVal := usesCaptures or usesIdentifier h.f, "$0"
     if not usesCaptures
       // Handler uses at most $0 (no capture groups $1..$9) — pass defaultHandler=true
-      // so the value is the matched string.
+      // so $cc fast matchers apply directly without RegExpMatchArray allocation.
       parameters = ["$loc", "$0"]
       paramTypes = ["Loc", "any"]
       callArgs = ["{ pos: $$p0, length: $$ctx.pos - $$p0 }", "$$v"]
@@ -1339,8 +1379,10 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   options := { ...defaultOptions, ...maybeOptions }
 
   reDefs.length = 0
+  ccDefs.length = 0
   dynamicReDefs.length = 0
   subFnCounter = 0
+  disabled = new Set options.disableOptimizations ?? []
 
   { language, module } := options
   // transpileEmbedded output skips the downstream Civet pass over Hera's
@@ -1387,6 +1429,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   reDefSource := reDefs.map (r, i) ->
     `const $R${i} = /${r or "(?:)"}/suy;\n`
+
+  ccDefSource := ccDefs.map (r, i) -> `const $RC${i} = $cc(/${r}/suy);\n`
 
   dynamicReDefSource := dynamicDefs.map (r, i) =>
     if r.every((part) => part <? "string" or part.constant)
@@ -1461,6 +1505,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
     "\n"
     reDefSource
+    "\n\n"
+    ccDefSource
     "\n\n"
     dynamicReDefSource
     "\n\n"
@@ -1558,6 +1604,7 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
 
 runtimeImports := [
   "$adaptEvents"
+  "$cc"
   "$isFail"
   "$wrap"
   "FAIL"

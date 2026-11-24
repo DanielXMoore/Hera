@@ -1,0 +1,104 @@
+// Differential test for `disableOptimizations`: every codegen optimization
+// must be semantics-preserving, so a parser compiled with any subset of them
+// turned off has to produce identical results (values and error messages)
+// to the fully optimized parser.
+
+assert from assert
+fs from fs
+{ readFile } from ./helper.civet
+{ compile, execMod } from ../source/main.civet
+type { Optimization } from ../source/compiler.civet
+
+allOptimizations: Optimization[] := ["cc"]
+
+heraSamples := fs.readdirSync("samples").filter(.endsWith ".hera").sort()
+
+// Inputs per sample grammar: valid inputs plus truncated/invalid ones so
+// failure-expectation recording is compared too.
+cases: [string, string[]][] := [
+  ["math.hera", ["8 + 3 / (2 + 5)", "1 + 2 * (3 - 4) / 5 + 6 * 7 - 8", "1 +", "(1", ""]]
+  ["url.hera", ["http://danielx.net:443/%21?query#fragment", "https://a.b/c/d?e=f", "http://", "ftp:x"]]
+  ["coffee.hera", ["x = 1\ny = 2\nz = x + y\n", "x = \n", "a = b\n  c\n"]]
+  ["regex.hera", ["/foo[abc](?:bar)\\d+/g", "/a|b/", "/[/", "/(?<n>x)\\k<n>/u", "/a{2,3}?/y"]]
+  ["unary-subtract.hera", ["-1", "--1", "1 - -1", "-"]]
+  ["heregex.hera", ["abc", "a", ""]]
+  ["structural-mapping.hera", ["a", "b", "ab", "c"]]
+  ["pegjs.hera", [readFile("samples/parser.pegjs"), "start = 'a'", "start ="]]
+  // The Hera grammar parsing every sample grammar (and truncations of them)
+  ["hera_v0_8.hera", heraSamples.flatMap (name) ->
+    src := readFile `samples/${name}`
+    [src, src.slice(0, Math.floor(src.length / 2))]
+  ]
+]
+
+outcome := (parser: any, input: string) ->
+  try
+    JSON.stringify { ok: parser.parse(input) }
+  catch e
+    JSON.stringify { error: (e as Error).message }
+
+describe "disableOptimizations", ->
+  for [name, inputs] of cases
+    it `should parse ${name} identically with optimizations on, off, and each one off`, ->
+      grammar := readFile `samples/${name}`
+      variants: [string, Optimization[]][] := [
+        ["all off", allOptimizations]
+        ...allOptimizations.map (o): [string, Optimization[]] => [`${o} off`, [o]]
+      ]
+      reference := execMod compile(grammar)
+      for input of inputs
+        expected := outcome reference, input
+        for [label, disabled] of variants
+          parser := execMod compile(grammar, { disableOptimizations: disabled })
+          assert.equal outcome(parser, input), expected, `${name} (${label}) on ${JSON.stringify input.slice(0, 40)}`
+
+  it "should actually remove each optimization from the generated code", ->
+    grammar := """
+      Root
+        Word ( &/[a-z]/ Word )* !/[0-9]x/ /(?![0-9])/ ( ("." ".") / ";" )? Tail -> $1
+
+      Tail
+        "!" ( "!" / "?" ) "." -> $1
+
+      Word
+        $(/[a-z]+/ " "?) -> $1.trim()
+    """
+    on := compile grammar
+    off := compile grammar, { disableOptimizations: allOptimizations }
+    assert.match on, /\$cc\(/
+    assert.doesNotMatch off, /\$cc\(/
+    for input of ["ab cd!?.", "ab cd..!!.", "ab;!x.", "ab cd1!!.", "ab", "1"]
+      assert.equal outcome(execMod(off), input), outcome(execMod(on), input)
+
+  it "should reject a rule called inside a surrogate pair, and match whole pairs elsewhere", ->
+    // A Unicode regex that starts at a trail surrogate after a lead surrogate
+    // starts matching at the lead surrogate, before the cursor, where $cc
+    // would start at the trail surrogate
+    grammar := """
+      Text
+        /.+/
+
+      Ch
+        /./
+
+      Rest
+        /[^a][a-z]*/
+
+      Skip
+        /.+/ -> $loc.length
+    """
+    on := compile grammar
+    assert.match on, /const \$RC\d+ = \$cc\(/
+    onMod := execMod(on) as any
+    offMod := execMod(compile grammar, { disableOptimizations: allOptimizations }) as any
+    ctx := { expectation: "", fail: () => {} }
+    for rule of ["Text", "Ch", "Rest", "Skip"]
+      for input of ["😀ab", "😀😀b", "😀", "a😀b"]
+        for pos of [0, 1, 2, 3]
+          if pos > 0 and input.charCodeAt(pos - 1) >= 0xD800 and input.charCodeAt(pos - 1) < 0xDC00
+            for mod of [onMod, offMod]
+              assert.throws (-> mod[rule](ctx, { input, pos })), /position \d+, between the halves of a surrogate pair/
+          else
+            assert.deepEqual onMod[rule](ctx, { input, pos }), offMod[rule](ctx, { input, pos }), `${rule} on ${JSON.stringify input} at ${pos}`
+    assert.equal onMod.Ch(ctx, { input: "a😀", pos: 1 }).value, "😀"
+    assert.equal onMod.Rest(ctx, { input: "😀😀b", pos: 2 }).value, "😀b"

@@ -2441,7 +2441,7 @@ describe "Hera", ->
       }
       assert.equal (execMod(minifiedJs) as any).parse("a"), "ok:a"
 
-  describe "discarded sub-expressions", ->
+  describe "discarded sub-expressions and $cc char-class matchers", ->
     it "should match $(...), &(...), !(...), and discarded repetitions", ->
       grammar := """
         Root
@@ -2465,6 +2465,7 @@ describe "Hera", ->
           "z"
       """
       js := compile(parse(grammar))
+      assert.match js, /const \$RC\d+ = \$cc\(/
       mod := execMod(js) as any
       assert.deepEqual mod.parse("/* hi 😀 */  foo+a"), ["/* hi 😀 */", "foo"]
 
@@ -2492,6 +2493,7 @@ describe "Hera", ->
         ```
       """), { types: true })
       assert.match tsCode, /function \$\$h_\d+\(\$\$ctx: CursorContext\)/
+      assert.match tsCode, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
       // Also exercise JS mode varName on non-char-class &/!
       jsLook := compile(parse("""
         Root
@@ -2500,7 +2502,51 @@ describe "Hera", ->
       """))
       assert.deepEqual (execMod(jsLook) as any).parse("ab"), [true, true]
 
-    it "should pass the matched string to regex handlers that use only $0", ->
+    it "should handle all $cc quantifiers, ASCII/Unicode paths, and identifier lookaheads", ->
+      grammar := """
+        Root
+          A B C D E F G H I J "_" K L
+
+        A
+          /[a-z]+/
+        B
+          /[ \\t]*/
+        C
+          /[+-]?/
+        D
+          /[0-9]/
+        E
+          /[\\s]+/
+        F
+          /[\\s]*/
+        G
+          /[^x]?/
+        H
+          /./
+        I
+          /[a-z][0-9]+/
+        J
+          /[a-z][0-9]*(?![a-z])/
+        K
+          /[a-z][0-9]*(?![\\x80-\\u{10FFFF}])/
+        L
+          /[^x]+/
+      """
+      parser := generate(grammar)
+      res := parser.parse("abc  +5 \u00A0😀😀a12b3_c4!yz")
+      assert.equal res[0], "abc"
+      assert.equal res[1], "  "
+      assert.equal res[2], "+"
+      assert.equal res[3], "5"
+      assert.equal res[4], " \u00A0"
+      assert.equal res[6], "😀"
+      assert.equal res[7], "😀"
+      assert.equal res[8], "a12"
+      assert.equal res[9], "b3"
+      assert.equal res[11], "c4"
+      assert.equal res[12], "!yz"
+
+    it "should unlock $cc for regex rules with $0-only handlers", ->
       grammar := """
         Root
           Spaces Word ->
@@ -2518,11 +2564,12 @@ describe "Hera", ->
           ///(\${"d"})/// -> $1 || $0
       """
       js := compile(parse(grammar))
+      assert.match js, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
       mod := execMod(js) as any
       assert.deepEqual mod.parse("  hello"), ["  ", "HELLO"]
       assert.deepEqual mod.parse("  42"), ["  ", 42]
       tsCode := compile(parse(grammar), { types: true })
-      assert.match tsCode, /const \$\$v = \$\$m\d+\[0\]/
+      assert.match tsCode, /\$RC\d+\(\$\$ctx\.input, \$\$ctx\.pos\)/
 
     it "should run every handler in its own function scope in JS, TS, and Civet", ->
       grammar := """
@@ -2699,3 +2746,16 @@ describe "Hera", ->
       """), { types: true })
       assert.match fnTsCode, /function \$\$r_Root\(\$\$ctx: CursorContext\): \(\(\) => number\) \| typeof FAIL/
       assert.match fnTsCode, /function Choice\([\s\S]*?\): MaybeResult<\(\(\) => number\) \| string>/
+
+    it "should preserve regex backtracking in $cc when lookahead fails", ->
+      grammar := """
+        Root
+          Pref "bx"
+
+        Pref
+          /[a][b]*(?![x])/
+      """
+      js := compile(parse(grammar))
+      assert.match js, /const \$RC\d+ = \$cc\(/
+      mod := execMod(js) as any
+      assert.deepEqual mod.parse("abx"), ["a", "bx"]
