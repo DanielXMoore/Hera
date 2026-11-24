@@ -71,6 +71,17 @@ describe "util", ->
     rules := parse grammar
     assert.equal decompile(rules), grammar
 
+  it "should decompile a handler whose type is present but undefined", ->
+    // #49: `t` can be a key of the handler without a value
+    rules := parse """
+      Rule
+        "X" -> 1
+
+    """
+    expected := decompile rules
+    rules.Rule = ["L", "X", { ...rules.Rule[2], t: undefined }] as any
+    assert.equal decompile(rules), expected
+
   it "decompiles to an object format", ->
     grammar := """
       Rule
