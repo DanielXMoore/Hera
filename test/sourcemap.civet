@@ -263,6 +263,19 @@ describe "sourcemap", ->
       // Without positions (rules built by hand), types aren't mapped
       assert.match compile({ Rule: ["L", "a", { t: " string" }] } as any, { types: true }), /MaybeResult<string>/
 
+    it "should map an alternative's function to the end of its last line", ->
+      source := 'Rule\n  ///\n    a\n  ///\n  "b"\n'
+      { code, sourceMap } := compile parse(source), { source, filename: "h.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "h.js"
+      lines := code.split "\n"
+      position := (line: number, column: number) ->
+        { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
+        [l! - 1, c]
+      header := lines.findIndex .startsWith "function Rule$0("
+      close := lines.findIndex (l, i) -> i > header and l is "}"
+      assert.deepEqual position(header, 0), [1, 0]
+      assert.deepEqual position(close, 0), [3, 5]
+
     it "should map only handlers in rules without positions", ->
       source := 'Rule\n  "a" -> "b"\n'
       rules := parse source

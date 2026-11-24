@@ -93,10 +93,12 @@ lineEnd := (pos: number): number ->
   lineEndRE.test mapSource!
   lineEndRE.lastIndex
 
-/** Span of the alternative `node` that starts at `start` */
-alternativeSpan := (start: number, node: HeraAST): AlternativeSpan ->
+/** Span of a rule's alternative `i`, whose AST is `node` */
+alternativeSpan := (positions: RulePositions, i: number, node: HeraAST): AlternativeSpan ->
+  start := positions.alternatives[i]
   handler := node <? "string" ? undefined : node[2]
-  last := handler and "f" in handler ? handler.$loc.pos + handler.f.length - 1 : start
+  // Its last character: its handler's, or its expression's
+  last := handler and "f" in handler ? handler.$loc.pos + handler.f.length - 1 : positions.ends[i] - 1
   // before the line's two-space indent
   { line: start - 2, start, end: lineEnd last }
 
@@ -711,7 +713,7 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
     // shape via `ReturnType<typeof Rule>`.  An explicit ::Type still anchors
     // the inference so recursive rules don't fall back to `unknown`.
     retAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
-    alternative := if positions then alternativeSpan positions.alternatives[0], rule
+    alternative := if positions then alternativeSpan positions, 0, rule
     { helpers, body } := compileRuleBodyInline(options, name, name, rule, true, alternative)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
@@ -731,8 +733,8 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
   // line, which keeps it from covering them.
   perAlternative := positions and positions.alternatives# is args#
   alternatives := if perAlternative
-    args.map (arg, i) -> alternativeSpan positions!.alternatives[i], arg
-  ruleLine := if positions then alternativeSpan positions.alternatives[0], rule
+    args.map (arg, i) -> alternativeSpan positions!, i, arg
+  ruleLine := if positions then alternativeSpan positions, 0, rule
   allHelpers: ASTNode[] := []
   subFunctions := args.flatMap (arg, i) ->
     helperName := `${name}$${i}`

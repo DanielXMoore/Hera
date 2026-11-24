@@ -51,18 +51,21 @@ Statement
 CodeBlock
   TripleBacktick CodeBody TripleBacktick -> $2
 
-# The rule's name and body, and where the rule and each alternative start
+# The rule's name and body, where the rule and each alternative start, and
+# where each alternative's expression ends
 Rule
-  Name RuleBody :: [string, HeraAST, RulePositions] -> [$1, $2[0], { name: $loc.pos, alternatives: $2[1] }]
+  Name RuleBody :: [string, HeraAST, RulePositions] -> [$1, $2[0], { name: $loc.pos, alternatives: $2[1], ends: $2[2] }]
 
 RuleTypeAnnotation
   Space* TypeAnnotation -> $2
 
-# The rule's body and where each alternative starts
+# The rule's body, where each alternative starts, and where each
+# alternative's expression ends
 RuleBody
-  RuleTypeAnnotation?:t EOS ( Indent Choice )+:choices :: [HeraAST, number[]] ->
+  RuleTypeAnnotation?:t EOS ( Indent Choice )+:choices :: [HeraAST, number[], number[]] ->
     var r: HeraAST[] = choices.map((a) => a[1][0])
-    const positions = choices.map((a) => a[1][1])
+    const starts = choices.map((a) => a[1][1])
+    const ends = choices.map((a) => a[1][2])
     if (t) r = r.map((a): HeraAST => {
       if (typeof a === "string") return ["S", [a], { ...t }] as unknown as HeraAST
       const handler = a[2]
@@ -72,17 +75,22 @@ RuleBody
       }
       return [a[0], a[1], { ...t }] as unknown as HeraAST
     })
-    if (r.length === 1) return [r[0], positions]
-    return [["/", r] as HeraAST, positions]
+    if (r.length === 1) return [r[0], starts, ends]
+    return [["/", r] as HeraAST, starts, ends]
 
-# An alternative, and where it starts
+# An alternative, where it starts, and where its expression ends (a heregex
+# can span lines)
 Choice
-  Sequence Handling :: [HeraAST, number] ->
-    if ($2 === undefined) return [$1, $loc.pos]
+  Sequence Position Handling :: [HeraAST, number, number] ->
+    if ($3 === undefined) return [$1, $loc.pos, $2]
     // A bare rule reference gets wrapped so the handler has somewhere to live
-    if (typeof $1 === "string") return [["S", [$1], $2], $loc.pos]
-    $1.push($2)
-    return [$1, $loc.pos]
+    if (typeof $1 === "string") return [["S", [$1], $3], $loc.pos, $2]
+    $1.push($3)
+    return [$1, $loc.pos, $2]
+
+# The current position
+Position
+  "" -> $loc.pos
 
 Sequence
   Expression SequenceExpression+ :: SequenceNode ->

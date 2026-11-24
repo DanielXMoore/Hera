@@ -27,9 +27,10 @@ All notable changes to `@danielx/hera` will be documented in this file.
   unknown name in a type, map to the annotation, and an inline handler's
   value that doesn't match maps to the handler. Before, these errors mapped
   nowhere, or only to the rule with `transpileEmbedded`.
-- `parse` records where each rule and each of its alternatives start, under
-  `Symbol.for("positions")` (a Map from rule name) in the rules it returns,
-  and where each `::Type` starts (`tPos` on its handler), for these maps.
+- `parse` records where each rule and each of its alternatives start, and
+  where each alternative's expression ends, under `Symbol.for("positions")`
+  (a Map from rule name) in the rules it returns, and where each `::Type`
+  starts (`tPos` on its handler), for these maps.
 
 ### Changed
 - The esbuild plugin with `language: "civet"`, and the
