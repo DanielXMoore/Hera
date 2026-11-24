@@ -2,7 +2,8 @@ assert from assert
 typescript from typescript
 { readFile } from ./helper.civet
 hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../source/main.civet
-{ transpileTsToJs } from ../source/register/tsc/transpile.civet
+{ transpileTsEmbedded, transpileTsToJs } from ../source/register/tsc/transpile.civet
+{ EOL } from node:os
 { SourceMap } from ../source/sourcemap.civet
 civet from @danielx/civet
 esbuild from esbuild
@@ -2028,6 +2029,19 @@ describe "Hera", ->
       assert.equal civetMod.parse("ml", { startRule: "Multiline" }), "ml"
       civetMod.setShared "c"
       assert.equal civetMod.parse("c"), "c"
+
+    // tsc drops an import it sees no use of, and CommonJS output renames one
+    it "should read a heregex interpolation's binding inside the transpiled module", ->
+      grammar := """
+        ```
+        import { EOL } from "node:os"
+        ```
+        Rule
+          /// ${EOL} /// -> $0
+      """
+      js := compile grammar, transpileEmbedded: (src) ->
+        transpileTsEmbedded src, { module: typescript.ModuleKind.CommonJS }
+      assert.equal (execMod(js) as any).parse(EOL), EOL
 
     it "should map each rule's generated code to the rule, and its handler's to the alternative", ->
       grammar := """

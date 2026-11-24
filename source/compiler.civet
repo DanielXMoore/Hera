@@ -170,13 +170,24 @@ defineDynamicRe := (parts: RegExpPart[]) -> intern dynamicReDefs, "$RD", parts, 
 isIdentifierExpression := (expression: string): boolean =>
   /^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(expression.trim())
 
-heregexToExpression := (parts: RegExpPart[], constantPrefix?: string): string =>
+/**
+A heregex interpolation as compiled.  `identifier` is set when its expression
+reads one binding, before transpileEmbedded turns it into a call: that read
+stays uncached, as the README says of an identifier `const` part.
+*/
+type Interpolation = RegExpExpression & { identifier?: boolean }
+
+/** Whether `part` reads one binding, which is never cached */
+readsBinding := (part: Interpolation): boolean ->
+  part.identifier ?? isIdentifierExpression part.expression
+
+heregexToExpression := (parts: (string | Interpolation)[], constantPrefix?: string): string =>
   let constIndex = 0
   `\`${parts.map((part) =>
     if part <? "string"
       part.replace(/[`\\$]/g, "\\$&")
     else if part.constant and constantPrefix?
-      if isIdentifierExpression(part.expression)
+      if readsBinding part
         "${" + part.expression + "}"
       else
         index := constIndex
@@ -946,17 +957,19 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     [ compileRule(options, name, rules[name]), "\n\n"]
 
   // With transpileEmbedded, heregex interpolations become calls to their
-  // transpiled named functions.  An identifier stays a direct read of the
-  // binding, as without transpileEmbedded (an identifier `const` part isn't
-  // cached).
+  // transpiled named functions.  Identifiers do too: a binding read outside
+  // the transpiled module could be one the transpiler renamed (CommonJS
+  // imports) or removed (an import it saw no use of).  An identifier still
+  // reads the binding every time, as without transpileEmbedded (an identifier
+  // `const` part isn't cached).
   prefix := embeddedPrefix
   dynamicExprs: string[] := []
-  dynamicDefs := if prefix?
+  dynamicDefs: (string | Interpolation)[][] := if prefix?
     dynamicReDefs.map (r) ->
       r.map (part) ->
-        return part if part <? "string" or isIdentifierExpression part.expression
+        return part if part <? "string"
         j := dynamicExprs.push(part.expression) - 1
-        { ...part, expression: `${prefix}rd_${j}__()` }
+        { ...part, expression: `${prefix}rd_${j}__()`, identifier: isIdentifierExpression part.expression }
   else
     dynamicReDefs
 
@@ -983,7 +996,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       ].join("")
 
     constantParts := r.flatMap((part): RegExpExpression[] =>
-      if part <? "string" or not part.constant or isIdentifierExpression(part.expression) then [] else [part]
+      if part <? "string" or not part.constant or readsBinding(part) then [] else [part]
     )
     cacheProps := types ? [
       "source?: string"
