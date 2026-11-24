@@ -2029,7 +2029,7 @@ describe "Hera", ->
       civetMod.setShared "c"
       assert.equal civetMod.parse("c"), "c"
 
-    it "should map each rule's generated code to its first handler", ->
+    it "should map each rule's generated code to the rule, and its handler's to the alternative", ->
       grammar := """
         Rule ::number
           "a" Num ->
@@ -2056,18 +2056,19 @@ describe "Hera", ->
         assert i >= 0, match
         sourceMap.lines[i].filter((e) -> e.length is 4).map (e) -> [e[2], e[3]]
 
-      // Rule's header, typed with its `::number`, maps to the handler (source
-      // line 2), with a segment at each identifier so that a consumer that
-      // interpolates columns stays on the handler's position
+      // Rule's header, typed with its `::number`, maps to the rule, with a
+      // segment at each identifier so that a consumer that interpolates
+      // columns stays on the rule's position
       header := sources "function Rule("
       assert header.length > 5
-      assert.deepEqual new Set(header.map(JSON.stringify)), new Set [JSON.stringify [2, 0]]
-      // So does the handler's function, through the transpiler's map
+      assert.deepEqual new Set(header.map(JSON.stringify)), new Set [JSON.stringify [0, 0]]
+      // The handler's function maps to its alternative's line, through the
+      // transpiler's map
       handlerHeader := sources "function __hera_h_0__("
       assert handlerHeader.length > 0
-      assert handlerHeader.every ([line]) -> line is 2
-      // A rule without a handler isn't mapped
-      assert.deepEqual sources("function Bare("), []
+      assert handlerHeader.every ([line]) -> line is 1
+      // So does a rule without a handler
+      assert.deepEqual new Set(sources("function Bare(").map(JSON.stringify)), new Set [JSON.stringify [7, 0]]
 
     it "should compose accurate source maps back to original .hera lines", ->
       grammar := """

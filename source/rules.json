@@ -2,10 +2,10 @@
   "code": [
     {
       "type": "CodeBlock",
-      "token": "\nimport type {\n  HeraAST,\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n} from './hera-types'\n\nconst regexEscapes: Record<string, string> = {\n  \"\\n\": \"\\\\n\",\n  \"\\r\": \"\\\\r\",\n  \"\\u2028\": \"\\\\u2028\",\n  \"\\u2029\": \"\\\\u2029\",\n  \"\\t\": \"\\\\t\",\n  \"\\v\": \"\\\\v\",\n  \"\\f\": \"\\\\f\",\n  \" \": \" \",\n}\n\n// \\ followed by whitespace is natural in heregexes,\n// but forbidden in JS regexes with s flag, so rewrite them.\n// Newlines aren't allowed in JS regexes either, so we escape them too.\nfunction normalizeRegExpSource(source: string) {\n  return source.replace(/\\\\?([\\n\\r\\u2028\\u2029\\t\\v\\f ])/g, (_, char: string) => regexEscapes[char])\n}\n",
+      "token": "\nimport type {\n  HeraAST,\n  SequenceNode,\n  NameNode,\n  Handler,\n  CodeBlockNode,\n  RulePositions,\n} from './hera-types'\n\nconst regexEscapes: Record<string, string> = {\n  \"\\n\": \"\\\\n\",\n  \"\\r\": \"\\\\r\",\n  \"\\u2028\": \"\\\\u2028\",\n  \"\\u2029\": \"\\\\u2029\",\n  \"\\t\": \"\\\\t\",\n  \"\\v\": \"\\\\v\",\n  \"\\f\": \"\\\\f\",\n  \" \": \" \",\n}\n\n// \\ followed by whitespace is natural in heregexes,\n// but forbidden in JS regexes with s flag, so rewrite them.\n// Newlines aren't allowed in JS regexes either, so we escape them too.\nfunction normalizeRegExpSource(source: string) {\n  return source.replace(/\\\\?([\\n\\r\\u2028\\u2029\\t\\v\\f ])/g, (_, char: string) => regexEscapes[char])\n}\n",
       "$loc": {
         "pos": 3,
-        "length": 625
+        "length": 642
       }
     }
   ],
@@ -14,10 +14,10 @@
       "*",
       "Statement",
       {
-        "f": "    const code = $1.filter(a => typeof a === \"object\" && a !== null && \"type\" in a && a.type === \"CodeBlock\")\n    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))\n    rules[Symbol.for(\"code\")] = code\n    return rules",
+        "f": "    const code: CodeBlockNode[] = []\n    const definitions: [string, HeraAST, RulePositions][] = []\n    const positions = new Map<string, RulePositions>()\n    for (const statement of $1) {\n      if (Array.isArray(statement)) {\n        definitions.push(statement)\n        positions.set(statement[0], statement[2])\n      } else code.push(statement)\n    }\n    const rules = Object.fromEntries(definitions)\n    rules[Symbol.for(\"code\")] = code\n    rules[Symbol.for(\"positions\")] = positions\n    return rules",
         "$loc": {
-          "pos": 657,
-          "length": 236
+          "pos": 674,
+          "length": 505
         }
       }
     ],
@@ -36,7 +36,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 923,
+              "pos": 1209,
               "length": 3
             },
             "inline": true
@@ -54,7 +54,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 941,
+              "pos": 1227,
               "length": 4
             },
             "inline": true
@@ -72,8 +72,8 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 999,
-          "length": 4
+          "pos": 1285,
+          "length": 78
         },
         "inline": true
       }
@@ -85,12 +85,13 @@
         "RuleBody"
       ],
       {
-        "f": "[$1, $2]",
+        "f": "[$1, $2[0], { name: $loc.pos, alternatives: $2[1] }]",
         "$loc": {
-          "pos": 1027,
-          "length": 10
+          "pos": 1423,
+          "length": 54
         },
-        "inline": true
+        "inline": true,
+        "t": " [string, HeraAST, RulePositions] "
       }
     ],
     "RuleTypeAnnotation": [
@@ -105,8 +106,8 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 1083,
-          "length": 4
+          "pos": 1523,
+          "length": 56
         },
         "inline": true
       }
@@ -141,12 +142,12 @@
         ]
       ],
       {
-        "f": "    var r: HeraAST[] = choices.map((a) => a[1] as HeraAST)\n    if (t) r = r.map((a): HeraAST => {\n      if (typeof a === \"string\") return [\"S\", [a], { t }] as unknown as HeraAST\n      const handler = a[2]\n      if (handler) {\n        if (\"t\" in handler) return a\n        return [a[0], a[1], { ...handler, t }] as unknown as HeraAST\n      }\n      return [a[0], a[1], { t }] as unknown as HeraAST\n    })\n    if (r.length === 1) return r[0];\n    return [\"/\", r] as HeraAST",
+        "f": "    var r: HeraAST[] = choices.map((a) => a[1][0])\n    const positions = choices.map((a) => a[1][1])\n    if (t) r = r.map((a): HeraAST => {\n      if (typeof a === \"string\") return [\"S\", [a], { t }] as unknown as HeraAST\n      const handler = a[2]\n      if (handler) {\n        if (\"t\" in handler) return a\n        return [a[0], a[1], { ...handler, t }] as unknown as HeraAST\n      }\n      return [a[0], a[1], { t }] as unknown as HeraAST\n    })\n    if (r.length === 1) return [r[0], positions]\n    return [[\"/\", r] as HeraAST, positions]",
         "$loc": {
-          "pos": 1165,
-          "length": 471
+          "pos": 1669,
+          "length": 538
         },
-        "t": " HeraAST "
+        "t": " [HeraAST, number[]] "
       }
     ],
     "Choice": [
@@ -156,11 +157,12 @@
         "Handling"
       ],
       {
-        "f": "    if ($2 === undefined) return $1\n    // A bare rule reference gets wrapped so the handler has somewhere to live\n    if (typeof $1 === \"string\") return [\"S\", [$1], $2]\n    $1.push($2)\n    return $1",
+        "f": "    if ($2 === undefined) return [$1, $loc.pos]\n    // A bare rule reference gets wrapped so the handler has somewhere to live\n    if (typeof $1 === \"string\") return [[\"S\", [$1], $2], $loc.pos]\n    $1.push($2)\n    return [$1, $loc.pos]",
         "$loc": {
-          "pos": 1666,
-          "length": 201
-        }
+          "pos": 2296,
+          "length": 237
+        },
+        "t": " [HeraAST, number] "
       }
     ],
     "Sequence": [
@@ -178,7 +180,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"S\", $2]",
             "$loc": {
-              "pos": 1928,
+              "pos": 2594,
               "length": 40
             },
             "t": " SequenceNode "
@@ -196,7 +198,7 @@
           {
             "f": "    $2.unshift($1)\n    return [\"/\", $2]",
             "$loc": {
-              "pos": 2018,
+              "pos": 2684,
               "length": 40
             },
             "t": " SequenceNode "
@@ -214,7 +216,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 2113,
+          "pos": 2779,
           "length": 4
         },
         "inline": true
@@ -234,7 +236,7 @@
       {
         "f": "$4",
         "$loc": {
-          "pos": 2166,
+          "pos": 2832,
           "length": 4
         },
         "inline": true
@@ -252,7 +254,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 2198,
+          "pos": 2864,
           "length": 4
         },
         "inline": true
@@ -274,7 +276,7 @@
       {
         "f": "    const result = $1 ? [$1, $2] : $2\n    if ($3) return [{name: $3}, result] as NameNode\n    return result as SequenceNode",
         "$loc": {
-          "pos": 2283,
+          "pos": 2949,
           "length": 125
         },
         "t": " SequenceNode | NameNode "
@@ -296,7 +298,7 @@
       {
         "f": "    if ($2) return [$2, $1]\n    else return $1",
         "$loc": {
-          "pos": 2468,
+          "pos": 3134,
           "length": 48
         }
       }
@@ -320,7 +322,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 2612,
+              "pos": 3278,
               "length": 4
             },
             "inline": true
@@ -346,7 +348,7 @@
           {
             "f": "    return undefined",
             "$loc": {
-              "pos": 2675,
+              "pos": 3341,
               "length": 21
             }
           }
@@ -378,7 +380,7 @@
           {
             "f": "    if (t) handler = { ...handler, t }\n    return handler as Handler",
             "$loc": {
-              "pos": 2759,
+              "pos": 3425,
               "length": 69
             }
           }
@@ -401,7 +403,7 @@
           {
             "f": "    return { t } as Handler",
             "$loc": {
-              "pos": 3000,
+              "pos": 3666,
               "length": 29
             }
           }
@@ -424,7 +426,7 @@
           {
             "f": "$2",
             "$loc": {
-              "pos": 3235,
+              "pos": 3901,
               "length": 49
             },
             "inline": true
@@ -438,7 +440,7 @@
           {
             "f": "    return {\n      f: $1.trimEnd(),\n      $loc,\n      inline: true,\n    }",
             "$loc": {
-              "pos": 3325,
+              "pos": 3991,
               "length": 75
             },
             "t": " Handler "
@@ -452,7 +454,7 @@
       {
         "f": "    return {\n      f: $1.join(\"\").trimEnd(),\n      $loc,\n    }",
         "$loc": {
-          "pos": 3463,
+          "pos": 4129,
           "length": 64
         },
         "t": " Handler "
@@ -505,7 +507,7 @@
       {
         "f": "    return $1 + $2.join(\"\") + ($3 ?? \"\")",
         "$loc": {
-          "pos": 4010,
+          "pos": 4676,
           "length": 42
         },
         "t": " string "
@@ -547,7 +549,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 4316,
+          "pos": 4982,
           "length": 4
         },
         "inline": true
@@ -584,7 +586,7 @@
       {
         "f": "[\"L\", $1]",
         "$loc": {
-          "pos": 4436,
+          "pos": 5102,
           "length": 11
         },
         "inline": true
@@ -608,7 +610,7 @@
           {
             "f": "    body = body.map((part) => typeof part === \"string\" ? normalizeRegExpSource(part) : part)\n    // Static heregexes use the normal RegExp path; only interpolated ones need RD.\n    if (body.every((part) => typeof part === \"string\"))\n      return [\"R\", body.join(\"\")]\n    return [\"RD\", body]",
             "$loc": {
-              "pos": 4507,
+              "pos": 5173,
               "length": 291
             }
           }
@@ -639,7 +641,7 @@
           {
             "f": "[\"R\", normalizeRegExpSource($3)]",
             "$loc": {
-              "pos": 4836,
+              "pos": 5502,
               "length": 33
             },
             "inline": true
@@ -651,7 +653,7 @@
           {
             "f": "[\"R\", normalizeRegExpSource($1)]",
             "$loc": {
-              "pos": 4900,
+              "pos": 5566,
               "length": 33
             },
             "inline": true
@@ -663,7 +665,7 @@
           {
             "f": "[\"R\", $1]",
             "$loc": {
-              "pos": 4942,
+              "pos": 5608,
               "length": 11
             },
             "inline": true
@@ -718,7 +720,7 @@
           {
             "f": "{ expression, constant: true }",
             "$loc": {
-              "pos": 5194,
+              "pos": 5860,
               "length": 125
             },
             "inline": true
@@ -751,7 +753,7 @@
           {
             "f": "{ expression }",
             "$loc": {
-              "pos": 5373,
+              "pos": 6039,
               "length": 15
             },
             "inline": true
@@ -764,7 +766,7 @@
           {
             "f": "\"\"",
             "$loc": {
-              "pos": 5456,
+              "pos": 6122,
               "length": 246
             },
             "inline": true
@@ -776,7 +778,7 @@
           {
             "f": "\"\"",
             "$loc": {
-              "pos": 5713,
+              "pos": 6379,
               "length": 67
             },
             "inline": true
@@ -788,7 +790,7 @@
           {
             "f": "\"\\\\/\"",
             "$loc": {
-              "pos": 5798,
+              "pos": 6464,
               "length": 116
             },
             "inline": true
@@ -800,7 +802,7 @@
           {
             "f": "$0",
             "$loc": {
-              "pos": 5938,
+              "pos": 6604,
               "length": 4
             },
             "inline": true
@@ -1035,7 +1037,7 @@
       {
         "f": "$2",
         "$loc": {
-          "pos": 7297,
+          "pos": 7963,
           "length": 4
         },
         "inline": true
@@ -1050,7 +1052,7 @@
       {
         "f": "    return {\n      type: \"CodeBlock\",\n      token: $0,\n      $loc,\n    }",
         "$loc": {
-          "pos": 7357,
+          "pos": 8023,
           "length": 73
         },
         "t": " CodeBlockNode "

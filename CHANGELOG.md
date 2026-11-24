@@ -11,7 +11,18 @@ All notable changes to `@danielx/hera` will be documented in this file.
   Hera writes the rest of the parser itself, so Civet no longer re-parses the
   generated scaffolding: Civet's own grammar builds in 4.4 s and 0.63 GB
   instead of 19.9 s and 2.06 GB. With `types`, handler parameters keep their
-  types, and type errors in a rule's generated code map to its first handler.
+  types, and type errors in a rule's generated code map to the rule (or to
+  the alternative whose code it is).
+- Source maps map the parser's functions and calls to the grammar they come
+  from. A rule's function maps to the rule, and each alternative's function
+  and handler to the alternative's lines, so a coverage report such as c8's
+  marks the lines of an alternative that never ran as uncovered and lists a
+  function for each rule, alternative and handler. Each call a rule makes
+  maps to the alternative it's parsing, so a stack trace through the parser
+  reads as the path through the grammar.
+- `parse` records where each rule and each of its alternatives start, under
+  `Symbol.for("positions")` (a Map from rule name) in the rules it returns,
+  for these maps.
 
 ### Changed
 - The esbuild plugin with `language: "civet"`, and the

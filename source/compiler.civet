@@ -1,6 +1,6 @@
 // Compile a rules json to typescript
 
-import type { HeraAST, HeraRules, RegExpExpression, RegExpPart } from ./hera-types.civet
+import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -51,6 +51,7 @@ type EmbeddedHandler = {
   handler: Handler
   parameters: string[]
   paramTypes: string[]
+  alternative: AlternativeSpan | undefined
 }
 
 type CompiledChunk = {
@@ -64,6 +65,50 @@ dynamicReDefs: RegExpPart[][] := []
 /** Name prefix for transpileEmbedded functions; undefined without transpileEmbedded. */
 let embeddedPrefix: string | undefined
 let embeddedHandlers: EmbeddedHandler[] = []
+/**
+While compiling with a source map: the grammar source, and where its rules and
+their alternatives start
+*/
+let mapSource: string | undefined
+let rulePositions: Map<string, RulePositions> | undefined
+
+/**
+Where the generated code for one alternative maps in the grammar.  Its
+functions map from `line`, the start of its line, to `end`, the end of its
+last line (its handler's, if it has one), so coverage reports count the lines
+of an alternative that never ran.  The calls made for it map to `start`, its
+first token, so a stack trace shows the alternative being parsed.
+*/
+type AlternativeSpan = { line: number, start: number, end: number }
+
+/** `token`, mapped to `pos` in the grammar when that is known */
+mapped := (token: string, pos?: number): ASTNode ->
+  pos? ? { $loc: { pos }, token } : token
+
+lineEndRE := /[^\r\n]*/y
+
+/** Offset of the end of the grammar line that `pos` is on, before its line break */
+lineEnd := (pos: number): number ->
+  lineEndRE.lastIndex = pos
+  lineEndRE.test mapSource!
+  lineEndRE.lastIndex
+
+/** Span of the alternative `node` that starts at `start` */
+alternativeSpan := (start: number, node: HeraAST): AlternativeSpan ->
+  handler := node <? "string" ? undefined : node[2]
+  last := handler and "f" in handler ? handler.$loc.pos + handler.f.length - 1 : start
+  // before the line's two-space indent
+  { line: start - 2, start, end: lineEnd last }
+
+/**
+With transpileEmbedded and `types`, nothing else maps the generated code
+around handlers, so it maps, line by line, to the grammar at `pos`: type
+errors in it (such as in a `::Type`) then point at the rule or alternative
+they come from.  Untyped code has no type errors to map, and mapping it would
+charge its branches to that position in coverage reports.
+*/
+anchorTo := (options: CompilerOptions, pos: number | undefined, nodes: ASTNode[]): ASTNode ->
+  pos? and embeddedPrefix? and options.types ? { anchor: pos, children: nodes } : nodes
 
 /**
 Return the `${prefix}${index}` identifier for `value`, adding it to `defs` on
@@ -308,7 +353,7 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
 // rule function using early returns for the null/tokenize paths so the IIFE
 // lands at 2-space indent, while the handler body comes in at 4-space from
 // the grammar's source indent.
-handlerFunctionParts := (declaration: string, types: boolean | undefined, handler: Handler, parameters: string[], paramTypes: string[]): ASTNode[] ->
+handlerFunctionParts := (declaration: ASTNode, types: boolean | undefined, handler: Handler, parameters: string[], paramTypes: string[]): ASTNode[] ->
   handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
 
   typedParameters := if types
@@ -350,7 +395,8 @@ handlerFunctionParts := (declaration: string, types: boolean | undefined, handle
   voidLine := if types and voidParameters.length then `${bodyIndent}void ${voidParameters.join(", ")};\n` else ""
 
   [
-    `${declaration}(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    declaration
+    `(${typedParameters.join(", ")})${handlerRetAnno} {\n`
     voidLine
     handlerBody
   ]
@@ -363,17 +409,22 @@ handlerFunctionParts := (declaration: string, types: boolean | undefined, handle
 // TS type-checks a generic function body once with `V` unresolved, which
 // leaves `.reduce`, `.filter`, etc. inside handler bodies with no known
 // method signatures).  `callArgs` are the matching argument expressions.
-emitHandlerIIFE := (options: CompilerOptions, handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string): ASTNode ->
+emitHandlerIIFE := (options: CompilerOptions, handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[], baseIndent: string, alternative: AlternativeSpan | undefined): ASTNode ->
   [
-    ...handlerFunctionParts("(function", options.types, handler, parameters, paramTypes)
-    `\n${baseIndent}})(${callArgs.join(", ")})`
+    ...handlerFunctionParts(["(", mapped("function", alternative?.line)], options.types, handler, parameters, paramTypes)
+    `\n${baseIndent}`
+    mapped("}", alternative?.end)
+    ")"
+    // A stack trace places the call at its arguments' parenthesis
+    mapped("(", alternative?.start)
+    `${callArgs.join(", ")})`
   ]
 
 // With transpileEmbedded: record the handler for the virtual module, and
 // emit a call to its named function there.
-emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[]): string ->
-  id := embeddedHandlers.push({ handler, parameters, paramTypes }) - 1
-  `${embeddedPrefix}h_${id}__(${callArgs.join(", ")})`
+emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: string[], callArgs: string[], alternative: AlternativeSpan | undefined): ASTNode ->
+  id := embeddedHandlers.push({ handler, parameters, paramTypes, alternative }) - 1
+  [mapped(`${embeddedPrefix}h_${id}__`, alternative?.start), `(${callArgs.join(", ")})`]
 
 // Emit the inline body for one rule (or one choice sub-rule).
 //   wrapEvent=true  — emit $EVENT enter/exit hooks (top-level rule)
@@ -384,8 +435,9 @@ emitEmbeddedHandlerCall := (handler: Handler, parameters: string[], paramTypes: 
 // `$E`/etc. closures are allocated once at module load instead of on every
 // call (the source of a ~10% parse regression vs the old combinator output).
 // Returns { helpers, body }: top-level helper declarations to emit before
-// the rule function, and the rule function body statements.
-compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean) ->
+// the rule function, and the rule function body statements.  The calls it
+// makes map to `alternative`, when known.
+compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string, rule: HeraAST, wrapEvent: boolean, alternative: AlternativeSpan | undefined) ->
   { types, tokenize } := options
   retType := ruleReturnType(rule)
 
@@ -402,7 +454,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       helpers
       body: [
         emitEventEnter(options, name, retType)
-        `  const $$final = ${rule}($$ctx, $$state);\n`
+        "  const $$final = "
+        mapped(rule, alternative?.start)
+        "($$ctx, $$state);\n"
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
@@ -426,15 +480,18 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
       rule = rule[1][0]
     parserExpr := compileOp(rule, name, true)
     helpers.push `const ${fnName}$parser = ${parserExpr};`
+    call := [mapped(`${fnName}$parser`, alternative?.start), "($$ctx, $$state);"]
     body := if wrapEvent
       [
         emitEventEnter(options, name, retType)
-        `  const $$final = ${fnName}$parser($$ctx, $$state);\n`
+        "  const $$final = "
+        call
+        "\n"
         emitEventExit(options, name)
         `\n  return $$final;`
       ]
     else
-      [`  return ${fnName}$parser($$ctx, $$state);`]
+      ["  return ", call]
     return { helpers, body }
 
   // Rule has a handler — inline it as an IIFE with parameter types that
@@ -530,9 +587,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   // strictly deeper than the IIFE's declaration line — civet's parser
   // needs that for block vs object-literal disambiguation.
   iife := if embeddedPrefix?
-    emitEmbeddedHandlerCall h, parameters, embeddedParamTypes, callArgs
+    emitEmbeddedHandlerCall h, parameters, embeddedParamTypes, callArgs, alternative
   else
-    emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ")
+    emitHandlerIIFE(options, h, parameters, paramTypes, callArgs, "  ", alternative)
 
   // Compose the rule body with early returns for the null / skip paths;
   // all exits route through a single exit-hook helper.  The hook only fires
@@ -548,7 +605,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
   body := []
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
-  body.push `  const $$r = ${fnName}$parser($$ctx, $$state);
+  body.push "  const $$r = ", mapped(`${fnName}$parser`, alternative?.start), `($$ctx, $$state);
   if (!$$r) {
     ${exitHook("undefined")}
     return undefined;
@@ -585,28 +642,14 @@ ${valueDecl}  const $$m = `
   return { helpers, body }
 
 /**
-Source position of the first handler in `node`, if any.
+A rule's function maps from its name to the end of its last line, or, when
+its alternatives have functions of their own, to the end of its name's line.
 */
-firstHandlerPos := (node: unknown): number | undefined ->
-  return unless Array.isArray node
-  for child of node
-    if child <? "object" and child and "$loc" in child and "f" in child
-      return (child as Handler).$loc.pos
-    pos := firstHandlerPos child
-    return pos if pos?
-  undefined
-
-// With transpileEmbedded and `types`, the rule's generated code maps to its
-// first handler.  Without transpileEmbedded the downstream compiler maps that
-// code itself, but with it, nothing else would map type errors in it (such as
-// in a `::Type`) back to the grammar.  Untyped code has no type errors to map,
-// and mapping it would charge its branches to the handler in coverage reports.
 compileRule := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode ->
-  nodes := compileRuleNodes options, name, rule
-  anchor := if embeddedPrefix? and options.types then firstHandlerPos rule
-  anchor? ? { anchor, children: nodes } : nodes
+  positions := if mapSource? then rulePositions?.get name
+  anchorTo options, positions?.name, compileRuleNodes options, name, rule, positions
 
-compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST): ASTNode[] ->
+compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, positions: RulePositions | undefined): ASTNode[] ->
   { types } := options
   stateType := types ? ": ParseState" : ""
   ctxType := types ? ": ParserContext" : ""
@@ -621,27 +664,49 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST): AST
     // shape via `ReturnType<typeof Rule>`.  An explicit ::Type still anchors
     // the inference so recursive rules don't fall back to `unknown`.
     retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
-    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true)
+    alternative := if positions then alternativeSpan positions.alternatives[0], rule
+    { helpers, body } := compileRuleBodyInline(options, name, name, rule, true, alternative)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
-      `function ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
+      mapped("function", positions?.name)
+      ` ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
       body
-      `\n}`
+      "\n"
+      mapped("}", alternative?.end)
     ]
 
   // Top-level choice: emit helpers + per-alternative dispatcher function + top-level rule.
   args := rule[1]
-  allHelpers: any[] := []
+  // Alternatives on lines of their own (not `A / B` on one line) map their
+  // functions to those lines.  The rule's function then maps to its name's
+  // line, which keeps it from covering them.
+  perAlternative := positions and positions.alternatives# is args#
+  alternatives := if perAlternative
+    args.map (arg, i) -> alternativeSpan positions!.alternatives[i], arg
+  ruleLine := if positions then alternativeSpan positions.alternatives[0], rule
+  allHelpers: ASTNode[] := []
   subFunctions := args.flatMap (arg, i) ->
     helperName := `${name}$${i}`
+    alternative := alternatives?[i]
+    header := [mapped("function", alternative?.line), ` ${helperName}($$ctx${ctxType}, $$state${stateType}) {`]
     if typeof arg is "string"
-      return [`function ${helperName}($$ctx${ctxType}, $$state${stateType}) { return ${arg}($$ctx, $$state); }\n\n`]
-    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false)
-    allHelpers.push ...helpers
-    [
-      `function ${helperName}($$ctx${ctxType}, $$state${stateType}) {\n`
+      return anchorTo options, alternative?.line, [
+        header
+        " return "
+        mapped(arg, alternative?.start)
+        "($$ctx, $$state); "
+        mapped("}", alternative?.end)
+        "\n\n"
+      ]
+    { helpers, body } := compileRuleBodyInline(options, name, helperName, arg, false, alternative)
+    allHelpers.push anchorTo options, alternative?.line, helpers.flatMap((h) -> [h, "\n\n"])
+    anchorTo options, alternative?.line, [
+      header
+      "\n"
       body
-      `\n}\n\n`
+      "\n"
+      mapped("}", alternative?.end)
+      "\n\n"
     ]
 
   retType := ruleReturnType(rule)
@@ -666,19 +731,25 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST): AST
   else ""
   tryBlock := [
     `  const $$final${finalWideDecl} = `
-    args.map((_, i) -> `${name}$${i}($$ctx, $$state)`).join("\n    || ")
+    args.map (_, i) -> [
+      i ? "\n    || " : ""
+      mapped(`${name}$${i}`, (alternatives?[i] ?? ruleLine)?.start)
+      "($$ctx, $$state)"
+    ]
     `;\n`
   ]
 
   [
-    ...allHelpers.flatMap((h) -> [h, "\n\n"])
+    ...allHelpers
     ...subFunctions
-    `function ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
+    mapped("function", positions?.name)
+    ` ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
     emitEventEnter(options, name, retType)
     ...tryBlock
     emitEventExit(options, name)
     `\n  return $$final;`
-    `\n}`
+    "\n"
+    mapped("}", if perAlternative then lineEnd positions!.name else ruleLine?.end)
   ]
 
 /**
@@ -759,13 +830,13 @@ transpileEmbeddedCode := (options: CompilerOptions, codeBlocks: ASTNode[], prefi
     genOpts.updateSourceMap = virtualSM.updateSourceMap.bind(virtualSM)
 
   nodes: ASTNode[] := [codeBlocks, "\n"]
-  for { handler, parameters, paramTypes }, i of handlers
-    nodes.push
-      anchor: handler.$loc.pos
-      children: [
-        handlerFunctionParts(`function ${prefix}h_${i}__`, options.types, handler, parameters, paramTypes)
-        "\n}\n"
-      ]
+  for { handler, parameters, paramTypes, alternative }, i of handlers
+    nodes.push anchorTo options, alternative?.line, [
+      handlerFunctionParts([mapped("function", alternative?.line), ` ${prefix}h_${i}__`], options.types, handler, parameters, paramTypes)
+      "\n"
+      mapped("}", alternative?.end)
+      "\n"
+    ]
   // Parenthesized, so an expression that starts on a new line isn't cut off
   // by automatic semicolon insertion after `return`
   for expr, j of dynamicExprs
@@ -809,6 +880,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
 
   embeddedPrefix = if options.transpileEmbedded then embeddedPrefixFor rules, codeBlocks
   embeddedHandlers = []
+  mapSource = if options.inlineMap or options.sourceMap then options.source
+  rulePositions = (rules as any)[Symbol.for("positions")]
 
   body := ruleNames.flatMap (name) ->
     [ compileRule(options, name, rules[name]), "\n\n"]

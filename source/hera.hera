@@ -5,6 +5,7 @@ import type {
   NameNode,
   Handler,
   CodeBlockNode,
+  RulePositions,
 } from './hera-types'
 
 const regexEscapes: Record<string, string> = {
@@ -28,9 +29,18 @@ function normalizeRegExpSource(source: string) {
 
 Grammar
   Statement* ->
-    const code = $1.filter(a => typeof a === "object" && a !== null && "type" in a && a.type === "CodeBlock")
-    const rules = Object.fromEntries($1.filter(a => Array.isArray(a)))
+    const code: CodeBlockNode[] = []
+    const definitions: [string, HeraAST, RulePositions][] = []
+    const positions = new Map<string, RulePositions>()
+    for (const statement of $1) {
+      if (Array.isArray(statement)) {
+        definitions.push(statement)
+        positions.set(statement[0], statement[2])
+      } else code.push(statement)
+    }
+    const rules = Object.fromEntries(definitions)
     rules[Symbol.for("code")] = code
+    rules[Symbol.for("positions")] = positions
     return rules
 
 Statement
@@ -40,15 +50,18 @@ Statement
 CodeBlock
   TripleBacktick CodeBody TripleBacktick -> $2
 
+# The rule's name and body, and where the rule and each alternative start
 Rule
-  Name RuleBody -> [$1, $2]
+  Name RuleBody :: [string, HeraAST, RulePositions] -> [$1, $2[0], { name: $loc.pos, alternatives: $2[1] }]
 
 RuleTypeAnnotation
   Space* TypeAnnotation -> $2
 
+# The rule's body and where each alternative starts
 RuleBody
-  RuleTypeAnnotation?:t EOS ( Indent Choice )+:choices :: HeraAST ->
-    var r: HeraAST[] = choices.map((a) => a[1] as HeraAST)
+  RuleTypeAnnotation?:t EOS ( Indent Choice )+:choices :: [HeraAST, number[]] ->
+    var r: HeraAST[] = choices.map((a) => a[1][0])
+    const positions = choices.map((a) => a[1][1])
     if (t) r = r.map((a): HeraAST => {
       if (typeof a === "string") return ["S", [a], { t }] as unknown as HeraAST
       const handler = a[2]
@@ -58,16 +71,17 @@ RuleBody
       }
       return [a[0], a[1], { t }] as unknown as HeraAST
     })
-    if (r.length === 1) return r[0];
-    return ["/", r] as HeraAST
+    if (r.length === 1) return [r[0], positions]
+    return [["/", r] as HeraAST, positions]
 
+# An alternative, and where it starts
 Choice
-  Sequence Handling ->
-    if ($2 === undefined) return $1
+  Sequence Handling :: [HeraAST, number] ->
+    if ($2 === undefined) return [$1, $loc.pos]
     // A bare rule reference gets wrapped so the handler has somewhere to live
-    if (typeof $1 === "string") return ["S", [$1], $2]
+    if (typeof $1 === "string") return [["S", [$1], $2], $loc.pos]
     $1.push($2)
-    return $1
+    return [$1, $loc.pos]
 
 Sequence
   Expression SequenceExpression+ :: SequenceNode ->

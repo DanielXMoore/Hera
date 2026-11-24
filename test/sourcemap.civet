@@ -1,7 +1,7 @@
 assert from assert
-{ TraceMap, decodedMappings } from @jridgewell/trace-mapping
+{ TraceMap, decodedMappings, originalPositionFor } from @jridgewell/trace-mapping
 { parse } from ../source/main.civet
-{ compile } from ../source/compiler.civet
+{ compile, type CompilerOptions } from ../source/compiler.civet
 { composeLines, decodeMappings, SourceMap, type SourceMapEntry } from ../source/sourcemap.civet
 { readFile } from ./helper.civet
 
@@ -87,3 +87,112 @@ describe "sourcemap", ->
       sm := new SourceMap "ab\ncd", "a.hera"
       sm.updateSourceMap "x", 5
       assert.deepEqual sm.lines, [[[0, 0, 1, 2]]]
+
+  describe "grammar mappings", ->
+    grammar := """
+      Start
+        Greeting Name? ->
+          return [$1, $2]
+
+      Greeting
+        "hello" -> "hi"
+        Farewell
+        "hey"
+
+      Farewell
+        "bye" / "ciao"
+
+      Name
+        " " /[a-z]+/
+
+      Alias
+        Name
+    """
+
+    /**
+    Compile `grammar` with a source map.  Positions are [line, column], 0-based;
+    an unmapped one is undefined.
+    */
+    compileMapped := (options: CompilerOptions = {}) ->
+      { code, sourceMap } := compile parse(grammar), { ...options, source: grammar, filename: "g.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "g.js"
+      lines := code.split "\n"
+      lineOf := (text: string, from = 0) ->
+        line := lines.findIndex (l, i) -> i >= from and l.includes text
+        assert line >= 0, text
+        line
+      original := (line: number, column: number) ->
+        { line: l, column: c } := originalPositionFor map, { line: line + 1, column }
+        l? ? [l - 1, c] : undefined
+      at := (text: string, offset = 0) ->
+        line := lineOf text
+        original line, lines[line].indexOf(text) + offset
+      /** Where function `name`'s `function` keyword and closing brace map */
+      fn := (name: string) ->
+        line := lineOf `function ${name}(`
+        close := lines[line].endsWith("}") ? line : lines.findIndex (l, i) -> i > line and l is "}"
+        [original(line, 0), original(close, lines[close].length - 1)]
+      /** The same for the handler IIFE in function `name`, and where it's called */
+      iife := (name: string) ->
+        line := lineOf "(function(", lineOf `function ${name}(`
+        close := lineOf "})(", line
+        column := lines[close].indexOf "})("
+        [original(line, lines[line].indexOf("function")), original(close, column), original(close, column + 2)]
+      { at, fn, iife }
+
+    // Each function maps from the start of its alternative's line (or the
+    // rule's name) to the end of the alternative's last line (or the rule's),
+    // and each call to the alternative it's made for
+    rules := (m: ReturnType<typeof compileMapped>) ->
+      assert.deepEqual m.fn("Start"), [[0, 0], [2, 19]]
+      assert.deepEqual m.at("Start$parser($$ctx"), [1, 2]
+      // The rest of a header is unmapped
+      assert.equal m.at("function Start(", 9), undefined
+
+      // Alternatives on lines of their own have functions of their own
+      assert.deepEqual m.fn("Greeting"), [[4, 0], [4, 8]]
+      assert.deepEqual m.at("= Greeting$0(", 2), [5, 2]
+      assert.deepEqual m.at("|| Greeting$1(", 3), [6, 2]
+      assert.deepEqual m.at("|| Greeting$2(", 3), [7, 2]
+      assert.deepEqual m.fn("Greeting$0"), [[5, 0], [5, 17]]
+      assert.deepEqual m.at("Greeting$0$parser($$ctx"), [5, 2]
+      assert.deepEqual m.fn("Greeting$1"), [[6, 0], [6, 10]]
+      assert.deepEqual m.at("return Farewell(", 7), [6, 2]
+      assert.deepEqual m.fn("Greeting$2"), [[7, 0], [7, 7]]
+      assert.deepEqual m.at("Greeting$2$parser($$ctx"), [7, 2]
+
+      // Alternatives on one line share it
+      assert.deepEqual m.fn("Farewell"), [[9, 0], [10, 16]]
+      assert.deepEqual m.at("= Farewell$0(", 2), [10, 2]
+      assert.deepEqual m.at("|| Farewell$1(", 3), [10, 2]
+      assert.deepEqual m.fn("Farewell$0"), [undefined, undefined]
+
+      assert.deepEqual m.fn("Name"), [[12, 0], [13, 14]]
+      assert.deepEqual m.at("Name$parser($$ctx"), [13, 2]
+      assert.deepEqual m.fn("Alias"), [[15, 0], [16, 6]]
+      assert.deepEqual m.at("$$final = Name(", 10), [16, 2]
+
+    it "should map rules' and handlers' generated code to the grammar", ->
+      m := compileMapped()
+      rules m
+      assert.deepEqual m.iife("Start"), [[1, 0], [2, 19], [1, 2]]
+      assert.deepEqual m.iife("Greeting$0"), [[5, 0], [5, 17], [5, 2]]
+
+    it "should map handler functions with transpileEmbedded", ->
+      m := compileMapped transpileEmbedded: (src, upstreamSourceMap) ->
+        { code: src, sourceMap: lines: upstreamSourceMap!.lines }
+      rules m
+      assert.deepEqual m.fn("__hera_h_0__"), [[1, 0], [2, 19]]
+      assert.deepEqual m.at("= __hera_h_0__(", 2), [1, 2]
+      assert.deepEqual m.fn("__hera_h_1__"), [[5, 0], [5, 17]]
+
+    it "should map only handlers in rules without positions", ->
+      source := 'Rule\n  "a" -> "b"\n'
+      rules := parse source
+      { code, sourceMap } := compile { Rule: rules.Rule }, { source, filename: "r.hera", sourceMap: true }
+      map := new TraceMap sourceMap.json "r.js"
+      lines := code.split "\n"
+      line := lines.findIndex .startsWith "function Rule("
+      assert.equal originalPositionFor(map, { line: line + 1, column: 0 }).line, null
+      handler := lines.findIndex .includes '"b"'
+      assert.equal originalPositionFor(map, { line: handler + 1, column: lines[handler].indexOf '"b"' }).line, 2

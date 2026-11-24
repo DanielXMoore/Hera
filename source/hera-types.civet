@@ -24,9 +24,18 @@ export type NameNode = [{ name: string }, HeraAST, Handler?]
 export type PrimaryNode = TerminalNode | SequenceNode | NameNode
 export type HeraAST = PrefixNode | SuffixNode | SequenceNode | TerminalNode | NameNode | string
 
+/**
+Where a rule starts in the grammar source (its name), and where each of its
+alternatives starts (after its line's two-space indent)
+*/
+export type RulePositions = { name: number, alternatives: number[] }
+
 export const CodeSymbol = Symbol.for("code")
+export const PositionsSymbol = Symbol.for("positions")
 
 export type HeraRules = {
   [key: string]: HeraAST,
   [CodeSymbol]?: CodeBlockNode[]
+  /** Rule names to their positions, for source maps */
+  [PositionsSymbol]?: Map<string, RulePositions>
 }
