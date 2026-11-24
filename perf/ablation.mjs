@@ -124,6 +124,7 @@ const samples = [
   },
 ].filter((s) => !args.samples || args.samples.split(",").includes(s.name))
 
+const optimizations = ["cc"]
 // `ref` names the variant each one is compared against (ratio = variant / ref).
 // A variant can set `compile` (compiler options) or `parse` (parse options).
 const variants = [
@@ -131,6 +132,7 @@ const variants = [
   { name: "current", ref: "baseline" },
   // Identical to `current`: its spread is the measurement noise floor.
   { name: "current again", ref: "current" },
+  ...optimizations.map((o) => ({ name: `${o} off`, compile: { disableOptimizations: [o] }, ref: "current" })),
 ].filter((v) => !args.variants || args.variants.split(",").includes(v.name) || ["baseline", "current", "current again"].includes(v.name))
 
 // ---- run -------------------------------------------------------------------

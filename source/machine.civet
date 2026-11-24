@@ -101,6 +101,145 @@ export interface CursorParser<T> {
 }
 
 /**
+ * Compile a simple character-class RegExp (single atom `[...]`/`\s`/`\d`/`\w`/`.`
+ * with optional `+`/`*`/`?`, or ASCII identifier pattern `[start][cont]*` with
+ * optional negative lookahead `(?![stop])`) into a fast `(input, pos) => number`
+ * matcher returning the match end index (or `-1` on failure) without allocating
+ * a `RegExpMatchArray` or invoking V8's RegExp engine on ASCII inputs.
+ */
+const ccSingleRe = /^(\[(?:\\.|[^\]\\])+\]|\\s|\\d|\\w|\.)([+*?])?$/
+const ccIdentRe = /^(\[(?:\\.|[^\]\\])+\])(\[(?:\\.|[^\]\\])+\])([*+])(?:\(\?!(\[(?:\\.|[^\]\\])+\])\))?$/
+
+export function isCharClassRe(source: string): boolean {
+  return ccSingleRe.test(source) || ccIdentRe.test(source)
+}
+
+function isAsciiOnlyAtom(atom: string): boolean {
+  if (atom === "." || atom.startsWith("[^") || atom === "\\s") return false
+  if (/\\[sSdDwWpPuUx]/.test(atom)) return false
+  for (let i = 0; i < atom.length; i++) {
+    if (atom.charCodeAt(i) >= 128) return false
+  }
+  return true
+}
+
+/**
+ * Whether `pos` is a trail surrogate after a lead surrogate. A Unicode regex
+ * that starts there starts matching at the lead surrogate, before the cursor,
+ * where `$cc` would start at the trail surrogate. Literals can't end there and
+ * Unicode regexes can't either, so only a rule called directly at that
+ * position could start there, and `$wrap` rejects it.
+ */
+function insidePair(input: string, pos: number): boolean {
+  return pos > 0 && (input.charCodeAt(pos) & 0xFC00) === 0xDC00 && (input.charCodeAt(pos - 1) & 0xFC00) === 0xD800
+}
+
+/** The end of `re`'s match at `pos`, or -1 */
+function reEnd(re: RegExp, input: string, pos: number): number {
+  re.lastIndex = pos
+  const m = re.exec(input)
+  return m ? pos + m[0].length : -1
+}
+
+function buildAsciiTable(atomRe: RegExp): Uint8Array {
+  const ascii = new Uint8Array(128)
+  for (let c = 0; c < 128; c++) {
+    atomRe.lastIndex = 0
+    ascii[c] = atomRe.test(String.fromCharCode(c)) ? 1 : 0
+  }
+  return ascii
+}
+
+export function $cc(re: RegExp): (input: string, pos: number) => number
+  source := re.source
+  m1 := ccSingleRe.exec(source)
+  if m1
+    atom := m1[1]
+    quant := m1[2] || ""
+    charRe := new RegExp(atom, "suy")
+    ascii := buildAsciiTable(charRe)
+    asciiOnly := isAsciiOnlyAtom(atom)
+
+    if quant is "+" or quant is "*"
+      requireOne := quant is "+"
+      if asciiOnly
+        return (input: string, pos: number) =>
+          p .= pos
+          len := input.length
+          while p < len
+            c := input.charCodeAt(p)
+            break if c >= 128 or !ascii[c]
+            p++
+          if requireOne and p is pos then -1 else p
+      return (input: string, pos: number) =>
+        p .= pos
+        len := input.length
+        while p < len
+          c := input.charCodeAt(p)
+          if c < 128
+            break if !ascii[c]
+            p++
+          else
+            charRe.lastIndex = p
+            m := charRe.exec(input)
+            break if !m
+            p += m[0].length
+        if requireOne and p is pos then -1 else p
+
+    // Single character (`""`) or optional single character (`"?"`)
+    optional := quant is "?"
+    if asciiOnly
+      return (input: string, pos: number) =>
+        c := input.charCodeAt(pos)
+        if c < 128 and ascii[c] then pos + 1 else (if optional then pos else -1)
+    return (input: string, pos: number) =>
+      c := input.charCodeAt(pos)
+      if c < 128
+        return if ascii[c] then pos + 1 else (if optional then pos else -1)
+      return (if optional then pos else -1) if c !== c
+      charRe.lastIndex = pos
+      m := charRe.exec(input)
+      if m then pos + m[0].length else (if optional then pos else -1)
+
+  m2 := ccIdentRe.exec(source)
+  if m2 and isAsciiOnlyAtom(m2[1]) and isAsciiOnlyAtom(m2[2])
+    ascii1 := buildAsciiTable(new RegExp(m2[1], "suy"))
+    ascii2 := buildAsciiTable(new RegExp(m2[2], "suy"))
+    requireCont := m2[3] is "+"
+    stopAtom := m2[4]
+    stopRe := if stopAtom then new RegExp(stopAtom, "suy") else undefined
+    asciiStop := if stopRe then buildAsciiTable(stopRe) else undefined
+    stopAsciiOnly := if stopAtom then isAsciiOnlyAtom(stopAtom) else true
+    return (input: string, pos: number) =>
+      len := input.length
+      return -1 if pos >= len
+      c0 := input.charCodeAt(pos)
+      return -1 if c0 >= 128 or !ascii1[c0]
+      p .= pos + 1
+      while p < len
+        c := input.charCodeAt(p)
+        break if c >= 128 or !ascii2[c]
+        p++
+      return -1 if requireCont and p is pos + 1
+      if asciiStop and p < len
+        cs := input.charCodeAt(p)
+        hitStop := if cs < 128
+          asciiStop[cs] is 1
+        else if !stopAsciiOnly
+          stopRe!.lastIndex = p
+          stopRe!.test(input)
+        else
+          false
+        if hitStop
+          // Backtrack via the original regex (e.g. /[a][b]*(?![x])/ on "abx" -> "a")
+          re.lastIndex = pos
+          m := re.exec(input)
+          return if m then pos + m[0].length else -1
+      p
+
+  return (input: string, pos: number) => reEnd(re, input, pos)
+
+/**
  * Wire `events` onto a `CursorContext`. Fast `cacheEnter`/`cacheExit` hooks are
  * attached directly; legacy `enter`/`exit` hooks are adapted once per parse so
  * generated rules only check a single fast hook.
@@ -159,6 +298,7 @@ export function $wrap<R>(
   ctx: ParserContext,
   state: ParseState
 ): MaybeResult<Exclude<R, typeof FAIL>> {
+  if (insidePair(state.input, state.pos)) throw new Error(`Can't start a rule at position ${state.pos}, between the halves of a surrogate pair`)
   const c: CursorContext = {
     input: state.input,
     pos: state.pos,

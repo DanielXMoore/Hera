@@ -21,6 +21,14 @@ All notable changes to `@danielx/hera` will be documented in this file.
   gzipped). Each exported rule keeps its `(ctx, state)` signature and result, and
   `events.enter` and `exit` still run. The runtime keeps the combinators, so
   parsers compiled by earlier versions still work.
+- A regex that is a single character class (such as `/[a-z]+/` or
+  `/[^"]*/`) or an ASCII identifier pattern matches ASCII text with a lookup
+  table instead of the regex engine. Hera's sample grammars parse 17-57%
+  faster warm, but building the tables makes loading a parser and running
+  its first parse take 1.10-1.47x as long.
+- Calling an exported rule directly at a position between the halves of a
+  surrogate pair throws. A Unicode regex starting there matched from the
+  lead surrogate, before the given position.
 
 ## [0.9.10] - 2026-11-24
 

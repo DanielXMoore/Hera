@@ -78,8 +78,9 @@ points with identical code.  `ablation.mjs` instead:
   sample (e.g. an older grammar syntax) shows `n/a` and is listed as not
   compared.
 
-Variants can set compiler options or parse options.  Writes
-`perf/ablation-report.txt` (gitignored).
+Variants can set compiler options or parse options; `cc off` turns off the
+`$cc` matchers with the internal `disableOptimizations` compiler option.
+Writes `perf/ablation-report.txt` (gitignored).
 
 ## Extending
 
