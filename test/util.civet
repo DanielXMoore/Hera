@@ -11,17 +11,12 @@ normalizeHandlerLocs := (value) ->
     return value.map normalizeHandlerLocs
 
   if value and typeof value is "object"
-    if "f" in value and "$loc" in value
-      return Object.fromEntries(
-        Object.entries(value)
-          .filter ([key]) ->
-            key != "$loc"
-          .map ([key, entry]) ->
-            [key, normalizeHandlerLocs(entry)]
-      )
-
+    // Positions in the grammar (a handler's, and its `::Type`'s) differ
+    // between the decompiled grammar and the original
     return Object.fromEntries(
       Object.entries(value)
+        .filter ([key]) ->
+          key != "tPos" and not (key is "$loc" and "f" in value)
         .map ([key, entry]) ->
           [key, normalizeHandlerLocs(entry)]
     )

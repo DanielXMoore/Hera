@@ -22,9 +22,14 @@ All notable changes to `@danielx/hera` will be documented in this file.
   reads as the path through the grammar. Handler and code block text has a
   segment at each word, so columns stay exact for tools that don't
   interpolate within a segment (c8, Node.js, esbuild). Maps are 2-3x larger.
+- In typed output's source maps, type errors point at the `::Type` they come
+  from: a rule's or alternative's result that doesn't match its type, and an
+  unknown name in a type, map to the annotation, and an inline handler's
+  value that doesn't match maps to the handler. Before, these errors mapped
+  nowhere, or only to the rule with `transpileEmbedded`.
 - `parse` records where each rule and each of its alternatives start, under
   `Symbol.for("positions")` (a Map from rule name) in the rules it returns,
-  for these maps.
+  and where each `::Type` starts (`tPos` on its handler), for these maps.
 
 ### Changed
 - The esbuild plugin with `language: "civet"`, and the

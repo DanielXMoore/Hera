@@ -2056,17 +2056,19 @@ describe "Hera", ->
         assert i >= 0, match
         sourceMap.lines[i].filter((e) -> e.length is 4).map (e) -> [e[2], e[3]]
 
-      // Rule's header, typed with its `::number`, maps to the rule, with a
-      // segment at each identifier so that a consumer that interpolates
-      // columns stays on the rule's position
+      // Rule's header maps to the rule, with a segment at each identifier so
+      // that a consumer that interpolates columns stays on the rule's
+      // position, except for its type, copied from the `::number`
       header := sources "function Rule("
       assert header.length > 5
-      assert.deepEqual new Set(header.map(JSON.stringify)), new Set [JSON.stringify [0, 0]]
+      assert.deepEqual new Set(header.map(JSON.stringify)), new Set [[0, 0], [0, 7]].map(JSON.stringify)
       // The handler's function maps to its alternative's line, through the
-      // transpiler's map
+      // transpiler's map, except for its return type, copied from the rule's
+      // `::number`
       handlerHeader := sources "function __hera_h_0__("
       assert handlerHeader.length > 0
-      assert handlerHeader.every ([line]) -> line is 1
+      assert handlerHeader.every ([line, column]) -> line is 1 or (line is 0 and column is 7)
+      assert handlerHeader.some ([line]) -> line is 0
       // So does a rule without a handler
       assert.deepEqual new Set(sources("function Bare(").map(JSON.stringify)), new Set [JSON.stringify [7, 0]]
 

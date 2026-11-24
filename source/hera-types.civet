@@ -7,7 +7,12 @@ import type { Loc, ParserContext, HeraGrammar, ParserOptions } from "./machine.c
 export type ParserContext, HeraGrammar, ParserOptions
 
 export type Terminal = string | RegExp
-export type Handler = { $loc: Loc, f: string, t?: string, inline?: boolean } | { t: string }
+/**
+A `::Type` annotation: the type's text, and where it starts in the grammar
+(after the `::`)
+*/
+export type TypeAnnotationNode = { t: string, tPos: number }
+export type Handler = { $loc: Loc, f: string, t?: string, tPos?: number, inline?: boolean } | { t: string, tPos?: number }
 export type CodeBlockNode = { type: "CodeBlock", $loc: Loc, token: string }
 export type TerminalOp = "L" | "R" | "RD"
 export type SequenceOp = "S" | "/"

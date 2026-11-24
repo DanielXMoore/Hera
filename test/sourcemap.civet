@@ -206,6 +206,57 @@ describe "sourcemap", ->
       assert.deepEqual at("].join"), [7, 2]
       assert.deepEqual at("join()"), [7, 4]
 
+    // TypeScript reports a result that doesn't match its `::Type` at the
+    // `return` (or `$$final`) checked against it, and an unknown name in a
+    // type at the type
+    it "should map typed returns and types to their annotations", ->
+      source := """
+        Num ::number
+          "a" -> 1
+
+        Str ::string
+          Num
+
+        Alts
+          "p" ::number -> 1
+          "q" ::number
+
+        Wide ::number
+          "w" -> 2
+          "v" -> 3
+
+        Empty
+          "e" ::
+          "f" ::
+      """
+      { code, sourceMap } := compile parse(source), { source, filename: "t.hera", sourceMap: true, types: true }
+      map := new TraceMap sourceMap.json "t.ts"
+      lines := code.split "\n"
+      /** Where `text` maps, on the first line with it from function `name`'s */
+      at := (name: string, text: string, offset = 0) ->
+        start := lines.findIndex .startsWith `function ${name}(`
+        line := lines.findIndex (l, i) -> i >= start and l.includes text
+        { line: l, column } := originalPositionFor map, { line: line + 1, column: lines[line].indexOf(text) + offset }
+        [l! - 1, column]
+
+      // An inline handler's `return` maps to the handler, and its type to the
+      // annotation
+      assert.deepEqual at("Num", "return 1"), [1, 9]
+      assert.deepEqual at("Num", "): number {", 3), [0, 6]
+      assert.deepEqual at("Num", "MaybeResult<number> {", 12), [0, 6]
+      // A rule's result is checked against its annotation
+      assert.deepEqual at("Str", "return $$final;"), [3, 6]
+      // ...or, in a choice, against the rule's annotation, or the rule when
+      // each alternative has its own
+      assert.deepEqual at("Wide", "$$final:"), [10, 7]
+      assert.deepEqual at("Alts", "$$final:"), [6, 0]
+      assert.deepEqual at("Alts", "MaybeResult<number> =", 12), [7, 8]
+      // Empty annotations don't type the rule
+      assert.doesNotMatch lines.find(.startsWith "function Empty(")!, /MaybeResult/
+
+      // Without positions (rules built by hand), types aren't mapped
+      assert.match compile({ Rule: ["L", "a", { t: " string" }] } as any, { types: true }), /MaybeResult<string>/
+
     it "should map only handlers in rules without positions", ->
       source := 'Rule\n  "a" -> "b"\n'
       rules := parse source

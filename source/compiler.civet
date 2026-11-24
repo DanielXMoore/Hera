@@ -45,7 +45,7 @@ export type EmbeddedTranspileResult =
       }
     }
 
-type Handler = { $loc: any, f: string, t?: string, inline?: boolean }
+type Handler = { $loc: any, f: string, t?: string, tPos?: number, inline?: boolean }
 
 type EmbeddedHandler = {
   handler: Handler
@@ -273,24 +273,56 @@ usesIdentifier := (text: string, identifier: string): boolean ->
     identifierREs.set identifier, re
   re.test text
 
+/**
+`t`, the text of a `::Type`, trimmed unless `trim` is false, and copied from
+the annotation at `tPos` when that is known: type errors in it, such as an
+unknown name, then point at the annotation.
+*/
+typeText := (t: string, tPos: number | undefined, trim = true): ASTNode ->
+  token := trim ? t.trim() : t
+  mapped token, if tPos? then tPos + t.length - t.trimStart().length
+
+/**
+A rule's declared return type: `type`, copied from its `::Type` annotations,
+and `pos`, where the annotation starts when one annotation types the whole
+rule.  TypeScript checks the rule's result against the type there.
+*/
+type RuleType = { type: ASTNode, pos: number | undefined }
+
 // Compute the declared return type of a rule, if any.
 // For top-level choice: union of sub-rule types (only if all are annotated).
 // For single-body: the handler's h.t.
 // Returns undefined if not statically known.
-ruleReturnType := (rule: HeraAST): string | undefined ->
+ruleReturnType := (rule: HeraAST): RuleType | undefined ->
   return undefined if typeof rule is "string"
-  if rule[0] is "/" and !rule[2]
-    // Top-level choice
-    subTypes := rule[1].map (arg) ->
-      return undefined if typeof arg is "string"
-      return arg[2].t if arg.length is 3 and arg[2]
-      return undefined
-    if subTypes.every((t) -> t?)
-      return [...new Set(subTypes.map((t) -> t!.trim()))].join(" | ")
+  isTopChoice := rule[0] is "/" and !rule[2]
+  handlers := if isTopChoice
+    rule[1].map (arg) ->
+      if typeof arg is "string" or arg.length !== 3 then undefined else arg[2]
+  else if rule.length is 3 and rule[2]?.t
+    [rule[2]]
+  else
     return undefined
-  if rule.length is 3 and rule[2]
-    return rule[2].t
-  return undefined
+  return undefined unless handlers.every (h) -> h?.t?
+  // Each distinct type once, copied from its first annotation
+  type: ASTNode[] := []
+  seen := new Set<string>
+  for h of handlers
+    t := h!.t!.trim()
+    continue if seen.has t
+    type.push " | " if seen.size
+    seen.add t
+    type.push typeText h!.t!, h!.tPos
+  return undefined if isTopChoice and seen.size is 1 and seen.has ""
+  first := handlers[0]!.tPos
+  { type, pos: if handlers.every((h) -> h!.tPos is first) then first }
+
+/**
+`return`, mapped to the `::Type` annotation it's checked against: TypeScript
+reports a rule's result not matching its type there.
+*/
+typedReturn := (options: CompilerOptions, retType: RuleType | undefined): ASTNode ->
+  mapped "return", if options.types then retType?.pos
 
 // Emit the inline $EVENT enter hook. Establishes `$$eventData` and may early-return on cache hit.
 //
@@ -299,7 +331,7 @@ ruleReturnType := (rule: HeraAST): string | undefined ->
 // accepts cleanly across many rules in the same module; the deeply-nested
 // form confused civet's state after ~7k lines of similar rule functions in
 // Civet's own parser.hera output.
-emitEventEnter := (options: CompilerOptions, name: string, retType: string | undefined): string ->
+emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | undefined): ASTNode ->
   { types } := options
   // Cast the cache return so the rule function's inferred return type matches
   // `Parser<T>` (i.e. `MaybeResult<T>`), not `unknown` from `ParserContext.enter`.
@@ -307,14 +339,13 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: string | und
   // contributes nothing to the function's inferred return type — preserving
   // the precise type inferred from the success path.
   retAnno := if types
-    if retType then ` as MaybeResult<${retType.trim()}>` else " as never"
+    if retType then [" as MaybeResult<", retType.type, ">"] else " as never"
   else ""
-  ```
-\  const $$entered = $$ctx.enter?.(${JSON.stringify(name)}, $$state);
-  if ($$entered && "cache" in $$entered) return $$entered.cache${retAnno};
-  const $$eventData = $$entered?.data;
-  ```
-  + "\n"
+  [
+    `  const $$entered = $$ctx.enter?.(${JSON.stringify(name)}, $$state);\n  if ($$entered && "cache" in $$entered) return $$entered.cache`
+    retAnno
+    ";\n  const $$eventData = $$entered?.data;\n"
+  ]
 
 // Emit the inline $EVENT exit hook. Assumes `$$final` holds the result.
 // In tokenize-compiled output, also rewrites `$$final.value` into a
@@ -354,7 +385,7 @@ emitEventExit := (options: CompilerOptions, name: string): string ->
 // lands at 2-space indent, while the handler body comes in at 4-space from
 // the grammar's source indent.
 handlerFunctionParts := (declaration: ASTNode, types: boolean | undefined, handler: Handler, parameters: string[], paramTypes: string[]): ASTNode[] ->
-  handlerRetAnno := types and handler.t ? `: ${handler.t}` : ""
+  handlerRetAnno := types and handler.t ? [": ", typeText handler.t, handler.tPos, false] : ""
 
   typedParameters := if types
     parameters.map (p, i) -> `${p}: ${paramTypes[i]}`
@@ -376,11 +407,14 @@ handlerFunctionParts := (declaration: ASTNode, types: boolean | undefined, handl
   // sensitive consumers (Civet parsing Hera's output) read them as new
   // statements instead of the object body.  Prepend `bodyIndent` after each
   // newline so the grammar's relative nesting is preserved inside the IIFE.
-  // Each line is a token of its own, so the indent isn't mapped.
+  // Each line is a token of its own, so the indent isn't mapped.  The
+  // `return` maps to the handler too: TypeScript reports a returned value that
+  // doesn't match the handler's `::Type` there.
   handlerBody: ASTNode := if handler.inline
     pos .= handler.$loc.pos
     [
-      `${bodyIndent}return `
+      bodyIndent
+      mapped "return ", pos
       ...if handler.f.includes "\n"
         handler.f.split(/(?<=\n)/).map (line, i) ->
           token := { $loc: { pos }, token: line }
@@ -405,7 +439,9 @@ handlerFunctionParts := (declaration: ASTNode, types: boolean | undefined, handl
 
   [
     declaration
-    `(${typedParameters.join(", ")})${handlerRetAnno} {\n`
+    `(${typedParameters.join(", ")})`
+    handlerRetAnno
+    " {\n"
     voidLine
     handlerBody
   ]
@@ -467,7 +503,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
         mapped(rule, alternative?.start)
         "($$ctx, $$state);\n"
         emitEventExit(options, name)
-        `\n  return $$final;`
+        "\n  "
+        typedReturn options, retType
+        " $$final;"
       ]
     }
 
@@ -497,7 +535,9 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, fnName: string
         call
         "\n"
         emitEventExit(options, name)
-        `\n  return $$final;`
+        "\n  "
+        typedReturn options, retType
+        " $$final;"
       ]
     else
       ["  return ", call]
@@ -628,26 +668,24 @@ ${valueDecl}  const $$m = `
   // type.  $$final's annotation does the typing work — the `as any` on the
   // assignment from $$r is just to bypass the structural mismatch (TS still
   // believes $$r.value has its old shape pre-mutation).
-  finalType := if types
-    `MaybeResult<${
-      if retType then retType.trim() else "typeof $$m"
-    }>`
-  else ""
+  finalType := if types then ["MaybeResult<", retType?.type ?? "typeof $$m", ">"]
   rValueCast := types ? " as any" : ""
   body.push ";\n"
   if handlerUsesSkip
     skipCast := types ? " as any" : ""
-    body.push ```
-    \  const $$final${finalType && `: ${finalType}`} = ($$m${skipCast}) !== SKIP ? (($$r${rValueCast}).value = $$m, $$r${rValueCast}) : undefined;
-      ${exitHook("$$final")}
-      return $$final;
-    ```
+    body.push [
+      "  const $$final"
+      if finalType then [": ", finalType] else ""
+      ` = ($$m${skipCast}) !== SKIP ? (($$r${rValueCast}).value = $$m, $$r${rValueCast}) : undefined;\n  ${exitHook("$$final")}\n  `
+      typedReturn options, retType
+      " $$final;"
+    ]
   else
-    body.push ```
-    \  ($$r${rValueCast}).value = $$m;
-      ${exitHook("$$r")}
-      return $$r${finalType && ` as unknown as ${finalType}`};
-    ```
+    body.push [
+      `  ($$r${rValueCast}).value = $$m;\n  ${exitHook("$$r")}\n  return $$r`
+      if finalType then [" as unknown as ", finalType] else ""
+      ";"
+    ]
   return { helpers, body }
 
 /**
@@ -672,13 +710,15 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
     // precise return type from the body — consumers can then read the AST
     // shape via `ReturnType<typeof Rule>`.  An explicit ::Type still anchors
     // the inference so recursive rules don't fall back to `unknown`.
-    retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
+    retAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
     alternative := if positions then alternativeSpan positions.alternatives[0], rule
     { helpers, body } := compileRuleBodyInline(options, name, name, rule, true, alternative)
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
       mapped("function", positions?.name)
-      ` ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
+      ` ${name}($$ctx${ctxType}, $$state${stateType})`
+      retAnno
+      " {\n"
       body
       "\n"
       mapped("}", alternative?.end)
@@ -722,7 +762,7 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
   // Same as the non-choice branch: only emit a return annotation when an
   // explicit ::Type is known (or every alternative is annotated, per
   // ruleReturnType).  Otherwise let TS infer the union from the body.
-  retAnno := if types and retType then `: MaybeResult<${retType.trim()}>` else ""
+  retAnno := if types and retType then [": MaybeResult<", retType.type, ">"] else ""
 
   // Declare $$final at a union type so the `||` chain normalizes to
   // `MaybeResult<X | Y>` instead of `ParseResult<X> | MaybeResult<Y>`.
@@ -733,13 +773,19 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
   // when the rule is used inside `$S(...)` etc.
   finalWideDecl := if types
     if retType
-      `: MaybeResult<${retType.trim()}>`
+      retAnno
     else
       altUnion := args.map((_, i) -> `Unwrap<ReturnType<typeof ${name}$${i}>>`).join(" | ")
       `: MaybeResult<${altUnion}>`
   else ""
   tryBlock := [
-    `  const $$final${finalWideDecl} = `
+    "  const "
+    // TypeScript reports the alternatives' results not matching the rule's
+    // type here: at its annotation, or at the rule when each alternative has
+    // its own
+    mapped "$$final", if types and retType then retType.pos ?? positions?.name
+    finalWideDecl
+    " = "
     args.map (_, i) -> [
       i ? "\n    || " : ""
       mapped(`${name}$${i}`, (alternatives?[i] ?? ruleLine)?.start)
@@ -752,7 +798,9 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
     ...allHelpers
     ...subFunctions
     mapped("function", positions?.name)
-    ` ${name}($$ctx${ctxType}, $$state${stateType})${retAnno} {\n`
+    ` ${name}($$ctx${ctxType}, $$state${stateType})`
+    retAnno
+    " {\n"
     emitEventEnter(options, name, retType)
     ...tryBlock
     emitEventExit(options, name)
