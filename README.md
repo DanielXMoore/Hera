@@ -574,6 +574,30 @@ CJS:
 const { compile } = require("@danielx/hera")
 ```
 
+### Rule tags
+
+Tags on the lines above a rule describe it to Hera and to other tools:
+
+```hera
+# Comments go above the tags
+@state
+Nested
+  EOS Indent:indent ->
+    return $0 if indent.level is state.currentIndent.level
+    return $skip
+
+@nomemo @mytool.thing
+CodeSpanOpen
+  /`+/ ->
+    state.codeMarker = $0
+```
+
+- A tag line holds one or more space-separated tags and may end with a `# comment`. Tag lines may stack, but must sit directly above their rule, with no blank or comment line between.
+- Built-in tags are bare names, and Hera rejects a bare name it doesn't know. With `memo`:
+  - `@nomemo`: never memoize the rule, e.g. because its handler changes state that the memo can't restore on a cache hit.
+  - `@state`: the rule's handler reads the parser state that `memo.sk` stands for. Tagging rules `@state` tells Hera that every rule that can't reach one ignores `memo.sk`, so their results are shared across states. Without any `@state` tags, every memoized rule depends on `memo.sk`.
+- Other tags need a namespace (`@mytool.thing`). Hera keeps them for tools: `parse(grammar)[Symbol.for("tags")]` maps each tagged rule's name to its tags, without the `@`.
+
 ### `compile(grammar, options?)`
 
 Compiles a Hera grammar into parser source code.

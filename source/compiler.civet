@@ -1,6 +1,7 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
+import { TagsSymbol } from ./hera-types.civet
 import { isCharClassRe, MEMO_SLOTS } from ./machine.civet
 
 export type MemoTiers = {
@@ -129,6 +130,50 @@ type MemoSpec =
   | { base: number, mode: "stateless" }
   | { base: number, mode: "full" }
   | { base: number, mode: "masked", mask: number }
+
+/** Add the names of the rules that `ast` refers to into `refs` */
+addRuleRefs := (ast: HeraAST, refs: Set<string>): void ->
+  if typeof ast is "string"
+    refs.add ast
+    return
+  [op, body] := ast
+  return if op is "L" or op is "R" or op is "RD"
+  if op is "S" or op is "/"
+    for each child of body as HeraAST[]
+      addRuleRefs child, refs
+  else
+    addRuleRefs body as HeraAST, refs
+
+/** The rules tagged `@tag` in `rules` */
+taggedRules := (rules: HeraRules, tag: string): string[] ->
+  for [name, tags] of rules[TagsSymbol] ?? []
+    continue unless tags.includes tag
+    name
+
+/**
+The rules whose results can't depend on the parser's state key: those that
+can't reach a rule tagged `@state`, whose handler reads that state.
+Undefined when no rule is tagged `@state`, which means any rule may depend
+on it.
+*/
+export function stateIndependentRules(rules: HeraRules): Set<string> | undefined
+  readers := taggedRules rules, "state"
+  return unless readers#
+  callers := new Map<string, string[]>
+  for name of Object.keys rules
+    refs := new Set<string>
+    addRuleRefs rules[name], refs
+    for ref of refs
+      list := callers.get(ref)
+      if list then list.push name else callers.set ref, [name]
+  dependent := new Set readers
+  queue := [...readers]
+  while queue#
+    for each caller of callers.get(queue.pop()!) ?? []
+      continue if dependent.has caller
+      dependent.add caller
+      queue.push caller
+  new Set Object.keys(rules).filter (name) => not dependent.has name
 
 /** How rule `name` is memoized, or undefined if it isn't */
 getMemoSpec := (name: string): MemoSpec | undefined ->
@@ -1518,12 +1563,15 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   memoBase.clear()
   memoCount .= 0
   if options.memo
-    noMemo := new Set options.noMemo ?? []
+    noMemo := new Set [...(options.noMemo ?? []), ...taggedRules(rules, "nomemo")]
     for name of Object.keys rules
       unless noMemo.has name
         memoBase.set name, memoCount * MEMO_SLOTS
         memoCount++
-  memoStateless = if options.memoTiers?.stateless then new Set options.memoTiers.stateless
+  memoStateless = new Set [
+    ...(options.memoTiers?.stateless ?? [])
+    ...(stateIndependentRules(rules) ?? [])
+  ]
   memoMasks = options.memoTiers?.masks
   memoDefaultStateful = options.memoTiers?.defaultStateful ?? true
 

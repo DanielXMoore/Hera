@@ -2,6 +2,7 @@ assert from assert
 typescript from typescript
 { readFile } from ./helper.civet
 hera, { compile, execMod, generate, modImport, parse, parseTokens } from ../source/main.civet
+{ stateIndependentRules } from ../source/compiler.civet
 { transpileTsEmbedded, transpileTsToJs } from ../source/register/tsc/transpile.civet
 { EOL } from node:os
 { SourceMap } from ../source/sourcemap.civet
@@ -2715,6 +2716,133 @@ describe "Hera", ->
       assert.match tsCode, /\$mGet\(\$\$mc, \d+, \$\$p0, \$\$sk, \$\$ctx\)/
       assert.match tsCode, /\$\$sk = \(\$\$sk0 & 3\)/
       assert.match tsCode, /createMemoCache/
+
+  describe "rule tags", ->
+    tagsOf := (grammar: string) => parse(grammar)[Symbol.for("tags") as any] as Map<string, string[]>
+
+    it "should read decorator lines above rules", ->
+      tags := tagsOf """
+        # A comment goes above the decorators
+        @nomemo @mytool.thing # and one may end a decorator line
+        @state
+        Rule
+          "a"
+
+        Other
+          "b"
+
+        @mytool.deep.name
+        Last
+          "c"
+      """
+      assert.deepEqual [...tags], [
+        ["Rule", ["nomemo", "mytool.thing", "state"]]
+        ["Last", ["mytool.deep.name"]]
+      ]
+
+    it "should have no tags without decorators", ->
+      assert.equal tagsOf("Rule\n  \"a\"\n").size, 0
+      assert.equal stateIndependentRules(parse("Rule\n  \"a\"\n")), undefined
+
+    it "should reject an unknown bare tag", ->
+      assert.throws (-> parse "@nomeno\nRule\n  \"a\"\n"), /Unknown tag @nomeno on rule Rule\. Built-in tags are @nomemo, @state; a user tag needs a namespace, like @mytool\.nomeno/
+
+    it "should reject decorators not directly above a rule", ->
+      // A blank line, a comment line, or no rule at all
+      assert.throws -> parse "@state\n\nRule\n  \"a\"\n"
+      assert.throws -> parse "@state\n# comment\nRule\n  \"a\"\n"
+      assert.throws -> parse "Rule\n  \"a\"\n\n@state\n"
+
+    it "should never memoize a rule tagged @nomemo", ->
+      grammar := """
+        Root
+          Probe "b"
+          Probe "a"
+
+        @nomemo
+        Probe
+          "x" ->
+            probeRuns++
+            return $1
+
+        ```
+        let probeRuns = 0
+        exports.takeProbeRuns = () => { const n = probeRuns; probeRuns = 0; return n }
+        ```
+      """
+      mod := execMod(compile(parse(grammar), { memo: true })) as any
+      assert.deepEqual mod.parse("xa"), ["x", "a"]
+      assert.equal mod.takeProbeRuns(), 2
+
+    it "should find every rule that reaches a @state rule, along any path", ->
+      rules := parse """
+        Top
+          Left Right
+
+        Left
+          Reader
+
+        Right
+          Reader "!"
+
+        @state
+        Reader
+          "r"
+
+        Apart
+          "a"
+      """
+      assert.deepEqual [...stateIndependentRules(rules)!], ["Apart"]
+
+    it "should key only the rules that can reach a @state rule on the state", ->
+      grammar := """
+        Root
+          Flip Shared Wrapped "nope"
+          Flop Shared Wrapped
+
+        @nomemo
+        Flip
+          "" ->
+            activeMemo.sk = 1
+            return
+
+        @nomemo
+        Flop
+          "" ->
+            activeMemo.sk = 2
+            return
+
+        # Can't reach a @state rule, so its results are shared across states
+        Shared
+          "a" ->
+            sharedRuns++
+            return $1
+
+        # Reaches one, so its results are kept per state
+        Wrapped
+          Keyed:keyed -> keyed
+
+        @state
+        Keyed
+          "b" ->
+            keyedRuns++
+            return "key:" + activeMemo.sk
+
+        ```
+        let activeMemo = null
+        let sharedRuns = 0
+        let keyedRuns = 0
+        exports.setActiveMemo = (m) => { activeMemo = m }
+        exports.getCounts = () => ({ sharedRuns, keyedRuns })
+        ```
+      """
+      rules := parse grammar
+      assert.deepEqual [...stateIndependentRules(rules)!].sort(), ["Flip", "Flop", "Shared"]
+      mod := execMod(compile(rules, { memo: true })) as any
+      mc := mod.default.createMemoCache()
+      mod.setActiveMemo mc
+      assert.deepEqual mod.parse("ab", { memo: mc }), [undefined, "a", "key:2"]
+      assert.deepEqual mod.getCounts(), { sharedRuns: 1, keyedRuns: 2 }
 
   describe "discarded sub-expressions and $cc char-class matchers", ->
     it "should match $(...), &(...), !(...), and discarded repetitions", ->

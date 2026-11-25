@@ -62,6 +62,19 @@ describe "util", ->
     decompiled := decompile rules
     assert.deepEqual normalizeHandlerLocs(parse(decompiled)), normalizeHandlerLocs(rules)
 
+  it "should decompile rule tags as decorator lines", ->
+    grammar := """
+      @nomemo @mytool.thing
+      Rule
+        "X"
+
+      Other
+        "Y"
+
+    """
+    rules := parse grammar
+    assert.equal decompile(rules), grammar
+
   it "should decompile literal undefined", ->
     grammar := """
       Rule
