@@ -2635,6 +2635,32 @@ describe "Hera", ->
       tagged := grammar.replace "\nCount\n", "\n@nomemo\nCount\n"
       assert.deepEqual execMod(compile(parse(tagged), { memo: true })).parse("a"), [2, "a"]
 
+    it "should clear the memos of every parse in progress", ->
+      // The parse started from Inner clears the memo after changing n, which
+      // the outer parse's Probe reads too
+      grammar := """
+        Root
+          Probe Inner "!"
+          Probe Inner
+
+        Inner
+          "" -> exports.parse("", { startRule: "Bump" })
+
+        @nomemo
+        Bump
+          "" ->
+            n++
+            $clearMemo()
+
+        Probe
+          "x" -> n
+
+        ```
+        let n = 0
+        ```
+      """
+      assert.deepEqual execMod(compile(parse(grammar), { memo: true })).parse("x"), [1, undefined]
+
     it "should make $setStateKey and $clearMemo do nothing without a memo", ->
       grammar := """
         Root

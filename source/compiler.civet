@@ -1807,8 +1807,10 @@ memoScaffolding := (types: boolean, ruleCount: number): string ->
     "const $mSet0 = $memoSet0; void $mSet0;\n"
     `const $memoRuleCount = ${ruleCount};\n`
     `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n`
-    // The memo of the parse in progress, for the grammar's handlers
+    // The memo of the innermost parse in progress, for `$setStateKey`, and
+    // those of every parse in progress, for `$clearMemo`
     `let $activeMemo${types ? ": MemoCache | undefined" : ""} = undefined;\n`
+    `const $openMemos${types ? ": MemoCache[]" : ""} = [];\n`
   ].join("")
 
 /**
@@ -1824,7 +1826,7 @@ stateKeyFunctions := (types: boolean, memo: boolean): string ->
     else
       `function $setStateKey(_key${t ": number | string"})${t ": void"} {}`
     if memo
-      `function $clearMemo()${t ": void"} { if ($activeMemo) $activeMemo.reset() }`
+      `function $clearMemo()${t ": void"} { for (const memo of $openMemos) memo.reset() }`
     else
       `function $clearMemo()${t ": void"} {}`
     "void $setStateKey; void $clearMemo;\n"
@@ -1878,6 +1880,7 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
       "      $$memo = $memoPool.pop() || new MemoCache($memoRuleCount)"
       "      $$memo.start()"
       "      ctx.memo = $$memo"
+      "      $openMemos.push($$memo)"
       "    }"
       // For `$setStateKey`; a parse started from a handler restores the
       // outer parse's memo when it ends
@@ -1914,6 +1917,7 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
       "    } finally {"
       "      $activeMemo = $$outerMemo"
       "      if ($$memo) {"
+      "        $openMemos.pop()"
       "        $$memo.release()"
       "        $memoPool.push($$memo)"
       "      }"

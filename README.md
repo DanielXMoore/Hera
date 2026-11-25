@@ -600,12 +600,12 @@ CodeSpanOpen
 
 ### Memoizing a grammar with state
 
-A parser compiled with `memo: true` keeps rules' recent results (for each rule, two per position modulo 64, which covers backtracking over nearby input) and reuses one when the rule is tried at the same position again. A cache hit returns the result without running the rule, so its handlers, and those of every rule it calls, don't run. When handlers keep state that changes how rules match (an indentation stack, say), the grammar tells the memo about it:
+A parser compiled with `memo: true` keeps rules' recent results (for each rule, two per position modulo 64, which covers backtracking over nearby input) and reuses one when the rule is tried at the same position again. A result can be evicted, so a parse that backtracks far can rerun a rule; in Civet that's 0.5% of cache misses, while a table that kept every result made Civet compile 50% slower. A cache hit returns the result without running the rule, so its handlers, and those of every rule it calls, don't run. When handlers keep state that changes how rules match (an indentation stack, say), the grammar tells the memo about it:
 
 - `$setStateKey(key)`: call it whenever that state changes. Results are cached per key, so the key should capture everything rules read: a number or a string (a non-negative 32-bit integer is cheapest).
-- `$clearMemo()`: drop the memoized results, after changing state the key doesn't capture (parser options set by a directive, say).
+- `$clearMemo()`: drop the memoized results, after changing state the key doesn't capture (parser options set by a directive, say). It drops those of every parse in progress, in case a parse started from a handler shares that state with the parse that started it.
 - `@state` on the rules whose handlers read the state, so that the rules that can't reach one share their results across keys.
-- `@nomemo` on every rule whose run can leave state changed, since a cache hit would skip the change. That includes a rule that only calls rules that change state (one that pushes three flags, say), and a change that leaves the key as it was (pushing a flag equal to the one on top). A rule whose changes balance (a push and its pop) can stay memoized.
+- `@nomemo` on every rule whose run can leave behind state that a later rule reads before setting it, since a cache hit would skip the change. That includes a rule that only calls rules that change state (one that pushes three flags, say), and a change that leaves the key as it was (pushing a flag equal to the one on top). A rule whose changes balance (a push and its pop) can stay memoized, and so can one that only changes scratch state that every reader sets first.
 
 As a safety net, Hera doesn't cache a run that changed the key, or one that the memo was cleared during.
 
@@ -617,7 +617,7 @@ A grammar that cached with `events.enter`/`events.exit`, a `getStateKey()` and a
 
 1. Compile with `memo: true`, and `trace: true` if `events` also logged rules.
 2. Call `$setStateKey(getStateKey())` wherever the state that `getStateKey()` reads changes, instead of computing the key on every rule.
-3. Tag the uncacheable rules `@nomemo`.
+3. Tag the uncacheable rules `@nomemo`. The memo also caches failures, so also tag rules that change state and can then fail, which a cache that never replayed failures may have let you leave out.
 4. Replace the `events` cache with `parse(input)`. Pass a `trace` with `enter(rule, pos)` and `exit(rule, pos, end, value, cached)` for logging.
 
 ### `compile(grammar, options?)`
