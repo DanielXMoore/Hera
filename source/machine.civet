@@ -106,8 +106,8 @@ export interface Tracer {
  * Each memoized rule gets `MEMO_SETS` sets of 2 slots (`MEMO_SLOTS` total)
  * indexed by compile-time rule base offset + hashed `(pos, sk)`.
  */
-export const MEMO_SETS = 64
-export const MEMO_MASK = MEMO_SETS - 1
+const MEMO_SETS = 64
+const MEMO_MASK = MEMO_SETS - 1
 export const MEMO_SLOTS = MEMO_SETS * 2
 
 export class MemoCache {
@@ -122,8 +122,13 @@ export class MemoCache {
   sk: number = 0
   /** Last slot index computed on a cache miss (reused by `$memoSet`/`$memoSet0`). */
   s: number = 0
+  /**
+   * Counts the clears, so a rule that was running when the memo was
+   * cleared doesn't store its result
+   */
+  gen: number = 0
   /** Ids of the state keys that aren't non-negative 32-bit integers */
-  readonly keyIds = new Map<unknown, number>()
+  readonly keyIds = new Map<number | string, number>()
 
   constructor(ruleCount: number) {
     const size = ruleCount * MEMO_SLOTS
@@ -139,7 +144,7 @@ export class MemoCache {
    * integer is its own key; any other value (a string, say) gets a negative
    * id, the same one each time it's set.
    */
-  setKey(key: unknown): void {
+  setKey(key: number | string): void {
     if (typeof key === "number" && (key | 0) === key && key >= 0) {
       this.sk = key
       return
@@ -152,17 +157,23 @@ export class MemoCache {
     this.sk = id
   }
 
+  /** Start a parse (or the lazyErrors retry): empty, with state key 0 */
+  start(): void {
+    this.sk = 0
+    this.reset()
+  }
+
+  /** Drop every result (a grammar's `$clearMemo`) */
   reset(): void {
     this.pos.fill(-1)
+    this.gen++
   }
 
-  clearVals(): void {
+  /** Let go of the parse's values and keys, for the cache to be reused */
+  release(): void {
     this.val.fill(undefined)
+    this.keyIds.clear()
   }
-}
-
-export function createMemoCache(ruleCount: number): MemoCache {
-  return new MemoCache(ruleCount)
 }
 
 export function $memoGet0(mc: MemoCache, base: number, p0: number, ctx: CursorContext): unknown {

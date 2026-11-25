@@ -14,9 +14,9 @@ All notable changes to `@danielx/hera` will be documented in this file.
   hook calls, and passing `events` to any parser throws.
 
 ### Added
-- The `memo` compile option compiles in a packrat memo cache: each rule's
-  result at each position is kept and reused when the rule is tried there
-  again. Such a parser memoizes by default; `parse(input, { memo: false })`
+- The `memo` compile option compiles in a memo cache: rules' recent
+  results (for each rule, two per position modulo 64) are kept and reused
+  when a rule is tried at the same position again. Such a parser memoizes by default; `parse(input, { memo: false })`
   turns it off. A grammar whose handlers keep state calls `$setStateKey(key)`
   when that state changes, so results are cached per key, and `$clearMemo()`
   after changing state the key doesn't capture; a rule run that changes the

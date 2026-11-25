@@ -2649,7 +2649,7 @@ describe "Hera", ->
       assert.equal execMod(compile(parse(grammar))).parse("a"), 1
       assert.equal execMod(compile(parse(grammar), { memo: true })).parse("a", { memo: false }), 1
 
-    it "should handle 2-way collisions and cached failures in MemoCache", ->
+    it "should reuse cached results", ->
       grammar := """
         Root
           Probe "b"
@@ -2669,9 +2669,108 @@ describe "Hera", ->
       res := mod.parse("xxxxa")
       assert.deepEqual res, [4, "a"]
       assert.equal mod.getProbeRuns(), 1
-      // Way-1 hits: two colliding positions in the same set (0 and 64)
-      res2 := mod.parse("x".repeat(64) + "a")
-      assert.deepEqual res2, [64, "a"]
+
+    it "should keep two results for each rule per position modulo 64", ->
+      // Probe runs at 0, 64 and 128 (evicting 0, in the same set), then at
+      // 0 and 64 again (evicting 128, then 0's first entry), then finds 0
+      // in the set's second slot and 64 in its first, and runs at 128
+      grammar := """
+        Root
+          Probe Gap Probe Gap Probe "!"
+          Probe Gap Probe "!"
+          Probe Gap Probe Gap Probe
+
+        Probe
+          "x" -> ++runs
+
+        Gap
+          /-{63}/
+
+        ```
+        let runs = 0
+        exports.takeRuns = () => { const n = runs; runs = 0; return n }
+        ```
+      """
+      input := "x" + "-".repeat(63) + "x" + "-".repeat(63) + "x"
+      // Keyed, and (with a @state rule elsewhere) shared across keys
+      for extra of ["", '\n@state\nUnused\n  "u"\n']
+        mod := execMod(compile(parse(grammar + extra), { memo: true })) as any
+        assert.deepEqual mod.parse(input), [4, "-".repeat(63), 5, "-".repeat(63), 6]
+        assert.equal mod.takeRuns(), 6
+        mod.parse input, { memo: false }
+        assert.equal mod.takeRuns(), 8
+
+    it "should not cache a run that the memo was cleared during", ->
+      // A reads n, then clears the memo after changing it: a stored A would
+      // replay the old n (and skip the next clear)
+      grammar := """
+        Root
+          A "!"
+          A
+
+        A
+          Probe Clear -> $1
+
+        Probe
+          "x" -> n
+
+        @nomemo
+        Clear
+          "" ->
+            n++
+            $clearMemo()
+
+        ```
+        let n = 0
+        ```
+      """
+      assert.equal execMod(compile(parse(grammar), { memo: true })).parse("x"), 1
+
+    it "should release a pooled memo's state keys", ->
+      grammar := """
+        Root
+          Key "x"
+
+        Key
+          "" -> $setStateKey("key")
+
+        ```
+        exports.pool = $memoPool
+        ```
+      """
+      mod := execMod(compile(parse(grammar), { memo: true })) as any
+      mod.parse "x"
+      assert.equal mod.pool.length, 1
+      assert.equal mod.pool[0].keyIds.size, 0
+
+    it "should memoize rules without tags, e.g. read from JSON", ->
+      rules := JSON.parse JSON.stringify parse 'Root\n  Probe "b"\n  Probe\n\nProbe\n  "x" -> ++exports.runs\n'
+      mod := execMod(compile(rules, { memo: true })) as any
+      mod.runs = 0
+      assert.equal mod.parse("x"), 1
+
+    it "should accept the memo option when no rule is memoized", ->
+      grammar := """
+        @nomemo
+        Root
+          "" ->
+            $setStateKey(1)
+            return 1
+      """
+      assert.equal execMod(compile(parse(grammar), { memo: true })).parse("", { memo: true }), 1
+
+    it "should keep its memo and trace settings across a compile() in transpileEmbedded", ->
+      code := compile parse('Root\n  "x" -> $1\n'), {
+        memo: true
+        trace: true
+        transpileEmbedded: (src) ->
+          compile parse('Other\n  "y"\n  "z"\n')
+          src
+      }
+      assert.match code, /\$memoRuleCount = 1;/
+      exits: unknown[] := []
+      execMod(code).parse "x", trace: { enter: (->), exit: (rule, pos, end, value, cached) -> exits.push [rule, cached] }
+      assert.deepEqual exits, [["Root", false]]
 
     it "should emit valid TypeScript for the memo", ->
       grammar := """
@@ -2687,8 +2786,8 @@ describe "Hera", ->
       tsCode := compile(parse(grammar), { types: true, memo: true })
       assert.match tsCode, /\$mGet0\(/
       assert.match tsCode, /\$mGet\(\$\$mc, \d+, \$\$p0, \$\$sk, \$\$ctx\)/
-      assert.match tsCode, /function \$setStateKey\(key: unknown\): void/
-      assert.match tsCode, /createMemoCache/
+      assert.match tsCode, /function \$setStateKey\(key: number \| string\): void/
+      assert.match tsCode, /new MemoCache\(\$memoRuleCount\)/
 
   describe "rule tags", ->
     tagsOf := (grammar: string) => parse(grammar)[Symbol.for("tags") as any] as Map<string, string[]>
