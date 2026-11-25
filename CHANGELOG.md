@@ -15,21 +15,25 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ### Added
 - The `memo` compile option compiles in a packrat memo cache: each rule's
-  result at each position is kept in a `MemoCache` and reused when the rule
-  is tried there again. Such a parser memoizes by default; `parse(input,
-  { memo: false })` turns it off, and `parse(input, { memo: cache })` uses
-  a `MemoCache` from `parser.createMemoCache()`. Its `sk` is a state key for
-  grammars whose handlers keep state: rules are cached per `sk` value, and a
-  run that changes `sk` isn't cached. The `noMemo` option leaves rules out
-  of the memo, and `memoTiers` marks rules that don't depend on `sk`
-  (`stateless`) or only on some of its bits (`masks`). A parser compiled
-  without `memo` contains no memo code.
+  result at each position is kept and reused when the rule is tried there
+  again. Such a parser memoizes by default; `parse(input, { memo: false })`
+  turns it off. A grammar whose handlers keep state calls `$setStateKey(key)`
+  when that state changes, so results are cached per key, and `$clearMemo()`
+  after changing state the key doesn't capture; a rule run that changes the
+  key isn't cached. The `noMemo` option leaves more rules out of the memo.
+  A parser compiled without `memo` contains no memo code. To migrate from
+  `events`, see the README.
+- Rule tags: a line of tags directly above a rule (`@state`, `@nomemo
+  @mytool.thing`). `@nomemo` leaves the rule out of the memo, and `@state`
+  marks a rule whose handler reads the state the key stands for: rules that
+  can't reach one ignore the key. Other tags need a namespace and are kept
+  for tools in `parse(grammar)[Symbol.for("tags")]`.
 - The `lazyErrors` parse option: the parse first runs without recording
   what it expected at each failure, and only a failed or incomplete parse
   runs again to build the error message. Hera's sample grammars parse 21-116%
   faster warm with it, but a failing parse runs its handlers twice, so this
-  is opt-in. A tracer sees only the first pass, and the retry restores the
-  starting `memo.sk` and clears the memo.
+  is opt-in. A tracer sees only the first pass, and the retry starts with an
+  empty memo and state key.
 
 ### Changed
 - Rules compile to cursor functions. Each rule becomes `$$r_<Rule>(ctx)`,

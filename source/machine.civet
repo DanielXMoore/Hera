@@ -116,13 +116,14 @@ export class MemoCache {
   readonly end: Int32Array
   readonly val: unknown[]
   /**
-   * Parser state key that stateful rules are cached under (e.g. bit flags
-   * the grammar's handlers set).  Keys are stored as 32-bit integers, so
-   * while `sk` holds any other value stateful rules run uncached.
+   * The state key that rules depending on parser state are cached under,
+   * as a 32-bit integer (see `setKey`)
    */
   sk: number = 0
   /** Last slot index computed on a cache miss (reused by `$memoSet`/`$memoSet0`). */
   s: number = 0
+  /** Ids of the state keys that aren't non-negative 32-bit integers */
+  readonly keyIds = new Map<unknown, number>()
 
   constructor(ruleCount: number) {
     const size = ruleCount * MEMO_SLOTS
@@ -131,6 +132,24 @@ export class MemoCache {
     this.state = new Int32Array(size)
     this.end = new Int32Array(size)
     this.val = new Array(size)
+  }
+
+  /**
+   * Set the state key (a grammar's `$setStateKey`).  A non-negative 32-bit
+   * integer is its own key; any other value (a string, say) gets a negative
+   * id, the same one each time it's set.
+   */
+  setKey(key: unknown): void {
+    if (typeof key === "number" && (key | 0) === key && key >= 0) {
+      this.sk = key
+      return
+    }
+    let id = this.keyIds.get(key)
+    if (id === undefined) {
+      id = -1 - this.keyIds.size
+      this.keyIds.set(key, id)
+    }
+    this.sk = id
   }
 
   reset(): void {
@@ -210,8 +229,6 @@ export function $memoGet(mc: MemoCache, base: number, p0: number, sk: number, ct
 }
 
 export function $memoSet(mc: MemoCache, s: number, p0: number, sk: number, endPos: number, val: unknown): void {
-  // `state` would truncate a non-int32 key into one that matches other states
-  if ((sk | 0) !== sk) return
   const pos = mc.pos
   const st = mc.state
   const end = mc.end
@@ -526,11 +543,9 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
   startRule?: keyof T
   /**
    * For parsers compiled with `memo: true`, which memoize by default:
-   * - `true` or omitted: use a pooled `MemoCache` for this parse
-   * - `false`: don't memoize
-   * - `MemoCache`: use a caller-managed `MemoCache` (allowing state key `sk` updates and `reset()`)
+   * `false` turns the memo off for this parse.
    */
-  memo?: boolean | MemoCache
+  memo?: boolean
   /**
    * Hooks to call around every rule, for parsers compiled with `trace: true`.
    * With `lazyErrors`, they see only the first pass.
@@ -542,9 +557,9 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
    * from the start to build the error message.  Successful parses skip all
    * expectation bookkeeping, which matters most for backtracking-heavy
    * grammars.  A failing parse runs its handlers twice, so handlers must be
-   * safe to re-run, and state they keep outside the memo must be reset at
-   * the start of a parse (e.g. by a Reset rule).  The retry restores the
-   * starting `memo.sk` and clears the memo.
+   * safe to re-run, and state they keep must be reset at the start of a
+   * parse (e.g. by a Reset rule).  The retry starts with an empty memo and
+   * state key.
    */
   lazyErrors?: boolean
 }

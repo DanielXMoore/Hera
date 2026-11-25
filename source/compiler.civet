@@ -4,21 +4,6 @@ import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } 
 import { TagsSymbol } from ./hera-types.civet
 import { isCharClassRe, MEMO_SLOTS } from ./machine.civet
 
-export type MemoTiers = {
-  /** Rules that do not depend on `memo.sk` (use stateless `$memoGet0`/`$memoSet0`). */
-  stateless?: Iterable<string>
-  /** Rules that depend only on `memo.sk & mask` (per-rule bitmask). */
-  masks?: Record<string, number>
-  /**
-   * Whether memoized rules not in `stateless` or `masks` depend on the full
-   * `memo.sk`.  Defaults to true, which is always correct.  Set false only
-   * when every unlisted rule is known not to depend on parser state (a
-   * stateless rule ignores `memo.sk`, so state-dependent results would be
-   * served from cache).
-   */
-  defaultStateful?: boolean
-}
-
 export type CompilerOptions = {
   filename?: string
   inlineMap?: boolean
@@ -59,18 +44,11 @@ export type CompilerOptions = {
    */
   memo?: boolean
   /**
-   * Rule names to leave out of the memo (with `memo`), e.g. cheap leaf rules
-   * whose cache bookkeeping costs more than re-running them, and rules whose
-   * handlers change parser state.
+   * More rules to leave out of the memo (with `memo`), besides those tagged
+   * `@nomemo`, for speed: e.g. rules that a profile shows never reuse a
+   * result.  Leaving a rule out never changes the parse.
    */
   noMemo?: Iterable<string>
-  /**
-   * Optional per-rule state-sensitivity tiers for the memo (with `memo`).
-   * Stateless rules skip `memo.sk` hashing/comparison; masked rules hash
-   * `memo.sk & mask`; stateful rules hash full `memo.sk`.  Without
-   * `memoTiers`, every memoized rule is stateful.
-   */
-  memoTiers?: MemoTiers
   /**
    * Compile in calls to the `trace` parse option's hooks around every rule,
    * for debugging and profiling (see `Tracer`).  Without it the generated
@@ -122,14 +100,10 @@ let traceOn = false
 // The memo (the `memo` option): each memoized rule's first slot in the
 // MemoCache, and how its cache key depends on `memo.sk`
 memoBase := new Map<string, number>
-let memoStateless: Set<string> | undefined
-let memoMasks: Record<string, number> | undefined
-let memoDefaultStateful = true
+/** Memoized rules whose results don't depend on `memo.sk` */
+let memoStateless = new Set<string>
 
-type MemoSpec =
-  | { base: number, mode: "stateless" }
-  | { base: number, mode: "full" }
-  | { base: number, mode: "masked", mask: number }
+type MemoSpec = { base: number, stateless: boolean }
 
 /** Add the names of the rules that `ast` refers to into `refs` */
 addRuleRefs := (ast: HeraAST, refs: Set<string>): void ->
@@ -143,6 +117,16 @@ addRuleRefs := (ast: HeraAST, refs: Set<string>): void ->
       addRuleRefs child, refs
   else
     addRuleRefs body as HeraAST, refs
+
+/**
+Whether every alternative of a rule is the empty string `""`: a rule that
+runs only for its handler, which is where grammars change their state.
+The memo leaves these out, since a cache hit would skip the handler, and
+replaying one saves nothing.
+*/
+matchesOnlyEmpty := (ast: HeraAST): boolean ->
+  alternatives := if Array.isArray(ast) and ast[0] is "/" then ast[1] as HeraAST[] else [ast]
+  alternatives.every (a) => Array.isArray(a) and a[0] is "L" and a[1] is ""
 
 /** The rules tagged `@tag` in `rules` */
 taggedRules := (rules: HeraRules, tag: string): string[] ->
@@ -179,13 +163,7 @@ export function stateIndependentRules(rules: HeraRules): Set<string> | undefined
 getMemoSpec := (name: string): MemoSpec | undefined ->
   base := memoBase.get name
   return unless base?
-  if memoStateless?.has name
-    return { base, mode: "stateless" }
-  if memoMasks and Object.prototype.hasOwnProperty.call(memoMasks, name)
-    return { base, mode: "masked", mask: memoMasks[name] }
-  if memoDefaultStateful
-    return { base, mode: "full" }
-  { base, mode: "stateless" }
+  { base, stateless: memoStateless.has name }
 dynamicReDefs: RegExpPart[][] := []
 /** Counter for the names of helper functions (`$$h_<n>`) */
 let subFnCounter = 0
@@ -436,22 +414,9 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | u
   retAnno := if options.types
     if retType then [" as (", retType.type, ") | typeof FAIL"] else " as never"
   else ""
-  isStateless := spec.mode is "stateless"
-  // `$$sk` is the cache key's state; `$$sk0` (or `$$sk` when the key is the
-  // full state) is `memo.sk` on entry, compared on exit by `emitExitCall`.
-  skDecl := if isStateless
-    "  let $$sk0 = 0;\n"
-  else if spec.mode is "masked"
-    "  let $$sk = 0, $$sk0 = 0;\n"
-  else
-    "  let $$sk = 0;\n"
-  skSet := if isStateless
-    "    $$sk0 = $$mc.sk;\n"
-  else if spec.mode is "masked"
-    `    $$sk0 = $$mc.sk;\n    $$sk = ($$sk0 & ${spec.mask});\n`
-  else
-    "    $$sk = $$mc.sk;\n"
-  getCall := if isStateless
+  // `$$sk` is `memo.sk` on entry: the cache key's state for a rule that
+  // depends on it, and compared on exit by `emitExitCall` either way.
+  getCall := if spec.stateless
     `$mGet0($$mc, ${spec.base}, $$p0, $$ctx)`
   else
     `$mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx)`
@@ -459,7 +424,7 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | u
     `      if ($$t) $$t.exit(${nameLit}, $$p0, $$ctx.pos, $$c, true);\n`
   else ""
   [
-    `${traceEnter}  const $$mc = $$ctx.memo;\n${skDecl}  let $$s = 0;\n  if ($$mc) {\n${skSet}    const $$c = ${getCall};\n    if ($$c !== $MISS) {\n${traceHit}      return $$c`
+    `${traceEnter}  const $$mc = $$ctx.memo;\n  let $$sk = 0;\n  let $$s = 0;\n  if ($$mc) {\n    $$sk = $$mc.sk;\n    const $$c = ${getCall};\n    if ($$c !== $MISS) {\n${traceHit}      return $$c`
     retAnno
     ";\n    }\n    $$s = $$mc.s;\n  }\n"
   ]
@@ -470,14 +435,13 @@ emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | u
 emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
   calls: string[] := []
   if spec := getMemoSpec name
-    setCall := if spec.mode is "stateless"
+    setCall := if spec.stateless
       `$mSet0($$mc, $$s, $$p0, ${endPosExpr}, ${valExpr})`
     else
       `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
     // A cache hit restores the position and value but not `memo.sk`, so a run
     // that changed the state is not cached.
-    entrySk := if spec.mode is "full" then "$$sk" else "$$sk0"
-    calls.push `if ($$mc && $$mc.sk === ${entrySk}) ${setCall};`
+    calls.push `if ($$mc && $$mc.sk === $$sk) ${setCall};`
   if traceOn
     calls.push `if ($$t) $$t.exit(${JSON.stringify name}, $$p0, ${endPosExpr}, ${valExpr}, false);`
   calls.join `\n${indent}`
@@ -1565,15 +1529,10 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   if options.memo
     noMemo := new Set [...(options.noMemo ?? []), ...taggedRules(rules, "nomemo")]
     for name of Object.keys rules
-      unless noMemo.has name
+      unless noMemo.has(name) or matchesOnlyEmpty rules[name]
         memoBase.set name, memoCount * MEMO_SLOTS
         memoCount++
-  memoStateless = new Set [
-    ...(options.memoTiers?.stateless ?? [])
-    ...(stateIndependentRules(rules) ?? [])
-  ]
-  memoMasks = options.memoTiers?.masks
-  memoDefaultStateful = options.memoTiers?.defaultStateful ?? true
+  memoStateless = stateIndependentRules(rules) ?? new Set
 
   { language, module } := options
   // transpileEmbedded output skips the downstream Civet pass over Hera's
@@ -1703,8 +1662,11 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
         "const $mSet0 = $memoSet0; void $mSet0;\n"
         `const $memoRuleCount = ${memoBase.size};\n`
         `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n`
+        // The memo of the parse in progress, for the grammar's handlers
+        `let $activeMemo${types ? ": MemoCache | undefined" : ""} = undefined;\n`
       ].join("")
     else ""
+    stateKeyFunctions(types, memo)
     "\n"
     reDefSource
     "\n\n"
@@ -1857,6 +1819,25 @@ buildHead := (types: boolean, language: CompilerOptions["language"], module: boo
     return `import {\n${valueList},\n} from ${pathLit}\n\n`
   `const {\n${valueList}\n} = require(${pathLit})\n\n`
 
+/**
+The functions a grammar's code calls to key the memo on its state, and to
+drop memoized results.  Every parser has them, so a grammar's code doesn't
+depend on its compile options: without `memo` they do nothing.
+*/
+stateKeyFunctions := (types: boolean, memo: boolean): string ->
+  t := (annotation: string) -> types ? annotation : ""
+  [
+    if memo
+      `function $setStateKey(key${t ": unknown"})${t ": void"} { if ($activeMemo) $activeMemo.setKey(key) }`
+    else
+      `function $setStateKey(_key${t ": unknown"})${t ": void"} {}`
+    if memo
+      `function $clearMemo()${t ": void"} { if ($activeMemo) $activeMemo.reset() }`
+    else
+      `function $clearMemo()${t ": void"} {}`
+    "void $setStateKey; void $clearMemo;\n"
+  ].join "\n"
+
 parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
   t := (annotation: string) -> types ? annotation : ""
   cast := t " as CursorParser<ParserResult<Grammar[K]>>"
@@ -1874,11 +1855,7 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
   [
     ...typeDefs
     "const parser = {"
-    ...(if memo then [
-      "  memoRuleCount: $memoRuleCount,"
-      "  createMemoCache: () => createMemoCache($memoRuleCount),"
-    ] else [])
-    `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
+    `  parse:${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
     "    const $$lazy = !!options.lazyErrors"
     `    let $$fail${t ": ((pos: number, expected: unknown) => void) | undefined"}`
@@ -1903,20 +1880,19 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
     "    reset()"
     ...(if trace then ["    if (options.trace) ctx.trace = options.trace"] else [])
     ...(if memo then [
-      // Memoize by default; `memo: false` turns it off, a MemoCache supplies
-      // the cache (to set its state key `sk`).
-      `    let $$ownedMemo${t ": MemoCache | undefined"}`
-      "    if (options.memo === true || options.memo === undefined) {"
-      "      $$ownedMemo = $memoPool.pop() || createMemoCache($memoRuleCount)"
-      "      $$ownedMemo.sk = 0"
-      "      $$ownedMemo.reset()"
-      "      ctx.memo = $$ownedMemo"
-      "    } else if (options.memo) {"
-      "      ctx.memo = options.memo"
+      // Memoize unless `memo: false`
+      `    let $$memo${t ": MemoCache | undefined"}`
+      "    if (options.memo !== false) {"
+      "      $$memo = $memoPool.pop() || createMemoCache($memoRuleCount)"
+      "      $$memo.sk = 0"
+      "      $$memo.keyIds.clear()"
+      "      $$memo.reset()"
+      "      ctx.memo = $$memo"
       "    }"
-      // No `?:` here: the scaffolding must also parse as Civet with coffeeCompat
-      "    let $$sk0 = 0"
-      "    if (ctx.memo) $$sk0 = ctx.memo.sk"
+      // For `$setStateKey`; a parse started from a handler restores the
+      // outer parse's memo when it ends
+      "    const $$outerMemo = $activeMemo"
+      "    $activeMemo = $$memo"
     ] else [])
     ""
     // The memo goes back to the pool however the parse ends
@@ -1933,9 +1909,9 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
       "        ctx.fail = fail"
       ...(if trace then ["        ctx.trace = undefined"] else [])
       ...(if memo then [
-        "        if (ctx.memo) {"
-        "          ctx.memo.sk = $$sk0"
-        "          ctx.memo.reset()"
+        "        if ($$memo) {"
+        "          $$memo.sk = 0"
+        "          $$memo.reset()"
         "        }"
       ] else [])
       "        parser(ctx)"
@@ -1949,9 +1925,10 @@ parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
     ].map((line) -> if memo then line else line.slice(2))
     ...(if memo then [
       "    } finally {"
-      "      if ($$ownedMemo) {"
-      "        $$ownedMemo.clearVals()"
-      "        $memoPool.push($$ownedMemo)"
+      "      $activeMemo = $$outerMemo"
+      "      if ($$memo) {"
+      "        $$memo.clearVals()"
+      "        $memoPool.push($$memo)"
       "      }"
       "    }"
     ] else [])
