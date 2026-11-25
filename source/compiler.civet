@@ -118,16 +118,6 @@ addRuleRefs := (ast: HeraAST, refs: Set<string>): void ->
   else
     addRuleRefs body as HeraAST, refs
 
-/**
-Whether every alternative of a rule is the empty string `""`: a rule that
-runs only for its handler, which is where grammars change their state.
-The memo leaves these out, since a cache hit would skip the handler, and
-replaying one saves nothing.
-*/
-matchesOnlyEmpty := (ast: HeraAST): boolean ->
-  alternatives := if Array.isArray(ast) and ast[0] is "/" then ast[1] as HeraAST[] else [ast]
-  alternatives.every (a) => Array.isArray(a) and a[0] is "L" and a[1] is ""
-
 /** The rules tagged `@tag` in `rules` */
 taggedRules := (rules: HeraRules, tag: string): string[] ->
   for [name, tags] of rules[TagsSymbol] ?? []
@@ -1529,7 +1519,7 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   if options.memo
     noMemo := new Set [...(options.noMemo ?? []), ...taggedRules(rules, "nomemo")]
     for name of Object.keys rules
-      unless noMemo.has(name) or matchesOnlyEmpty rules[name]
+      unless noMemo.has name
         memoBase.set name, memoCount * MEMO_SLOTS
         memoCount++
   memoStateless = stateIndependentRules(rules) ?? new Set

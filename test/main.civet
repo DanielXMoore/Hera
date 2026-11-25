@@ -2585,6 +2585,7 @@ describe "Hera", ->
             probeRuns++
             return $1
 
+        @nomemo
         Clear
           "" -> $clearMemo()
 
@@ -2616,7 +2617,8 @@ describe "Hera", ->
       mod := execMod(compile(parse(grammar), { memo: true })) as any
       assert.deepEqual mod.parse("p"), [undefined, 0, 5]
 
-    it "should never memoize a rule that matches only the empty string", ->
+    it "should memoize a rule with side effects unless it's tagged @nomemo", ->
+      // A cache hit skips the handler, whatever the rule matches
       grammar := """
         Root
           Count "b"
@@ -2629,8 +2631,9 @@ describe "Hera", ->
         let runs = 0
         ```
       """
-      mod := execMod(compile(parse(grammar), { memo: true })) as any
-      assert.deepEqual mod.parse("a"), [2, "a"]
+      assert.deepEqual execMod(compile(parse(grammar), { memo: true })).parse("a"), [1, "a"]
+      tagged := grammar.replace "\nCount\n", "\n@nomemo\nCount\n"
+      assert.deepEqual execMod(compile(parse(tagged), { memo: true })).parse("a"), [2, "a"]
 
     it "should make $setStateKey and $clearMemo do nothing without a memo", ->
       grammar := """

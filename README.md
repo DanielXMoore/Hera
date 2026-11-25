@@ -595,7 +595,7 @@ CodeSpanOpen
 - A tag line holds one or more space-separated tags and may end with a `# comment`. Tag lines may stack, but must sit directly above their rule, with no blank or comment line between.
 - Built-in tags are bare names, and Hera rejects a bare name it doesn't know. They tell the memo (see below) about a grammar's state:
   - `@state`: the rule's handler reads the state that the grammar's state key stands for. Every rule that can't reach a `@state` rule ignores the key, so its results are shared across states. Without any `@state` tags, every memoized rule is cached per key.
-  - `@nomemo`: never memoize the rule, because its handler changes or reads state that the key doesn't capture.
+  - `@nomemo`: never memoize the rule. Tag every rule whose run can leave state changed (a push without its pop, say), since a cache hit skips the handlers, and every rule that reads state the key doesn't capture.
 - Other tags need a namespace (`@mytool.thing`). Hera keeps them for tools: `parse(grammar)[Symbol.for("tags")]` maps each tagged rule's name to its tags, without the `@`.
 
 ### Memoizing a grammar with state
@@ -604,8 +604,7 @@ A parser compiled with `memo: true` keeps each rule's result at each position an
 
 - `$setStateKey(key)`: call it whenever that state changes. Results are cached per key, so the key should capture everything rules read (a number or a string; a non-negative 32-bit integer is cheapest). A rule run that changes the key isn't cached, because a cache hit would skip the change.
 - `$clearMemo()`: drop the memoized results, after changing state the key doesn't capture (parser options set by a directive, say).
-- `@state` and `@nomemo` tags, as above.
-- A rule whose only alternative is `""` runs only for its handler, which is where grammars change state, so it is never memoized.
+- `@state` and `@nomemo` tags, as above. A run that changes the key isn't cached, but one that changes state and leaves the key as it was (pushing a flag equal to the one on top, say) is, so the tags are what keep a memoized parse correct.
 
 Both functions exist in every parser and do nothing without a memo, so a grammar's code doesn't depend on how it was compiled.
 
@@ -615,7 +614,7 @@ A grammar that cached with `events.enter`/`events.exit`, a `getStateKey()` and a
 
 1. Compile with `memo: true`, and `trace: true` if `events` also logged rules.
 2. Call `$setStateKey(getStateKey())` wherever the state that `getStateKey()` reads changes, instead of computing the key on every rule.
-3. Tag the uncacheable rules `@nomemo`. Leave out those whose only alternative is `""`, and those whose run always changes the key.
+3. Tag the uncacheable rules `@nomemo`.
 4. Replace the `events` cache with `parse(input)`. Pass a `trace` with `enter(rule, pos)` and `exit(rule, pos, end, value, cached)` for logging.
 
 ### `compile(grammar, options?)`
