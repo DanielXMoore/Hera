@@ -2,6 +2,9 @@
   "scopeName": "source.hera",
   "patterns": [
     {
+      "include": "#decorator"
+    },
+    {
       "include": "#rule"
     },
     {
@@ -21,6 +24,18 @@
         { "include": "#comment" },
         { "include": "#choice"},
         { "include": "#dot"}
+      ]
+    },
+    "decorator": {
+      "comment": "A line of rule tags (`@nomemo @mytool.thing`) above a rule",
+      "begin": "^(?=@)",
+      "end": "$",
+      "patterns": [
+        {
+          "match": "@[_a-zA-Z][_a-zA-Z0-9]*(?:\\.[_a-zA-Z][_a-zA-Z0-9]*)*",
+          "name": "entity.name.function.decorator.hera"
+        },
+        { "include": "#comment" }
       ]
     },
     "rule": {

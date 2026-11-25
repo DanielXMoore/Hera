@@ -38,10 +38,16 @@ export type RulePositions = { name: number, alternatives: number[], ends: number
 
 export const CodeSymbol = Symbol.for("code")
 export const PositionsSymbol = Symbol.for("positions")
+export const TagsSymbol = Symbol.for("tags")
 
 export type HeraRules = {
   [key: string]: HeraAST,
   [CodeSymbol]?: CodeBlockNode[]
   /** Rule names to their positions, for source maps */
   [PositionsSymbol]?: Map<string, RulePositions>
+  /**
+  Rule names to the tags on the lines above them (`@nomemo`, `@mytool.thing`),
+  without the `@`.  Only tagged rules are present.
+  */
+  [TagsSymbol]?: Map<string, string[]>
 }

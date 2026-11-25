@@ -4,17 +4,36 @@ All notable changes to `@danielx/hera` will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking
+- The `events` parse option is replaced by the `trace` compile option and
+  the `trace` parse option. A parser compiled with `trace: true` calls
+  `trace.enter(rule, pos)` and `trace.exit(rule, pos, end, value, cached)`
+  around every rule; `value` is `FAIL` when the rule didn't match. Hooks can
+  no longer change the parse or supply cached results; use the `memo`
+  compile option for caching. A parser compiled without `trace` contains no
+  hook calls, and passing `events` to any parser throws.
+
 ### Added
+- The `memo` compile option compiles in a memo cache: rules' recent
+  results (for each rule, two per position modulo 64) are kept and reused
+  when a rule is tried at the same position again. Such a parser memoizes by default; `parse(input, { memo: false })`
+  turns it off. A grammar whose handlers keep state calls `$setStateKey(key)`
+  when that state changes, so results are cached per key, and `$clearMemo()`
+  after changing state the key doesn't capture; a rule run that changes the
+  key isn't cached. The `noMemo` option leaves more rules out of the memo.
+  A parser compiled without `memo` contains no memo code. To migrate from
+  `events`, see the README.
+- Rule tags: a line of tags directly above a rule (`@state`, `@nomemo
+  @mytool.thing`). `@nomemo` leaves the rule out of the memo, and `@state`
+  marks a rule whose handler reads the state the key stands for: rules that
+  can't reach one ignore the key. Other tags need a namespace and are kept
+  for tools in `parse(grammar)[Symbol.for("tags")]`.
 - The `lazyErrors` parse option: the parse first runs without recording
   what it expected at each failure, and only a failed or incomplete parse
   runs again to build the error message. Hera's sample grammars parse 21-116%
   faster warm with it, but a failing parse runs its handlers twice, so this
-  is opt-in. It is ignored when `events` are given.
-- `events.cacheEnter` and `events.cacheExit`: hooks for an external cache
-  that allocate nothing. `cacheEnter(name, pos, ctx)` returns `MISS`, `FAIL`
-  for a cached failure, or a cached value after advancing `ctx.pos`;
-  `cacheExit(name, startPos, endPos, value)` sees each result, with `FAIL`
-  for a failure. `events.enter` and `exit` are adapted onto them.
+  is opt-in. A tracer sees only the first pass, and the retry starts with an
+  empty memo and state key.
 
 ### Changed
 - Rules compile to cursor functions. Each rule becomes `$$r_<Rule>(ctx)`,
@@ -23,9 +42,9 @@ All notable changes to `@danielx/hera` will be documented in this file.
   `{ loc, pos, value }` result for every match. Hera's sample grammars parse
   43-128% faster warm, and loading a parser and running its first parse
   takes 0.78-1.02x as long. Generated parsers are 1.4-1.7x larger (1.2-1.3x
-  gzipped). Each exported rule keeps its `(ctx, state)` signature and result, and
-  `events.enter` and `exit` still run. The runtime keeps the combinators, so
-  parsers compiled by earlier versions still work.
+  gzipped). Each exported rule keeps its `(ctx, state)` signature and
+  result. The runtime keeps the combinators, so parsers compiled by earlier
+  versions still work.
 - A regex that is a single character class (such as `/[a-z]+/` or
   `/[^"]*/`) or an ASCII identifier pattern matches ASCII text with a lookup
   table instead of the regex engine. Hera's sample grammars parse 17-57%

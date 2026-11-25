@@ -1,7 +1,8 @@
 // Compile a rules json to TypeScript or JavaScript (inline cursor-based codegen)
 
 import type { HeraAST, HeraRules, RegExpExpression, RegExpPart, RulePositions } from ./hera-types.civet
-import { isCharClassRe } from ./machine.civet
+import { TagsSymbol } from ./hera-types.civet
+import { isCharClassRe, MEMO_SLOTS } from ./machine.civet
 
 export type CompilerOptions = {
   filename?: string
@@ -34,6 +35,27 @@ export type CompilerOptions = {
     source: string
     upstreamSourceMap?: SourceMap
   ) => EmbeddedTranspileResult
+  /**
+   * Compile in a memo cache: rules' recent results (for each rule, two per
+   * position modulo 64) are kept in a `MemoCache` and reused when a rule is
+   * tried at the same position again.
+   * Pays off for grammars that backtrack heavily; otherwise the bookkeeping
+   * costs more than it saves.  Without it the generated parser contains no
+   * memo code.
+   */
+  memo?: boolean
+  /**
+   * More rules to leave out of the memo (with `memo`), besides those tagged
+   * `@nomemo`, for speed: e.g. rules that a profile shows never reuse a
+   * result.  Leaving a rule out never changes the parse.
+   */
+  noMemo?: Iterable<string>
+  /**
+   * Compile in calls to the `trace` parse option's hooks around every rule,
+   * for debugging and profiling (see `Tracer`).  Without it the generated
+   * parser contains no hook calls.
+   */
+  trace?: boolean
   /**
    * @internal Turn off individual codegen optimizations, for benchmarking
    * and differential testing (output must parse identically either way).
@@ -73,6 +95,61 @@ reDefs: string[] := []
 ccDefs: string[] := []
 /** The optimizations turned off with `disableOptimizations` */
 let disabled = new Set<Optimization>
+/** Whether rules call the trace hooks (the `trace` option) */
+let traceOn = false
+
+/**
+How each memoized rule is cached (the `memo` option): its first slot in the
+MemoCache, and whether its results are shared across state keys
+*/
+memoSpecs := new Map<string, MemoSpec>
+
+type MemoSpec = { base: number, stateless: boolean }
+
+/** Add the names of the rules that `ast` refers to into `refs` */
+addRuleRefs := (ast: HeraAST, refs: Set<string>): void ->
+  if typeof ast is "string"
+    refs.add ast
+    return
+  [op, body] := ast
+  return if op is "L" or op is "R" or op is "RD"
+  if op is "S" or op is "/"
+    for each child of body as HeraAST[]
+      addRuleRefs child, refs
+  else
+    addRuleRefs body as HeraAST, refs
+
+/** The rules tagged `@tag` in `rules` */
+taggedRules := (rules: HeraRules, tag: string): string[] ->
+  for [name, tags] of rules[TagsSymbol] ?? []
+    continue unless tags.includes tag
+    name
+
+/**
+The rules whose results can't depend on the parser's state key: those that
+can't reach a rule tagged `@state`, whose handler reads that state.
+Undefined when no rule is tagged `@state`, which means any rule may depend
+on it.
+*/
+export function stateIndependentRules(rules: HeraRules): Set<string> | undefined
+  readers := taggedRules rules, "state"
+  return unless readers#
+  callers := new Map<string, string[]>
+  for name of Object.keys rules
+    refs := new Set<string>
+    addRuleRefs rules[name], refs
+    for ref of refs
+      list := callers.get(ref)
+      if list then list.push name else callers.set ref, [name]
+  dependent := new Set readers
+  queue := [...readers]
+  while queue#
+    for each caller of callers.get(queue.pop()!) ?? []
+      continue if dependent.has caller
+      dependent.add caller
+      queue.push caller
+  new Set Object.keys(rules).filter (name) => not dependent.has name
+
 dynamicReDefs: RegExpPart[][] := []
 /** Counter for the names of helper functions (`$$h_<n>`) */
 let subFnCounter = 0
@@ -310,23 +387,70 @@ reports a rule's result not matching its type there.
 typedReturn := (options: CompilerOptions, retType: RuleType | undefined): ASTNode ->
   mapped "return", if options.types then retType?.pos
 
-// Emit the inline event/cache enter hook.
+// Emit the start of a rule function's instrumentation: the trace enter hook
+// (with `trace`) and the memo lookup (for memoized rules).  Empty without
+// either.
 emitEventEnter := (options: CompilerOptions, name: string, retType: RuleType | undefined): ASTNode ->
-  { types } := options
-  retAnno := if types
+  nameLit := JSON.stringify name
+  traceEnter := if traceOn
+    `  const $$t = $$ctx.trace;\n  if ($$t) $$t.enter(${nameLit}, $$p0);\n`
+  else ""
+  spec := memoSpecs.get name
+  return traceEnter unless spec
+  retAnno := if options.types
     if retType then [" as (", retType.type, ") | typeof FAIL"] else " as never"
   else ""
-  nameLit := JSON.stringify name
+  // `$$sk` and `$$g` are the memo's state key and generation on entry: the
+  // key is part of the cache key for a rule that depends on it, and both
+  // are compared on exit by `emitExitCall`.
+  getCall := if spec.stateless
+    `$mGet0($$mc, ${spec.base}, $$p0, $$ctx)`
+  else
+    `$mGet($$mc, ${spec.base}, $$p0, $$sk, $$ctx)`
+  traceHit := if traceOn
+    `      if ($$t) $$t.exit(${nameLit}, $$p0, $$ctx.pos, $$c, true);\n`
+  else ""
   [
-    `  if ($$ctx.cacheEnter) {\n    const $$c = $$ctx.cacheEnter(${nameLit}, $$p0, $$ctx);\n    if ($$c !== $MISS) return $$c`
+    `${traceEnter}  const $$mc = $$ctx.memo;\n  let $$sk = 0;\n  let $$g = 0;\n  let $$s = 0;\n  if ($$mc) {\n    $$sk = $$mc.sk;\n    $$g = $$mc.gen;\n    const $$c = ${getCall};\n    if ($$c !== $MISS) {\n${traceHit}      return $$c`
     retAnno
-    ";\n  }\n"
+    ";\n    }\n    $$s = $$mc.s;\n  }\n"
   ]
 
-// Emit the inline event/cache exit hook call.
-emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos"): string ->
-  nameLit := JSON.stringify name
-  `if ($$ctx.cacheExit) $$ctx.cacheExit(${nameLit}, $$p0, ${endPosExpr}, ${valExpr});`
+// Emit the end of a rule function's instrumentation for a result `valExpr`
+// ending at `endPosExpr`: the memo store and the trace exit hook.  Empty
+// without either.
+emitExitCall := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
+  calls: string[] := []
+  if spec := memoSpecs.get name
+    setCall := if spec.stateless
+      `$mSet0($$mc, $$s, $$p0, ${endPosExpr}, ${valExpr})`
+    else
+      `$mSet($$mc, $$s, $$p0, $$sk, ${endPosExpr}, ${valExpr})`
+    // A cache hit restores the position and value but not the state key, so
+    // a run that changed the key isn't cached, and nor is one that the memo
+    // was cleared during (its result may come from before the clear).
+    calls.push `if ($$mc && $$mc.sk === $$sk && $$mc.gen === $$g) ${setCall};`
+  if traceOn
+    calls.push `if ($$t) $$t.exit(${JSON.stringify name}, $$p0, ${endPosExpr}, ${valExpr}, false);`
+  calls.join `\n${indent}`
+
+/** `emitExitCall` as a statement line (indented by `indent`), or "" without instrumentation. */
+exitLine := (name: string, valExpr: string, endPosExpr = "$$ctx.pos", indent = "  "): string ->
+  call := emitExitCall name, valExpr, endPosExpr, indent
+  if call then `${indent}${call}\n` else ""
+
+p0Decl := "  const $$p0 = $$ctx.pos;\n"
+
+/**
+Remove the `$$p0` declaration from a rule body that doesn't otherwise read
+it (e.g. an uninstrumented rule that only delegates), which TypeScript's
+`noUnusedLocals` would reject.
+*/
+dropUnusedP0 := (body: ASTNode[]): ASTNode[] ->
+  i := body.indexOf p0Decl
+  return body if i < 0
+  rest := [...body.slice(0, i), ...body.slice(i + 1)]
+  if textOf(rest).includes("$$p0") then body else rest
 
 /** Record that `exp` was expected at the cursor, unless a lazyErrors parse's first pass isn't tracking errors. */
 emitFailCall := (exp: string): string ->
@@ -366,7 +490,7 @@ emitEventExit := (options: CompilerOptions, name: string, valExpr = "$$final"): 
   }
   ```
   else ""
-  `${tokenWrap}  ${emitExitCall name, valExpr}\n`
+  tokenWrap + exitLine name, valExpr
 
 // `<declaration>(params)<ret> {\n<void line><body>`, shared by handler IIFEs
 // and the named functions in the transpileEmbedded virtual module.
@@ -923,7 +1047,8 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   makeFail := (restorePos: boolean): string ->
     restore := if restorePos then "$$ctx.pos = $$p0;\n    " else ""
     if wrapEvent
-      `${restore}${emitExitCall name, "$FAIL", "$$p0"}\n    return $FAIL;`
+      exitCall := emitExitCall name, "$FAIL", "$$p0", "    "
+      `${restore}${exitCall ? exitCall + "\n    " : ""}return $FAIL;`
     else if restorePos
       `${restore}return $FAIL;`
     else
@@ -937,7 +1062,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     return {
       helpers
       body: [
-        "  const $$p0 = $$ctx.pos;\n"
+        p0Decl
         emitEventEnter(options, name, retType)
         "  let $$final = "
         callFn(cx, `$$r_${rule}`)
@@ -956,7 +1081,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
       rule = rule[1][0]
     body: ASTNode[] := []
     if wrapEvent
-      body.push "  const $$p0 = $$ctx.pos;\n"
+      body.push p0Decl
       body.push emitEventEnter(options, name, retType)
 
     // Unwrap named wrapper for direct sequence/match emission
@@ -1030,7 +1155,7 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
   body: ASTNode[] := []
   needP0 := wrapEvent or handlerUsesLoc or handlerUsesSkip or (rule[0] is "S" and rule[1].length > 1)
   if needP0
-    body.push "  const $$p0 = $$ctx.pos;\n"
+    body.push p0Decl
   if wrapEvent
     body.push emitEventEnter(options, name, retType)
 
@@ -1125,19 +1250,19 @@ compileRuleBodyInline := (options: CompilerOptions, name: string, rule: HeraAST,
     body.push `  if (($$m${skipCast}) === $SKIP) {\n`
     body.push "    $$ctx.pos = $$p0;\n"
     if wrapEvent
-      body.push `    ${emitExitCall name, "$FAIL", "$$p0"}\n`
+      body.push exitLine name, "$FAIL", "$$p0", "    "
     body.push "    return $FAIL;\n"
     body.push "  }\n"
 
   if wrapEvent
-    body.push `  ${emitExitCall name, "$$m"}\n`
+    body.push exitLine name, "$$m"
   retCast := if types and retType then [" as unknown as ", retType.type] else ""
   body.push ["  return $$m", retCast, ";"]
   // What the body uses, apart from the handler
   bodyUses := (text: string, from = 0) ->
     body.slice(from).some (s) -> s is not iife and textOf(s).includes text
   // Drop unused $$p0 declaration (e.g. sequence of empty/infallible items) and silence unused $$ctx in TS mode
-  if needP0 and not wrapEvent and not handlerUsesLoc and not handlerUsesSkip and not bodyUses "$$p0", 1
+  if needP0 and not handlerUsesLoc and not handlerUsesSkip and not bodyUses "$$p0", 1
     body.shift()
   if types and not bodyUses "$$ctx"
     body.unshift "  void $$ctx;\n"
@@ -1172,7 +1297,8 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
 
   if not isTopChoice
     alternative := if positions then alternativeSpan positions, 0, rule
-    { helpers, body } := compileRuleBodyInline(options, name, rule, true, alternative)
+    { helpers, body: fullBody } := compileRuleBodyInline(options, name, rule, true, alternative)
+    body := dropUnusedP0 fullBody
     return [
       ...helpers.flatMap((h) -> [h, "\n\n"])
       mapped("function", positions?.name)
@@ -1260,10 +1386,12 @@ compileRuleNodes := (options: CompilerOptions, name: string, rule: HeraAST, posi
     ` $$r_${name}($$ctx${ctxType})`
     cursorRetAnno
     " {\n"
-    "  const $$p0 = $$ctx.pos;\n"
-    emitEventEnter(options, name, retType)
-    ...tryLines
-    emitEventExit(options, name)
+    ...dropUnusedP0 [
+      p0Decl
+      emitEventEnter(options, name, retType)
+      ...tryLines
+      emitEventExit(options, name)
+    ]
     "  return $$final;\n"
     mapped("}", ruleEnd)
     "\n\n"
@@ -1383,6 +1511,14 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
   dynamicReDefs.length = 0
   subFnCounter = 0
   disabled = new Set options.disableOptimizations ?? []
+  traceOn = !!options.trace
+  memoSpecs.clear()
+  if options.memo
+    noMemo := new Set [...(options.noMemo ?? []), ...taggedRules(rules, "nomemo")]
+    stateless := stateIndependentRules(rules) ?? new Set
+    for name of Object.keys rules
+      continue if noMemo.has name
+      memoSpecs.set name, { base: memoSpecs.size * MEMO_SLOTS, stateless: stateless.has name }
 
   { language, module } := options
   // transpileEmbedded output skips the downstream Civet pass over Hera's
@@ -1471,6 +1607,14 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
       `}\n`
     ].join("")
 
+  // The parser's scaffolding, which reads the module-level memo and trace
+  // settings, so it's built before a compile() inside transpileEmbedded can
+  // change them
+  memo := !!options.memo
+  head := buildHead types, language, !!module, libPath, memo
+  memoDecls := if memo then memoScaffolding types, memoSpecs.size else ""
+  tail := parserTail types, traceOn, memo
+
   // The code blocks and the handler and regex functions, transpiled as one
   // chunk.  This runs after everything above has read the module-level
   // tables, so a compile() inside the callback can't clobber them.
@@ -1491,8 +1635,6 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     genOpts.updateSourceMap = sm.updateSourceMap.bind(sm)
     genOpts.appendMapped = sm.appendMapped.bind(sm)
 
-  head := buildHead types, language, !!module, libPath
-  tail := parserTail types
   exp := (module ? mjsExport : cjsExport)
 
   code := generate [
@@ -1502,7 +1644,8 @@ export function compile(rules: HeraRules, maybeOptions?: CompilerOptions): strin
     `const $skip${types ? ": never" : ""} = SKIP${types ? " as never" : ""}; void $skip;\n`
     `const $SKIP${types ? ": SkipSymbol" : ""} = SKIP; void $SKIP;\n`
     `const $FAIL${types ? ": FailSymbol" : ""} = FAIL; void $FAIL;\n`
-    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+    memoDecls
+    stateKeyFunctions(types, memo)
     "\n"
     reDefSource
     "\n\n"
@@ -1603,15 +1746,21 @@ generate := (node: ASTNode, options: GenerateOptions): string ->
   throw new Error "unknown node type"
 
 runtimeImports := [
-  "$adaptEvents"
   "$cc"
   "$isFail"
   "$wrap"
   "FAIL"
-  "MISS"
   "ParseError"
   "SKIP"
   "Validator"
+]
+memoRuntimeImports := [
+  "$memoGet"
+  "$memoGet0"
+  "$memoSet"
+  "$memoSet0"
+  "MemoCache"
+  "MISS"
 ]
 
 typeImports := [
@@ -1620,7 +1769,6 @@ typeImports := [
   "FailSymbol"
   "Loc"
   "MaybeResult"
-  "MissSymbol"
   "ParseResult"
   "Parser"
   "ParserContext"
@@ -1629,12 +1777,15 @@ typeImports := [
   "SkipSymbol"
   "Unwrap"
 ]
+memoTypeImports := [
+  "MissSymbol"
+]
 
-buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string): string ->
+buildHead := (types: boolean, language: CompilerOptions["language"], module: boolean, libPath: string, memo: boolean): string ->
   pathLit := JSON.stringify libPath
-  valueList := runtimeImports.map((s) -> `  ${s}`).join(",\n")
+  valueList := [...runtimeImports, ...(if memo then memoRuntimeImports else [])].map((s) -> `  ${s}`).join(",\n")
   if types and not (language is "civet" and not module)
-    typeList := typeImports.map((s) -> `  type ${s}`).join(",\n")
+    typeList := [...typeImports, ...(if memo then memoTypeImports else [])].map((s) -> `  type ${s}`).join(",\n")
     // Reference all imported types at value-position so TS doesn't flag them as unused.
     typeUnion := [
       "CursorContext", "CursorParser<any>", "Loc", "MaybeResult<any>"
@@ -1646,7 +1797,42 @@ buildHead := (types: boolean, language: CompilerOptions["language"], module: boo
     return `import {\n${valueList},\n} from ${pathLit}\n\n`
   `const {\n${valueList}\n} = require(${pathLit})\n\n`
 
-parserTail := (types: boolean): string ->
+/** The memo's declarations, for `ruleCount` memoized rules */
+memoScaffolding := (types: boolean, ruleCount: number): string ->
+  [
+    `const $MISS${types ? ": MissSymbol" : ""} = MISS; void $MISS;\n`
+    "const $mGet = $memoGet; void $mGet;\n"
+    "const $mGet0 = $memoGet0; void $mGet0;\n"
+    "const $mSet = $memoSet; void $mSet;\n"
+    "const $mSet0 = $memoSet0; void $mSet0;\n"
+    `const $memoRuleCount = ${ruleCount};\n`
+    `const $memoPool${types ? ": MemoCache[]" : ""} = [];\n`
+    // The memo of the innermost parse in progress, for `$setStateKey`, and
+    // those of every parse in progress, for `$clearMemo`
+    `let $activeMemo${types ? ": MemoCache | undefined" : ""} = undefined;\n`
+    `const $openMemos${types ? ": MemoCache[]" : ""} = [];\n`
+  ].join("")
+
+/**
+The functions a grammar's code calls to key the memo on its state, and to
+drop memoized results.  Every parser has them, so a grammar's code doesn't
+depend on its compile options: without `memo` they do nothing.
+*/
+stateKeyFunctions := (types: boolean, memo: boolean): string ->
+  t := (annotation: string) -> types ? annotation : ""
+  [
+    if memo
+      `function $setStateKey(key${t ": number | string"})${t ": void"} { if ($activeMemo) $activeMemo.setKey(key) }`
+    else
+      `function $setStateKey(_key${t ": number | string"})${t ": void"} {}`
+    if memo
+      `function $clearMemo()${t ": void"} { for (const memo of $openMemos) memo.reset() }`
+    else
+      `function $clearMemo()${t ": void"} {}`
+    "void $setStateKey; void $clearMemo;\n"
+  ].join "\n"
+
+parserTail := (types: boolean, trace: boolean, memo: boolean): string ->
   t := (annotation: string) -> types ? annotation : ""
   cast := t " as CursorParser<ParserResult<Grammar[K]>>"
   failCond := (v: string) -> types ? `$isFail(${v})` : `${v} === $FAIL`
@@ -1656,19 +1842,24 @@ parserTail := (types: boolean): string ->
     "type ParserResult<P> = P extends (ctx: CursorContext) => infer R ? Exclude<R, typeof FAIL> : never;"
     ""
   ] : []
+  // Without the matching compile option the parser has no code to use these.
+  reject := (option: string) -> [
+    `    if (options.${option}) throw new Error("The ${option} parse option needs a parser compiled with ${option}: true")`
+  ]
   [
     ...typeDefs
     "const parser = {"
-    `  parse: ${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
+    `  parse:${t "<K extends keyof Grammar = GrammarDefaultRule>"}(input${t ": string"}, options${t ": ParserOptions<Grammar> & { startRule?: K }"} = {}) => {`
     "    const { fail, validate, reset } = Validator()"
-    // Lazy errors are opt-in and never combined with event hooks, whose
-    // caches would replay results without recording expectations.
-    "    const $$lazy = !!options.lazyErrors && !options.events"
+    "    const $$lazy = !!options.lazyErrors"
     `    let $$fail${t ": ((pos: number, expected: unknown) => void) | undefined"}`
     "    if (!$$lazy) $$fail = fail"
     `    const ctx${t ": CursorContext"} = { input, pos: 0, expectation: "", fail: $$fail }`
     ""
     '    if (typeof input !== "string") throw new Error("Input must be a string")'
+    `    if ((options${t " as any"}).events) throw new Error("The events parse option was replaced by the trace and memo compile options")`
+    ...(if trace then [] else reject "trace")
+    ...(if memo then [] else reject "memo")
     ""
     "    let parser"
     "    if (options.startRule !== null && options.startRule !== undefined)"
@@ -1681,25 +1872,57 @@ parserTail := (types: boolean): string ->
     '    const filename = options.filename || "<anonymous>";'
     ""
     "    reset()"
-    "    if (options.events) $adaptEvents(ctx, options.events);"
+    ...(if trace then ["    if (options.trace) ctx.trace = options.trace"] else [])
+    ...(if memo then [
+      // Memoize unless `memo: false`
+      `    let $$memo${t ": MemoCache | undefined"}`
+      "    if (options.memo !== false) {"
+      "      $$memo = $memoPool.pop() || new MemoCache($memoRuleCount)"
+      "      $$memo.start()"
+      "      ctx.memo = $$memo"
+      "      $openMemos.push($$memo)"
+      "    }"
+      // For `$setStateKey`; a parse started from a handler restores the
+      // outer parse's memo when it ends
+      "    const $$outerMemo = $activeMemo"
+      "    $activeMemo = $$memo"
+    ] else [])
     ""
-    "    const val = parser(ctx)"
-    "    const endPos = ctx.pos"
-    // Lazy errors: the first pass skips recording failure expectations; only
-    // a failed or incomplete parse re-runs from the start with full error
-    // tracking.
-    `    if ($$lazy && (${failCond "val"} || endPos !== input.length)) {`
-    "      reset()"
-    "      ctx.pos = 0"
-    "      ctx.fail = fail"
-    "      parser(ctx)"
-    "    }"
-    `    if (${failCond "val"}) {`
-    `      return validate(input, undefined, { filename: filename })${t " as never"}`
-    "    }"
-    "    return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
-    "      filename: filename"
-    "    })"
+    // The memo goes back to the pool however the parse ends
+    ...(if memo then ["    try {"] else [])
+    ...[
+      "      const val = parser(ctx)"
+      "      const endPos = ctx.pos"
+      // Lazy errors: the first pass skips recording failure expectations; only
+      // a failed or incomplete parse re-runs from the same starting state with
+      // full error tracking.  The tracer sees only the first pass.
+      `      if ($$lazy && (${failCond "val"} || endPos !== input.length)) {`
+      "        reset()"
+      "        ctx.pos = 0"
+      "        ctx.fail = fail"
+      ...(if trace then ["        ctx.trace = undefined"] else [])
+      ...(if memo then [
+        "        if ($$memo) $$memo.start()"
+      ] else [])
+      "        parser(ctx)"
+      "      }"
+      `      if (${failCond "val"}) {`
+      `        return validate(input, undefined, { filename: filename })${t " as never"}`
+      "      }"
+      "      return validate(input, { loc: { pos: 0, length: endPos }, pos: endPos, value: val }, {"
+      "        filename: filename"
+      "      })"
+    ].map((line) -> if memo then line else line.slice(2))
+    ...(if memo then [
+      "    } finally {"
+      "      $activeMemo = $$outerMemo"
+      "      if ($$memo) {"
+      "        $openMemos.pop()"
+      "        $$memo.release()"
+      "        $memoPool.push($$memo)"
+      "      }"
+      "    }"
+    ] else [])
     "  }"
     "}"
   ].join "\n"

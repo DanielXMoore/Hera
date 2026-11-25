@@ -574,6 +574,52 @@ CJS:
 const { compile } = require("@danielx/hera")
 ```
 
+### Rule tags
+
+Tags on the lines above a rule describe it to Hera and to other tools:
+
+```hera
+# Comments go above the tags
+@state
+Nested
+  EOS Indent:indent ->
+    return $0 if indent.level is state.currentIndent.level
+    return $skip
+
+@nomemo @mytool.thing
+CodeSpanOpen
+  /`+/ ->
+    state.codeMarker = $0
+```
+
+- A tag line holds one or more space-separated tags and may end with a `# comment`. Tag lines may stack, but must sit directly above their rule, with no blank or comment line between.
+- Built-in tags are bare names, and Hera rejects a bare name it doesn't know. They tell the memo (see below) about a grammar's state:
+  - `@state`: the rule's handler reads the state that the grammar's state key stands for. Every rule that can't reach a `@state` rule ignores the key, so its results are shared across states. Without any `@state` tags, every memoized rule is cached per key.
+  - `@nomemo`: never memoize the rule: one whose run can leave state changed, or that reads state the key doesn't capture.
+- Other tags need a namespace (`@mytool.thing`). Hera keeps them for tools: `parse(grammar)[Symbol.for("tags")]` maps each tagged rule's name to its tags, without the `@`.
+
+### Memoizing a grammar with state
+
+A parser compiled with `memo: true` keeps rules' recent results (for each rule, two per position modulo 64, which covers backtracking over nearby input) and reuses one when the rule is tried at the same position again. A result can be evicted, so a parse that backtracks far can rerun a rule; in Civet that's 0.5% of cache misses, while a table that kept every result made Civet compile 50% slower. A cache hit returns the result without running the rule, so its handlers, and those of every rule it calls, don't run. When handlers keep state that changes how rules match (an indentation stack, say), the grammar tells the memo about it:
+
+- `$setStateKey(key)`: call it whenever that state changes. Results are cached per key, so the key should capture everything rules read: a number or a string (a non-negative 32-bit integer is cheapest).
+- `$clearMemo()`: drop the memoized results, after changing state the key doesn't capture (parser options set by a directive, say). It drops those of every parse in progress, in case a parse started from a handler shares that state with the parse that started it.
+- `@state` on the rules whose handlers read the state, so that the rules that can't reach one share their results across keys.
+- `@nomemo` on every rule whose run can leave behind state that a later rule reads before setting it, since a cache hit would skip the change. That includes a rule that only calls rules that change state (one that pushes three flags, say), and a change that leaves the key as it was (pushing a flag equal to the one on top). A rule whose changes balance (a push and its pop) can stay memoized, and so can one that only changes scratch state that every reader sets first.
+
+As a safety net, Hera doesn't cache a run that changed the key, or one that the memo was cleared during.
+
+Both functions exist in every parser and do nothing without a memo, so a grammar's code doesn't depend on how it was compiled.
+
+#### Migrating from `events`
+
+A grammar that cached with `events.enter`/`events.exit`, a `getStateKey()` and a list of uncacheable rules:
+
+1. Compile with `memo: true`, and `trace: true` if `events` also logged rules.
+2. Call `$setStateKey(getStateKey())` wherever the state that `getStateKey()` reads changes, instead of computing the key on every rule.
+3. Tag the uncacheable rules `@nomemo`. The memo also caches failures, so also tag rules that change state and can then fail, which a cache that never replayed failures may have let you leave out.
+4. Replace the `events` cache with `parse(input)`. Pass a `trace` with `enter(rule, pos)` and `exit(rule, pos, end, value, cached)` for logging.
+
 ### `compile(grammar, options?)`
 
 Compiles a Hera grammar into parser source code.
@@ -594,6 +640,9 @@ Compiles a Hera grammar into parser source code.
 - `inlineMap?: boolean`: Append an inline source map comment to the generated output. Default: `false`.
 - `sourceMap?: boolean`: Return `{ code, sourceMap }` instead of a code string. Default: `false`.
 - `libPath?: string`: Import path for the Hera runtime library used by generated parsers. Default: `"@danielx/hera/lib"`.
+- `memo?: boolean`: Compile in a packrat memo cache (see [Memoizing a grammar with state](#memoizing-a-grammar-with-state)), which pays off for grammars that backtrack heavily. The parser then memoizes by default, and `parse(input, { memo: false })` turns it off. Default: `false`.
+- `noMemo?: Iterable<string>`: With `memo`, more rules to leave out of the memo, besides those tagged `@nomemo`, for speed: e.g. rules that a profile shows never reuse a result. Leaving a rule out never changes the parse.
+- `trace?: boolean`: Compile in calls to the `trace` parse option's hooks around every rule, for debugging and profiling: `parse(input, { trace: { enter(rule, pos) {}, exit(rule, pos, end, value, cached) {} } })`. `value` is `FAIL` when the rule didn't match. Without it the parser contains no hook calls, and passing `trace` to `parse` throws. Default: `false`.
 - `transpileEmbedded?: (source, upstreamSourceMap?) => string | { code, sourceMap? }`: Transpiles only the grammar's embedded code. Hera puts the code blocks, handlers, and heregex interpolations into one module (one named function per handler and per interpolation) and calls `transpileEmbedded` on it once; the parser calls those functions by name. Hera writes the rest of the parser in plain JavaScript (TypeScript with `types`), so a Civet grammar no longer has to be compiled through Civet as a whole. When a source map is requested, Hera passes the module's map to the grammar as `upstreamSourceMap`; return a map composed with it (as Civet's `upstreamSourceMap` option does), and Hera splices its lines into the parser's map. With `types`, handler parameters have the same types as without `transpileEmbedded`.
 
   ```js

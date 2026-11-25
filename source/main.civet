@@ -4,14 +4,14 @@ import type {
   HeraRules,
   ParserOptions,
 } from ./hera-types.civet
-import type { Loc, Token } from ./machine.civet
+import type { Loc, Token, Tracer } from ./machine.civet
 
 import type {
   CompilerOptions,
   EmbeddedTranspileResult,
 } from ./compiler.civet
 
-export type CompilerOptions, EmbeddedTranspileResult, HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token
+export type CompilerOptions, EmbeddedTranspileResult, HeraAST, HeraGrammar, HeraRules, Loc, ParserOptions, Token, Tracer
 
 import { createRequire } from "module"
 
@@ -63,13 +63,8 @@ parseTokens := (input: string, options?: ParserOptions<HeraGrammar>): Token =>
       throw new Error `Tokenize parser at ${tokenParserPath} is missing a .parse function`
   _tokenParser.parse(input, options)
 
-interface GenerateOptions
-  transpile: (src: string) => string
-  tokenize: boolean
-
-defaultGenerateOptions: GenerateOptions :=
-  transpile: (src) => src
-  tokenize: false
+type GenerateOptions = Pick<CompilerOptions, "tokenize" | "memo" | "noMemo" | "trace"> &
+  transpile?: (src: string) => string
 
 // Tokenize-mode `generate` returns a parser that yields a Token tree, while
 // the regular path returns whatever the user grammar's handlers produce.
@@ -77,14 +72,14 @@ defaultGenerateOptions: GenerateOptions :=
 type GeneratedParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => unknown }
 type GeneratedTokenParser<T extends HeraGrammar> = { parse: (input: string, options?: ParserOptions<T>) => Token }
 
-function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> & { tokenize: true }): GeneratedTokenParser<T>
-function generate<T extends HeraGrammar>(heraSrc: string, options?: Partial<GenerateOptions>): GeneratedParser<T>
-function generate<T extends HeraGrammar>(heraSrc: string, options: Partial<GenerateOptions> = {})
-  { transpile, tokenize } := { ...defaultGenerateOptions, ...options }
+function generate<T extends HeraGrammar>(heraSrc: string, options: GenerateOptions & { tokenize: true }): GeneratedTokenParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options?: GenerateOptions): GeneratedParser<T>
+function generate<T extends HeraGrammar>(heraSrc: string, options: GenerateOptions = {})
+  { transpile = (src: string) => src, tokenize, memo, noMemo, trace } := options
 
   heraSrc
     |> parse
-    |> compile ., { tokenize }
+    |> compile ., { tokenize, memo, noMemo, trace }
     |> transpile
     |> execMod(.) as GeneratedParser<T>
 

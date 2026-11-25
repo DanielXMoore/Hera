@@ -2,6 +2,7 @@ parser from ./hera.hera
 
 {
   CodeSymbol
+  TagsSymbol
   type Handler
   type HeraAST
   type HeraRules
@@ -44,9 +45,14 @@ decompile := (rules: HeraRules) ->
 
     ```
 
+  tags := rules[TagsSymbol]
   for [name, value] of Object.entries(rules)
+    decorators := if ruleTags := tags?.get name
+      ruleTags.map((t) => "@" + t).join(" ") + "\n"
+    else
+      ""
     lines.push ```
-      ${name}
+      ${decorators}${name}
         ${toS value}
 
     ```

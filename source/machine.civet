@@ -44,7 +44,7 @@ export const FAIL: unique symbol = Symbol.for("@danielx/hera/FAIL") as any
 export type FailSymbol = typeof FAIL
 
 /**
- * Sentinel returned by `cacheEnter` to signal a cache miss.
+ * Sentinel the memo lookup returns on a cache miss.
  */
 export const MISS: unique symbol = Symbol.for("@danielx/hera/MISS") as any
 export type MissSymbol = typeof MISS
@@ -61,6 +61,8 @@ export function $isFail(v: unknown): v is typeof FAIL {
 export type ParserContext = {
   expectation: string
   fail: Fail
+  // Event hooks of the legacy combinators, which only parsers compiled by
+  // earlier Hera versions use
   enter?(name: string, state: ParseState): {
     /**
      * If a key named `cache` is present then its value is returned immediately
@@ -80,17 +82,185 @@ export interface CursorContext {
   expectation: string
   /** Records a failure, or is `undefined` in the first pass of a `lazyErrors` parse */
   fail?: Fail | undefined
+  memo?: MemoCache
+  trace?: Tracer | undefined
+}
+
+/**
+ * Hooks that a parser compiled with `trace: true` calls around every rule,
+ * for debugging and profiling.  They observe the parse and can't change it.
+ */
+export interface Tracer {
+  /** `rule` starts matching at `pos`. */
+  enter(rule: string, pos: number): void
   /**
-   * Fast zero-allocation cache enter hook:
-   * - return `MISS` on cache miss
-   * - return `FAIL` on cached failure
-   * - advance `ctx.pos` and return cached value directly on cached success
+   * `rule`, entered at `pos`, ends at `end` with `value`, which is `FAIL` if
+   * it didn't match.  `cached` is true when the memo supplied the result
+   * without running the rule.
    */
-  cacheEnter?(name: string, pos: number, ctx: CursorContext): unknown
+  exit(rule: string, pos: number, end: number, value: unknown, cached: boolean): void
+}
+
+/**
+ * Built-in 2-way set-associative typed-array packrat memo cache.
+ * Each memoized rule gets `MEMO_SETS` sets of 2 slots (`MEMO_SLOTS` total)
+ * indexed by compile-time rule base offset + hashed `(pos, sk)`.
+ */
+const MEMO_SETS = 64
+const MEMO_MASK = MEMO_SETS - 1
+export const MEMO_SLOTS = MEMO_SETS * 2
+
+export class MemoCache {
+  readonly pos: Int32Array
+  readonly state: Int32Array
+  readonly end: Int32Array
+  readonly val: unknown[]
   /**
-   * Fast zero-allocation cache exit hook (`value === FAIL` on failure).
+   * The state key that rules depending on parser state are cached under,
+   * as a 32-bit integer (see `setKey`)
    */
-  cacheExit?(name: string, startPos: number, endPos: number, value: unknown): void
+  sk: number = 0
+  /** Last slot index computed on a cache miss (reused by `$memoSet`/`$memoSet0`). */
+  s: number = 0
+  /**
+   * Counts the clears, so a rule that was running when the memo was
+   * cleared doesn't store its result
+   */
+  gen: number = 0
+  /** Ids of the state keys that aren't non-negative 32-bit integers */
+  readonly keyIds = new Map<number | string, number>()
+
+  constructor(ruleCount: number) {
+    const size = ruleCount * MEMO_SLOTS
+    this.pos = new Int32Array(size)
+    this.pos.fill(-1)
+    this.state = new Int32Array(size)
+    this.end = new Int32Array(size)
+    this.val = new Array(size)
+  }
+
+  /**
+   * Set the state key (a grammar's `$setStateKey`).  A non-negative 32-bit
+   * integer is its own key; any other value (a string, say) gets a negative
+   * id, the same one each time it's set.
+   */
+  setKey(key: number | string): void {
+    if (typeof key === "number" && (key | 0) === key && key >= 0) {
+      this.sk = key
+      return
+    }
+    let id = this.keyIds.get(key)
+    if (id === undefined) {
+      id = -1 - this.keyIds.size
+      this.keyIds.set(key, id)
+    }
+    this.sk = id
+  }
+
+  /** Start a parse (or the lazyErrors retry): empty, with state key 0 */
+  start(): void {
+    this.sk = 0
+    this.reset()
+  }
+
+  /** Drop every result (a grammar's `$clearMemo`) */
+  reset(): void {
+    this.pos.fill(-1)
+    this.gen++
+  }
+
+  /** Let go of the parse's values and keys, for the cache to be reused */
+  release(): void {
+    this.val.fill(undefined)
+    this.keyIds.clear()
+  }
+}
+
+export function $memoGet0(mc: MemoCache, base: number, p0: number, ctx: CursorContext): unknown {
+  const s = base + ((p0 & MEMO_MASK) << 1)
+  const pos = mc.pos
+  if (pos[s] === p0) {
+    const ep = mc.end[s]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s]
+  }
+  const s1 = s + 1
+  if (pos[s1] === p0) {
+    const ep = mc.end[s1]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s1]
+  }
+  mc.s = s
+  return MISS
+}
+
+export function $memoSet0(mc: MemoCache, s: number, p0: number, endPos: number, val: unknown): void {
+  const pos = mc.pos
+  const end = mc.end
+  const vals = mc.val
+  const pPrev = pos[s]
+  if (pPrev >= 0) {
+    const s1 = s + 1
+    pos[s1] = pPrev
+    const ePrev = end[s]
+    end[s1] = ePrev
+    if (ePrev >= 0) vals[s1] = vals[s]
+  }
+  pos[s] = p0
+  if (val === FAIL) {
+    end[s] = -1
+  } else {
+    end[s] = endPos
+    vals[s] = val
+  }
+}
+
+export function $memoGet(mc: MemoCache, base: number, p0: number, sk: number, ctx: CursorContext): unknown {
+  const mix = sk ^ (sk >>> 7) ^ (sk >>> 14) ^ (sk >>> 21)
+  const s = base + (((p0 ^ mix) & MEMO_MASK) << 1)
+  const pos = mc.pos
+  const st = mc.state
+  if (pos[s] === p0 && st[s] === sk) {
+    const ep = mc.end[s]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s]
+  }
+  const s1 = s + 1
+  if (pos[s1] === p0 && st[s1] === sk) {
+    const ep = mc.end[s1]
+    if (ep < 0) return FAIL
+    ctx.pos = ep
+    return mc.val[s1]
+  }
+  mc.s = s
+  return MISS
+}
+
+export function $memoSet(mc: MemoCache, s: number, p0: number, sk: number, endPos: number, val: unknown): void {
+  const pos = mc.pos
+  const st = mc.state
+  const end = mc.end
+  const vals = mc.val
+  const pPrev = pos[s]
+  if (pPrev >= 0) {
+    const s1 = s + 1
+    pos[s1] = pPrev
+    st[s1] = st[s]
+    const ePrev = end[s]
+    end[s1] = ePrev
+    if (ePrev >= 0) vals[s1] = vals[s]
+  }
+  pos[s] = p0
+  st[s] = sk
+  if (val === FAIL) {
+    end[s] = -1
+  } else {
+    end[s] = endPos
+    vals[s] = val
+  }
 }
 
 export interface Parser<T> {
@@ -241,56 +411,6 @@ export function $cc(re: RegExp): (input: string, pos: number) => number
   return (input: string, pos: number) => reEnd(re, input, pos)
 
 /**
- * Wire `events` onto a `CursorContext`. Fast `cacheEnter`/`cacheExit` hooks are
- * attached directly; legacy `enter`/`exit` hooks are adapted once per parse so
- * generated rules only check a single fast hook.
- */
-export function $adaptEvents(ctx: CursorContext, events: ParserEvents): void
-  { cacheEnter, cacheExit, enter, exit } := events
-  if cacheEnter or cacheExit
-    ctx.cacheEnter = cacheEnter if cacheEnter
-    ctx.cacheExit = cacheExit if cacheExit
-    return
-  return if not enter and not exit
-  const stateStack: ParseState[] = []
-  const dataStack: unknown[] = []
-  if (enter) {
-    ctx.cacheEnter = (name: string, pos: number, c: CursorContext) => {
-      const st: ParseState = { input: c.input, pos }
-      const res = enter(name, st)
-      if (res && "cache" in res) {
-        const cached = res.cache
-        if (!cached) return FAIL
-        c.pos = cached.pos
-        return cached.value
-      }
-      if (exit) {
-        stateStack.push(st)
-        dataStack.push(res?.data)
-      }
-      return MISS
-    }
-  } else if (exit) {
-    ctx.cacheEnter = (_name: string, pos: number, c: CursorContext) => {
-      stateStack.push({ input: c.input, pos })
-      dataStack.push(undefined)
-      return MISS
-    }
-  }
-  if (exit) {
-    ctx.cacheExit = (name: string, startPos: number, endPos: number, value: unknown) => {
-      const st = stateStack.pop()!
-      const data = dataStack.pop()
-      const res: MaybeResult<unknown> = value === FAIL ? undefined : {
-        loc: { pos: startPos, length: endPos - startPos },
-        pos: endPos,
-        value,
-      }
-      exit(name, st, res, data)
-    }
-  }
-
-/**
  * Adapt an internal cursor-based rule function to the legacy exported
  * `(ctx: ParserContext, state: ParseState) => MaybeResult<T>` signature.
  */
@@ -305,9 +425,6 @@ export function $wrap<R>(
     pos: state.pos,
     expectation: ctx.expectation,
     fail: ctx.fail,
-  }
-  if (ctx.enter || ctx.exit) {
-    $adaptEvents(c, ctx)
   }
   const val = fn(c)
   if (val === FAIL) return undefined
@@ -428,13 +545,6 @@ export class ParseError extends Error {
   }
 }
 
-export type ParserEvents = {
-  enter?: ParserContext["enter"],
-  exit?: ParserContext["exit"],
-  cacheEnter?: CursorContext["cacheEnter"],
-  cacheExit?: CursorContext["cacheExit"],
-}
-
 export type HeraGrammar = { [key: string]: Parser<any> }
 export type CursorGrammar = { [key: string]: CursorParser<any> }
 
@@ -443,18 +553,24 @@ export interface ParserOptions<T extends HeraGrammar | CursorGrammar> {
   filename?: string
   startRule?: keyof T
   /**
-   * @deprecated Hooks called around every rule. The next release replaces
-   * them with the `trace` and `memo` compile options (#120).
+   * For parsers compiled with `memo: true`, which memoize by default:
+   * `false` turns the memo off for this parse.
    */
-  events?: ParserEvents
+  memo?: boolean
+  /**
+   * Hooks to call around every rule, for parsers compiled with `trace: true`.
+   * With `lazyErrors`, they see only the first pass.
+   */
+  trace?: Tracer
   /**
    * Opt-in lazy error tracking: the parse first runs without recording
    * failure expectations, and only a failed (or incomplete) parse runs again
    * from the start to build the error message.  Successful parses skip all
    * expectation bookkeeping, which matters most for backtracking-heavy
    * grammars.  A failing parse runs its handlers twice, so handlers must be
-   * safe to re-run, and state they keep must be reset at the start of a parse
-   * (e.g. by a Reset rule).  Ignored when `events` are given.
+   * safe to re-run, and state they keep must be reset at the start of a
+   * parse (e.g. by a Reset rule).  The retry starts with an empty memo and
+   * state key.
    */
   lazyErrors?: boolean
 }

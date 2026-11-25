@@ -20,6 +20,9 @@ const regexEscapes: Record<string, string> = {
   " ": " ",
 }
 
+// Rule tags Hera itself acts on (see the `memo` compile option)
+const builtinTags = new Set(["nomemo", "state"])
+
 // \ followed by whitespace is natural in heregexes,
 // but forbidden in JS regexes with s flag, so rewrite them.
 // Newlines aren't allowed in JS regexes either, so we escape them too.
@@ -33,20 +36,44 @@ Grammar
     const code: CodeBlockNode[] = []
     const definitions: [string, HeraAST, RulePositions][] = []
     const positions = new Map<string, RulePositions>()
+    const tags = new Map<string, string[]>()
     for (const statement of $1) {
       if (Array.isArray(statement)) {
-        definitions.push(statement)
+        definitions.push([statement[0], statement[1], statement[2]])
         positions.set(statement[0], statement[2])
+        if (statement[3]) tags.set(statement[0], statement[3])
       } else code.push(statement)
     }
     const rules = Object.fromEntries(definitions)
     rules[Symbol.for("code")] = code
     rules[Symbol.for("positions")] = positions
+    rules[Symbol.for("tags")] = tags
     return rules
 
 Statement
   EOS? CodeBlock -> $2
-  EOS? Rule -> $2
+  EOS? Decorator*:decorators Rule:rule :: [string, HeraAST, RulePositions] | [string, HeraAST, RulePositions, string[]] ->
+    if (!decorators.length) return rule
+    const ruleTags = decorators.flat()
+    for (const tag of ruleTags) {
+      if (!tag.includes(".") && !builtinTags.has(tag)) {
+        throw new Error(`Unknown tag @${tag} on rule ${rule[0]}. Built-in tags are ${[...builtinTags].map((t) => "@" + t).join(", ")}; a user tag needs a namespace, like @mytool.${tag}`)
+      }
+    }
+    return [rule[0], rule[1], rule[2], ruleTags]
+
+# A line of tags (`@nomemo @mytool.thing`) just above a rule.  Tag lines may
+# stack, but no blank or comment line may separate them from their rule.
+Decorator
+  Tag:first ( Space Tag )*:rest DecoratorEnd :: string[] -> [first, ...rest.map((r) => r[1])]
+
+# A built-in tag is a bare name; a user tag has a namespace (`@mytool.thing`)
+Tag
+  "@" $( Name ( "." Name )* ) -> $2
+
+# The end of a decorator line: exactly one line break, after an optional comment
+DecoratorEnd
+  /[ \t]*(?:#[^\n\r]*)?(?:\r\n|\n|\r)/
 
 CodeBlock
   TripleBacktick CodeBody TripleBacktick -> $2
